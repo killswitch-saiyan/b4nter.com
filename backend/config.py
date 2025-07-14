@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     jwt_expiration: int = 3600
     
     # CORS Configuration
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
     
     # Server Configuration
     host: str = "0.0.0.0"
