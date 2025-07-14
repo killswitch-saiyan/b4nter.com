@@ -1,0 +1,121 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, AuthResponse } from '../types';
+import { authAPI } from '../lib/api';
+import toast from 'react-hot-toast';
+
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string, fullName?: string) => Promise<void>;
+  logout: () => void;
+  googleLogin: (idToken: string) => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+interface AuthProviderProps {
+  children: React.ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const token = localStorage.getItem('access_token');
+      const savedUser = localStorage.getItem('user');
+
+      if (token && savedUser) {
+        try {
+          const userData = JSON.parse(savedUser);
+          setUser(userData);
+          
+          // Verify token is still valid
+          await authAPI.getCurrentUser();
+        } catch (error) {
+          // Token is invalid, clear storage
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('user');
+          setUser(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    initializeAuth();
+  }, []);
+
+  const saveAuthData = (authResponse: AuthResponse) => {
+    localStorage.setItem('access_token', authResponse.access_token);
+    localStorage.setItem('user', JSON.stringify(authResponse.user));
+    setUser(authResponse.user);
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await authAPI.login({ email, password });
+      saveAuthData(response);
+      toast.success('Successfully logged in!');
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Login failed';
+      toast.error(message);
+      throw error;
+    }
+  };
+
+  const register = async (username: string, email: string, password: string, fullName?: string) => {
+    try {
+      const response = await authAPI.register({ username, email, password, full_name: fullName });
+      saveAuthData(response);
+      toast.success('Account created successfully!');
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Registration failed';
+      toast.error(message);
+      throw error;
+    }
+  };
+
+  const googleLogin = async (idToken: string) => {
+    try {
+      const response = await authAPI.googleAuth(idToken);
+      saveAuthData(response);
+      toast.success('Successfully logged in with Google!');
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Google login failed';
+      toast.error(message);
+      throw error;
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    setUser(null);
+    toast.success('Logged out successfully');
+  };
+
+  const value: AuthContextType = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    googleLogin,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+}; 
