@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 import os
 
 
@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
     
-    # Google OAuth
-    google_client_id: str
-    google_client_secret: str
+    # Google OAuth (optional)
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
     
     # JWT Configuration
     jwt_secret: str
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     jwt_expiration: int = 3600
     
     # CORS Configuration
-    cors_origins: List[str] = ["http://localhost:3000"]
+    cors_origins: str = "http://localhost:3000"
     
     # Server Configuration
     host: str = "0.0.0.0"
@@ -35,5 +35,4 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Parse CORS origins from environment variable
-if hasattr(settings, 'cors_origins') and isinstance(settings.cors_origins, str):
-    settings.cors_origins = [origin.strip() for origin in settings.cors_origins.split(',')] 
+cors_origins_list = [origin.strip() for origin in settings.cors_origins.split(',')] 

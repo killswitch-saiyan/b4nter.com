@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 # Create Socket.IO server
 sio = socketio.AsyncServer(
-    async_mode='asyncio',
     cors_allowed_origins="*"
 )
 
