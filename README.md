@@ -1,4 +1,5 @@
-# B4nter - Slack-like App for Football Enthusiasts
+# b4nter.com
+Where the game never stops talking
 
 A real-time messaging platform built specifically for soccer/football communities, teams, and fans.
 
@@ -27,7 +28,7 @@ b4nter/
 ├── frontend/          # React application
 ├── backend/           # FastAPI server
 ├── shared/            # Shared types and utilities
-└── docs/             # Documentation
+└── docs/              # Documentation
 ```
 
 ## Quick Start
@@ -51,7 +52,7 @@ b4nter/
    ```bash
    # Run the interactive setup script
    python setup_supabase.py
-   
+
    # Or follow the manual setup guide
    # See SUPABASE_SETUP.md for detailed instructions
    ```
@@ -140,4 +141,4 @@ Once the backend is running, visit `http://localhost:8000/docs` for interactive 
 
 ## License
 
-MIT License 
+MIT License
