@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Frontend</title>
+</head>
+<body>
+    <h1>Debug Frontend</h1>
+    <button onclick="clearStorage()">Clear localStorage</button>
+    <button onclick="showStorage()">Show localStorage</button>
+    <button onclick="testAPI()">Test API</button>
+    
+    <div id="output"></div>
+
+    <script>
+        function clearStorage() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
+            document.getElementById('output').innerHTML = '<p>localStorage cleared!</p>';
+        }
+
+        function showStorage() {
+            const token = localStorage.getItem('access_token');
+            const user = localStorage.getItem('user');
+            
+            let output = '<h3>localStorage Contents:</h3>';
+            output += '<p><strong>Token:</strong> ' + (token ? token.substring(0, 50) + '...' : 'null') + '</p>';
+            output += '<p><strong>User:</strong> ' + (user ? user : 'null') + '</p>';
+            
+            if (user) {
+                try {
+                    const userObj = JSON.parse(user);
+                    output += '<h4>Parsed User Object:</h4>';
+                    output += '<pre>' + JSON.stringify(userObj, null, 2) + '</pre>';
+                } catch (e) {
+                    output += '<p>Error parsing user: ' + e.message + '</p>';
+                }
+            }
+            
+            document.getElementById('output').innerHTML = output;
+        }
+
+        async function testAPI() {
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                const data = await response.json();
+                document.getElementById('output').innerHTML = '<p>API Test: ' + JSON.stringify(data) + '</p>';
+            } catch (error) {
+                document.getElementById('output').innerHTML = '<p>API Error: ' + error.message + '</p>';
+            }
+        }
+
+        // Show storage on load
+        showStorage();
+    </script>
+</body>
+</html> 

@@ -10,6 +10,14 @@ const ChatPage: React.FC = () => {
   const [messages, setMessages] = useState<any[]>([]);
   const [selectedChannel, setSelectedChannel] = useState('general');
 
+  // Debug: Log user data
+  useEffect(() => {
+    console.log('Current user data:', user);
+    console.log('User ID:', user?.id);
+    console.log('User full_name:', user?.full_name);
+    console.log('User username:', user?.username);
+  }, [user]);
+
   useEffect(() => {
     if (!user) {
       return;
@@ -17,6 +25,7 @@ const ChatPage: React.FC = () => {
 
     // Join the selected channel
     if (socket && isConnected) {
+      console.log('Joining channel:', selectedChannel, 'with user ID:', user.id);
       socket.emit('join_channel', {
         channel_id: selectedChannel,
         user_id: user.id
@@ -28,11 +37,27 @@ const ChatPage: React.FC = () => {
     if (!socket) return;
 
     socket.on('new_channel_message', (messageData) => {
+      console.log('Received new message:', messageData);
       setMessages(prev => [...prev, messageData]);
+    });
+
+    socket.on('connect', () => {
+      console.log('Socket connected');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Socket disconnected');
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
     });
 
     return () => {
       socket.off('new_channel_message');
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('connect_error');
     };
   }, [socket]);
 
@@ -46,6 +71,7 @@ const ChatPage: React.FC = () => {
       channel_id: selectedChannel
     };
 
+    console.log('Sending message:', messageData);
     socket.emit('send_message', messageData);
     setMessage('');
   };
@@ -65,6 +91,9 @@ const ChatPage: React.FC = () => {
     );
   }
 
+  // Get display name - prefer full_name, fallback to username
+  const displayName = user.full_name || user.username || 'Unknown User';
+
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       {/* Header */}
@@ -76,7 +105,7 @@ const ChatPage: React.FC = () => {
           </div>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-gray-600">
-              Welcome, {user.full_name || user.username}!
+              Welcome, {displayName}!
             </span>
             <button
               onClick={handleLogout}

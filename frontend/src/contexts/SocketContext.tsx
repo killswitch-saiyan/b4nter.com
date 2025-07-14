@@ -36,6 +36,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   useEffect(() => {
     if (!user) {
       if (socketRef.current) {
+        console.log('Disconnecting socket - no user');
         socketRef.current.disconnect();
         socketRef.current = null;
         setIsConnected(false);
@@ -43,24 +44,28 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       return;
     }
 
+    console.log('Initializing socket connection for user:', user.id);
+
     // Initialize socket connection
     const socket = io('http://localhost:8000', {
       auth: {
         user_id: user.id,
       },
       transports: ['websocket', 'polling'],
+      timeout: 20000,
+      forceNew: true,
     });
 
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      console.log('Socket connected successfully');
       setIsConnected(true);
-      console.log('Connected to Socket.IO server');
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
       setIsConnected(false);
-      console.log('Disconnected from Socket.IO server');
     });
 
     socket.on('connect_error', (error) => {
@@ -68,39 +73,59 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setIsConnected(false);
     });
 
+    socket.on('error', (error) => {
+      console.error('Socket error:', error);
+    });
+
+    // Cleanup function
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
-      setIsConnected(false);
+      console.log('Cleaning up socket connection');
+      if (socket) {
+        socket.disconnect();
+        socketRef.current = null;
+        setIsConnected(false);
+      }
     };
   }, [user]);
 
   const sendMessage = (content: string, channelId?: string, recipientId?: string) => {
     if (socketRef.current && user) {
-      socketRef.current.emit('send_message', {
+      const messageData = {
         content,
         sender_id: user.id,
         channel_id: channelId,
         recipient_id: recipientId,
-      });
+      };
+      console.log('Sending message via context:', messageData);
+      socketRef.current.emit('send_message', messageData);
+    } else {
+      console.error('Cannot send message: socket not connected or user not available');
     }
   };
 
   const joinChannel = (channelId: string) => {
     if (socketRef.current && user) {
-      socketRef.current.emit('join_channel', {
+      const joinData = {
         channel_id: channelId,
         user_id: user.id,
-      });
+      };
+      console.log('Joining channel via context:', joinData);
+      socketRef.current.emit('join_channel', joinData);
+    } else {
+      console.error('Cannot join channel: socket not connected or user not available');
     }
   };
 
   const leaveChannel = (channelId: string) => {
     if (socketRef.current && user) {
-      socketRef.current.emit('leave_channel', {
+      const leaveData = {
         channel_id: channelId,
         user_id: user.id,
-      });
+      };
+      console.log('Leaving channel via context:', leaveData);
+      socketRef.current.emit('leave_channel', leaveData);
+    } else {
+      console.error('Cannot leave channel: socket not connected or user not available');
     }
   };
 

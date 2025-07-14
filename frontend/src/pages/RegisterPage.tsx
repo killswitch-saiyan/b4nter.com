@@ -33,7 +33,7 @@ const RegisterPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await register(formData.username, formData.email, formData.fullName, formData.password);
+      await register(formData.username, formData.email, formData.password, formData.fullName);
       toast.success('Registration successful! Please log in.');
       navigate('/login');
     } catch (error) {

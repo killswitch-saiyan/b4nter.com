@@ -35,14 +35,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = localStorage.getItem('access_token');
       const savedUser = localStorage.getItem('user');
 
+      console.log('Initializing auth...');
+      console.log('Token exists:', !!token);
+      console.log('Saved user exists:', !!savedUser);
+
       if (token && savedUser) {
         try {
           const userData = JSON.parse(savedUser);
+          console.log('Parsed user data:', userData);
           setUser(userData);
           
           // Verify token is still valid
           await authAPI.getCurrentUser();
         } catch (error) {
+          console.error('Error initializing auth:', error);
           // Token is invalid, clear storage
           localStorage.removeItem('access_token');
           localStorage.removeItem('user');
@@ -56,6 +62,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const saveAuthData = (authResponse: AuthResponse) => {
+    console.log('Saving auth data:', authResponse);
     localStorage.setItem('access_token', authResponse.access_token);
     localStorage.setItem('user', JSON.stringify(authResponse.user));
     setUser(authResponse.user);
@@ -63,10 +70,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     try {
+      console.log('Attempting login for:', email);
       const response = await authAPI.login({ email, password });
+      console.log('Login response:', response);
       saveAuthData(response);
       toast.success('Successfully logged in!');
     } catch (error: any) {
+      console.error('Login error:', error);
       const message = error.response?.data?.detail || 'Login failed';
       toast.error(message);
       throw error;
@@ -75,11 +85,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (username: string, email: string, password: string, fullName?: string) => {
     try {
+      console.log('Attempting registration for:', email);
+      console.log('Registration data:', { username, email, password, fullName });
+      
       const response = await authAPI.register({ username, email, password, full_name: fullName });
+      console.log('Registration response:', response);
       saveAuthData(response);
       toast.success('Account created successfully!');
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'Registration failed';
+      console.error('Registration error:', error);
+      console.error('Error response:', error.response);
+      console.error('Error data:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      let message = 'Registration failed';
+      if (error.response?.data?.detail) {
+        message = error.response.data.detail;
+      } else if (error.message) {
+        message = error.message;
+      }
+      
       toast.error(message);
       throw error;
     }
@@ -98,6 +123,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
+    console.log('Logging out...');
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     setUser(null);

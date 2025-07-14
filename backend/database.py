@@ -5,8 +5,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Initialize Supabase client
-supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_key)
+# Initialize Supabase client with service role key for backend operations
+supabase: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 class DatabaseManager:

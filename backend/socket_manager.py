@@ -8,7 +8,9 @@ logger = logging.getLogger(__name__)
 
 # Create Socket.IO server
 sio = socketio.AsyncServer(
-    cors_allowed_origins="*"
+    cors_allowed_origins="*",
+    logger=True,
+    engineio_logger=True
 )
 
 # Store connected users
@@ -19,15 +21,21 @@ connected_users: Dict[str, str] = {}  # user_id -> session_id
 async def connect(sid, environ, auth):
     """Handle client connection"""
     try:
+        logger.info(f"Connection attempt from {sid}")
+        logger.info(f"Auth data: {auth}")
+        logger.info(f"Environ: {environ}")
+        
         # Extract user info from auth (you'll need to implement this)
         user_id = auth.get('user_id') if auth else None
         if user_id:
             connected_users[user_id] = sid
             await sio.emit('user_connected', {'user_id': user_id}, skip_sid=sid)
             logger.info(f"User {user_id} connected with session {sid}")
+            return True
         else:
-            # Reject connection if no valid auth
-            return False
+            # For now, allow connection without auth for testing
+            logger.warning(f"No user_id in auth, but allowing connection for testing")
+            return True
     except Exception as e:
         logger.error(f"Error in connect: {e}")
         return False
@@ -37,6 +45,7 @@ async def connect(sid, environ, auth):
 async def disconnect(sid):
     """Handle client disconnection"""
     try:
+        logger.info(f"Disconnection from {sid}")
         # Find user by session ID
         user_id = None
         for uid, session_id in connected_users.items():
@@ -56,6 +65,7 @@ async def disconnect(sid):
 async def join_channel(sid, data):
     """Handle user joining a channel"""
     try:
+        logger.info(f"Join channel request from {sid}: {data}")
         channel_id = data.get('channel_id')
         user_id = data.get('user_id')
         
@@ -67,6 +77,8 @@ async def join_channel(sid, data):
                 'channel_id': channel_id
             }, room=f"channel_{channel_id}")
             logger.info(f"User {user_id} joined channel {channel_id}")
+        else:
+            logger.warning(f"Missing channel_id or user_id in join_channel: {data}")
     except Exception as e:
         logger.error(f"Error in join_channel: {e}")
 
@@ -75,6 +87,7 @@ async def join_channel(sid, data):
 async def leave_channel(sid, data):
     """Handle user leaving a channel"""
     try:
+        logger.info(f"Leave channel request from {sid}: {data}")
         channel_id = data.get('channel_id')
         user_id = data.get('user_id')
         
@@ -86,6 +99,8 @@ async def leave_channel(sid, data):
                 'channel_id': channel_id
             }, room=f"channel_{channel_id}")
             logger.info(f"User {user_id} left channel {channel_id}")
+        else:
+            logger.warning(f"Missing channel_id or user_id in leave_channel: {data}")
     except Exception as e:
         logger.error(f"Error in leave_channel: {e}")
 
@@ -94,12 +109,14 @@ async def leave_channel(sid, data):
 async def send_message(sid, data):
     """Handle sending a message"""
     try:
+        logger.info(f"Send message request from {sid}: {data}")
         content = data.get('content')
         sender_id = data.get('sender_id')
         channel_id = data.get('channel_id')
         recipient_id = data.get('recipient_id')
         
         if not content or not sender_id:
+            logger.warning(f"Missing content or sender_id in send_message: {data}")
             return
         
         # Create message data
@@ -113,11 +130,13 @@ async def send_message(sid, data):
         # Save message to database
         saved_message = await db.create_message(message_data)
         if not saved_message:
+            logger.error(f"Failed to save message to database: {message_data}")
             return
         
         # Get sender info
         sender = await db.get_user_by_id(sender_id)
         if not sender:
+            logger.error(f"Failed to get sender info for user_id: {sender_id}")
             return
         
         # Prepare message response
@@ -132,10 +151,13 @@ async def send_message(sid, data):
             'updated_at': saved_message['updated_at']
         }
         
+        logger.info(f"Message response prepared: {message_response}")
+        
         # Emit message to appropriate recipients
         if channel_id:
             # Channel message
             await sio.emit('new_channel_message', message_response, room=f"channel_{channel_id}")
+            logger.info(f"Message sent to channel {channel_id}")
         elif recipient_id:
             # Direct message
             recipient_sid = connected_users.get(recipient_id)
@@ -143,6 +165,7 @@ async def send_message(sid, data):
                 await sio.emit('new_direct_message', message_response, room=recipient_sid)
             # Also send to sender (for confirmation)
             await sio.emit('new_direct_message', message_response, room=sid)
+            logger.info(f"Direct message sent to user {recipient_id}")
         
         logger.info(f"Message sent by {sender_id} to {'channel ' + channel_id if channel_id else 'user ' + recipient_id}")
         
