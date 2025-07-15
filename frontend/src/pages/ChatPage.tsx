@@ -74,6 +74,11 @@ const ChatPage: React.FC = () => {
   // Get display name - prefer full_name, fallback to username
   const displayName = user.full_name || user.username || 'Unknown User';
 
+  // Filter messages for the selected channel
+  const filteredMessages = messages.filter(
+    (msg) => msg.channel_id === selectedChannel?.id
+  );
+
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       {/* Header */}
@@ -151,12 +156,12 @@ const ChatPage: React.FC = () => {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.length === 0 ? (
+            {filteredMessages.length === 0 ? (
               <div className="text-center text-gray-500 mt-8">
                 <p>No messages yet. Start the conversation!</p>
               </div>
             ) : (
-              messages.map((msg, index) => (
+              filteredMessages.map((msg, index) => (
                 <div key={index} className="flex items-start space-x-3">
                   <div className="flex-shrink-0">
                     <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
