@@ -8,6 +8,8 @@ interface WebSocketContextType {
   leaveChannel: (channelId: string) => void;
   startTyping: (channelId?: string, recipientId?: string) => void;
   stopTyping: (channelId?: string, recipientId?: string) => void;
+  messages: any[];
+  setMessages: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -28,6 +30,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const { user } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) {
@@ -37,6 +40,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         wsRef.current = null;
         setIsConnected(false);
       }
+      setMessages([]);
       return;
     }
 
@@ -74,10 +78,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             break;
           case 'new_channel_message':
             console.log('New channel message:', data.message);
-            // You can emit a custom event here if needed
+            setMessages((prev) => [...prev, data.message]);
             break;
           case 'new_direct_message':
             console.log('New direct message:', data.message);
+            setMessages((prev) => [...prev, data.message]);
             break;
           case 'channel_joined':
             console.log('Joined channel:', data.channel_id);
@@ -182,6 +187,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     leaveChannel,
     startTyping,
     stopTyping,
+    messages,
+    setMessages,
   };
 
   return (

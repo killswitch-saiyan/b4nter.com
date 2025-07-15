@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import { toast } from 'react-hot-toast';
@@ -6,10 +6,10 @@ import DebugPanel from '../components/DebugPanel';
 
 const ChatPage: React.FC = () => {
   const { user, logout } = useAuth();
-  const { isConnected, sendMessage, joinChannel } = useWebSocket();
+  const { isConnected, sendMessage, joinChannel, messages, setMessages } = useWebSocket();
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<any[]>([]);
   const [selectedChannel, setSelectedChannel] = useState('general');
+  const prevChannelRef = useRef<string | null>(null);
 
   // Debug: Log user data
   useEffect(() => {
@@ -20,19 +20,14 @@ const ChatPage: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    // Join the selected channel
-    if (isConnected) {
+    if (!user || !isConnected) return;
+    if (prevChannelRef.current !== selectedChannel) {
       console.log('Joining channel:', selectedChannel, 'with user ID:', user.id);
       joinChannel(selectedChannel);
+      setMessages([]); // Only clear when switching channels
+      prevChannelRef.current = selectedChannel;
     }
-  }, [isConnected, user, selectedChannel, joinChannel]);
-
-  // WebSocket message handling will be done in the WebSocket context
-  // Messages will be received and handled there
+  }, [isConnected, user, selectedChannel, joinChannel, setMessages]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
