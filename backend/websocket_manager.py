@@ -4,12 +4,25 @@ from typing import Dict, List, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from models import MessageResponse, UserResponse
 from database import db
+import re
 
 logger = logging.getLogger(__name__)
 
 # Store connected users and their WebSocket connections
 connected_users: Dict[str, WebSocket] = {}  # user_id -> WebSocket
 user_channels: Dict[str, List[str]] = {}  # user_id -> list of channel_ids
+
+async def get_channel_uuid(channel_id_or_name):
+    uuid_regex = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    if not channel_id_or_name:
+        return None
+    if uuid_regex.match(channel_id_or_name):
+        return channel_id_or_name
+    # Otherwise, look up by name
+    channel = await db.get_channel_by_name(channel_id_or_name)
+    if channel:
+        return channel['id']
+    return None
 
 class WebSocketManager:
     def __init__(self):
@@ -73,6 +86,13 @@ class WebSocketManager:
 
     async def send_message(self, content: str, sender_id: str, channel_id: str = None, recipient_id: str = None):
         try:
+            # Map channel_id string to UUID if needed
+            if channel_id:
+                channel_id_mapped = await get_channel_uuid(channel_id)
+                if not channel_id_mapped:
+                    logger.error(f"Channel not found for id or name: {channel_id}")
+                    return
+                channel_id = channel_id_mapped
             # Create message data
             message_data = {
                 'content': content,
@@ -124,7 +144,7 @@ class WebSocketManager:
                     "message": message_response
                 })
             
-            logger.info(f"Message sent by {sender_id} to {'channel ' + channel_id if channel_id else 'user ' + recipient_id}")
+            logger.info(f"Message sent by {sender_id} to {'channel ' + str(channel_id) if channel_id else 'user ' + str(recipient_id)}")
             
         except Exception as e:
             logger.error(f"Error in send_message: {e}")

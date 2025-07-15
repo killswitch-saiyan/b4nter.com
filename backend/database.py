@@ -73,6 +73,17 @@ class DatabaseManager:
             logger.error(f"Error getting channel by ID: {e}")
             return None
     
+    async def get_channel_by_name(self, name: str):
+        """Get channel by name"""
+        try:
+            response = self.client.table('channels').select('*').eq('name', name).execute()
+            if response.data:
+                return response.data[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error getting channel by name: {e}")
+            return None
+    
     async def get_user_channels(self, user_id: str):
         """Get all channels a user is a member of"""
         try:

@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 from models import MessageResponse, UserResponse
 from database import db
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,17 @@ sio = socketio.AsyncServer(
 # Store connected users
 connected_users: Dict[str, str] = {}  # user_id -> session_id
 
+async def get_channel_uuid(channel_id_or_name):
+    uuid_regex = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+    if not channel_id_or_name:
+        return None
+    if uuid_regex.match(channel_id_or_name):
+        return channel_id_or_name
+    # Otherwise, look up by name
+    channel = await db.get_channel_by_name(channel_id_or_name)
+    if channel:
+        return channel['id']
+    return None
 
 @sio.event
 async def connect(sid, environ, auth):
@@ -119,6 +131,14 @@ async def send_message(sid, data):
             logger.warning(f"Missing content or sender_id in send_message: {data}")
             return
         
+        # Map channel_id string to UUID if needed
+        if channel_id:
+            channel_id = await get_channel_uuid(channel_id)
+            if not channel_id:
+                logger.error(f"Channel not found for id or name: {data.get('channel_id')}")
+                await sio.emit('error', {'message': f"Channel not found: {data.get('channel_id')}"}, room=sid)
+                return
+        
         # Create message data
         message_data = {
             'content': content,
@@ -167,7 +187,7 @@ async def send_message(sid, data):
             await sio.emit('new_direct_message', message_response, room=sid)
             logger.info(f"Direct message sent to user {recipient_id}")
         
-        logger.info(f"Message sent by {sender_id} to {'channel ' + channel_id if channel_id else 'user ' + recipient_id}")
+        logger.info(f"Message sent by {sender_id} to {'channel ' + str(channel_id) if channel_id else 'user ' + str(recipient_id)}")
         
     except Exception as e:
         logger.error(f"Error in send_message: {e}")
