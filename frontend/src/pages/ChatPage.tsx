@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWebSocket } from '../contexts/WebSocketContext';
+import { useChannels } from '../contexts/ChannelsContext';
 import { toast } from 'react-hot-toast';
 import DebugPanel from '../components/DebugPanel';
 
 const ChatPage: React.FC = () => {
   const { user, logout } = useAuth();
   const { isConnected, sendMessage, joinChannel, messages, setMessages } = useWebSocket();
+  const { channels, loading, selectedChannel, setSelectedChannel } = useChannels();
   const [message, setMessage] = useState('');
-  const [selectedChannel, setSelectedChannel] = useState('general');
   const prevChannelRef = useRef<string | null>(null);
 
   // Debug: Log user data
@@ -20,14 +21,16 @@ const ChatPage: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user || !isConnected) return;
-    if (prevChannelRef.current !== selectedChannel) {
-      console.log('Joining channel:', selectedChannel, 'with user ID:', user.id);
-      joinChannel(selectedChannel);
-      setMessages([]); // Only clear when switching channels
-      prevChannelRef.current = selectedChannel;
+    if (!user || !selectedChannel) {
+      return;
     }
-  }, [isConnected, user, selectedChannel, joinChannel, setMessages]);
+
+    // Join the selected channel
+    if (isConnected) {
+      console.log('Joining channel:', selectedChannel.name, 'with ID:', selectedChannel.id);
+      joinChannel(selectedChannel.id);
+    }
+  }, [isConnected, user, selectedChannel, joinChannel]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,9 +38,10 @@ const ChatPage: React.FC = () => {
     console.log('message:', message);
     console.log('user:', user);
     console.log('isConnected:', isConnected);
+    console.log('selectedChannel:', selectedChannel);
     
-    if (!message.trim() || !user) {
-      console.log('Message empty or no user, returning');
+    if (!message.trim() || !user || !selectedChannel) {
+      console.log('Message empty, no user, or no selected channel, returning');
       return;
     }
 
@@ -47,8 +51,8 @@ const ChatPage: React.FC = () => {
       return;
     }
 
-    console.log('Sending message via context:', message);
-    sendMessage(message, selectedChannel);
+    console.log('Sending message via context:', message, 'to channel:', selectedChannel.id);
+    sendMessage(message, selectedChannel.id);
     setMessage('');
   };
 
@@ -98,45 +102,64 @@ const ChatPage: React.FC = () => {
         <div className="w-64 bg-white border-r">
           <div className="p-4">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Channels</h3>
-            <div className="space-y-2">
-              {['general', 'premier-league', 'champions-league'].map((channel) => (
-                <button
-                  key={channel}
-                  onClick={() => setSelectedChannel(channel)}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
-                    selectedChannel === channel
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  #{channel}
-                </button>
-              ))}
-            </div>
+            {loading ? (
+              <div className="text-sm text-gray-500">Loading channels...</div>
+            ) : (
+              <div className="space-y-2">
+                {channels.map((channel) => (
+                  <button
+                    key={channel.id}
+                    onClick={() => setSelectedChannel(channel)}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
+                      selectedChannel?.id === channel.id
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    #{channel.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Chat Area */}
+        {/* Main Chat Area */}
         <div className="flex-1 flex flex-col">
           {/* Channel Header */}
           <div className="bg-white border-b px-6 py-4">
-            <h2 className="text-lg font-semibold text-gray-900">#{selectedChannel}</h2>
-            <p className="text-sm text-gray-500">
-              {isConnected ? 'Connected' : 'Connecting...'}
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {selectedChannel ? `#${selectedChannel.name}` : 'Select a channel'}
+                </h2>
+                {selectedChannel && (
+                  <p className="text-sm text-gray-500">{selectedChannel.description}</p>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-500">
+                  {isConnected ? (
+                    <span className="text-green-600">● Connected</span>
+                  ) : (
+                    <span className="text-red-600">● Disconnected</span>
+                  )}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {messages.length === 0 ? (
-              <div className="text-center text-gray-500">
+              <div className="text-center text-gray-500 mt-8">
                 <p>No messages yet. Start the conversation!</p>
               </div>
             ) : (
               messages.map((msg, index) => (
-                <div key={index} className="flex space-x-3">
+                <div key={index} className="flex items-start space-x-3">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
+                    <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
                       <span className="text-white text-sm font-medium">
                         {msg.sender_name?.charAt(0) || 'U'}
                       </span>
@@ -165,12 +188,13 @@ const ChatPage: React.FC = () => {
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Type your message..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                placeholder={selectedChannel ? `Message #${selectedChannel.name}...` : "Select a channel to send a message..."}
+                disabled={!selectedChannel}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
-                disabled={!message.trim()}
+                disabled={!message.trim() || !selectedChannel}
                 className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Send

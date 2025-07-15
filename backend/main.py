@@ -48,6 +48,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         logger.error(f"WebSocket error: {e}")
         websocket_manager.disconnect(user_id)
 
+# Export the ASGI app for uvicorn
+asgi_app = app
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
