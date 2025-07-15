@@ -1,11 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-import socketio
 from config import settings, cors_origins_list
 from routers import auth, channels, messages
-from socket_manager import sio
+from websocket_manager import websocket_manager
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +17,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins_list,
@@ -27,33 +25,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(auth.router)
 app.include_router(channels.router)
 app.include_router(messages.router)
 
-# Create Socket.IO app
-socket_app = socketio.ASGIApp(sio, app)
-
-# Mount Socket.IO app
-app.mount("/socket.io", socket_app)
-
-
 @app.get("/")
 async def root():
-    """Root endpoint"""
-    return {
-        "message": "Welcome to B4nter API",
-        "version": "1.0.0",
-        "docs": "/docs"
-    }
-
+    return {"message": "Welcome to B4nter API", "version": "1.0.0", "docs": "/docs"}
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {"status": "healthy"}
 
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    await websocket_manager.connect(websocket, user_id)
+    try:
+        await websocket_manager.handle_websocket_message(websocket, user_id)
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(user_id)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        websocket_manager.disconnect(user_id)
 
 if __name__ == "__main__":
     import uvicorn

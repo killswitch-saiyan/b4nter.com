@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.IO Connection Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .disconnected { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .error { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .log { background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin: 10px 0; max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>Socket.IO Connection Test</h1>
+    <div id="status" class="status disconnected">Connecting...</div>
+    <div id="log" class="log"></div>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        const logDiv = document.getElementById('log');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        log('Starting Socket.IO connection test...');
+        
+        // Connect to Socket.IO server
+        const socket = io('http://127.0.0.1:8000', {
+            auth: {
+                user_id: 'test_user_123'
+            },
+            transports: ['websocket', 'polling'],
+            timeout: 20000,
+            forceNew: true
+        });
+        
+        socket.on('connect', () => {
+            log('✅ Socket connected successfully!');
+            log(`Socket ID: ${socket.id}`);
+            log(`Socket connected: ${socket.connected}`);
+            statusDiv.textContent = 'Connected!';
+            statusDiv.className = 'status connected';
+            
+            // Test joining a channel
+            log('Joining test channel...');
+            socket.emit('join_channel', {
+                channel_id: 'general',
+                user_id: 'test_user_123'
+            });
+        });
+        
+        socket.on('disconnect', (reason) => {
+            log(`❌ Socket disconnected: ${reason}`);
+            statusDiv.textContent = 'Disconnected: ' + reason;
+            statusDiv.className = 'status disconnected';
+        });
+        
+        socket.on('connect_error', (error) => {
+            log(`❌ Connection error: ${error.message}`);
+            statusDiv.textContent = 'Connection Error: ' + error.message;
+            statusDiv.className = 'status error';
+        });
+        
+        socket.on('user_joined_channel', (data) => {
+            log(`✅ User joined channel: ${JSON.stringify(data)}`);
+        });
+        
+        socket.on('new_channel_message', (data) => {
+            log(`📨 New message: ${JSON.stringify(data)}`);
+        });
+        
+        // Test sending a message after 3 seconds
+        setTimeout(() => {
+            if (socket.connected) {
+                log('Sending test message...');
+                socket.emit('send_message', {
+                    content: 'Hello from test page!',
+                    sender_id: 'test_user_123',
+                    channel_id: 'general'
+                });
+                log('Test message sent');
+            } else {
+                log('❌ Cannot send message - socket not connected');
+            }
+        }, 3000);
+        
+        // Test sending another message after 6 seconds
+        setTimeout(() => {
+            if (socket.connected) {
+                log('Sending second test message...');
+                socket.emit('send_message', {
+                    content: 'Second test message!',
+                    sender_id: 'test_user_123',
+                    channel_id: 'general'
+                });
+                log('Second test message sent');
+            }
+        }, 6000);
+    </script>
+</body>
+</html> 

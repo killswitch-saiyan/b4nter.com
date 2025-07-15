@@ -47,7 +47,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     console.log('Initializing socket connection for user:', user.id);
 
     // Initialize socket connection
-    const socket = io('http://localhost:8000', {
+    const socket = io('http://127.0.0.1:8000', {
       auth: {
         user_id: user.id,
       },
@@ -60,6 +60,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
     socket.on('connect', () => {
       console.log('Socket connected successfully');
+      console.log('Socket ID:', socket.id);
+      console.log('Socket connected:', socket.connected);
       setIsConnected(true);
     });
 
@@ -70,6 +72,11 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
     socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
       setIsConnected(false);
     });
 
@@ -89,6 +96,11 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   }, [user]);
 
   const sendMessage = (content: string, channelId?: string, recipientId?: string) => {
+    console.log('sendMessage called with:', { content, channelId, recipientId });
+    console.log('socketRef.current:', socketRef.current);
+    console.log('user:', user);
+    console.log('isConnected:', isConnected);
+    
     if (socketRef.current && user) {
       const messageData = {
         content,
@@ -100,6 +112,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       socketRef.current.emit('send_message', messageData);
     } else {
       console.error('Cannot send message: socket not connected or user not available');
+      console.error('socketRef.current:', socketRef.current);
+      console.error('user:', user);
     }
   };
 

@@ -4,14 +4,14 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import App from './App.tsx'
 import { AuthProvider } from './contexts/AuthContext.tsx'
-import { SocketProvider } from './contexts/SocketContext.tsx'
+import { WebSocketProvider } from './contexts/WebSocketContext.tsx'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <SocketProvider>
+        <WebSocketProvider>
           <App />
           <Toaster 
             position="top-right"
@@ -23,7 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               },
             }}
           />
-        </SocketProvider>
+        </WebSocketProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

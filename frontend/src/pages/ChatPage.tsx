@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useSocket } from '../contexts/SocketContext';
+import { useWebSocket } from '../contexts/WebSocketContext';
 import { toast } from 'react-hot-toast';
+import DebugPanel from '../components/DebugPanel';
 
 const ChatPage: React.FC = () => {
   const { user, logout } = useAuth();
-  const { socket, isConnected } = useSocket();
+  const { isConnected, sendMessage, joinChannel } = useWebSocket();
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
   const [selectedChannel, setSelectedChannel] = useState('general');
@@ -24,60 +25,35 @@ const ChatPage: React.FC = () => {
     }
 
     // Join the selected channel
-    if (socket && isConnected) {
+    if (isConnected) {
       console.log('Joining channel:', selectedChannel, 'with user ID:', user.id);
-      socket.emit('join_channel', {
-        channel_id: selectedChannel,
-        user_id: user.id
-      });
+      joinChannel(selectedChannel);
     }
-  }, [socket, isConnected, user, selectedChannel]);
+  }, [isConnected, user, selectedChannel, joinChannel]);
 
-  useEffect(() => {
-    if (!socket) return;
-
-    socket.on('new_channel_message', (messageData) => {
-      console.log('Received new message:', messageData);
-      setMessages(prev => [...prev, messageData]);
-    });
-
-    socket.on('connect', () => {
-      console.log('Socket connected');
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Socket disconnected');
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
-
-    return () => {
-      socket.off('new_channel_message');
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('connect_error');
-    };
-  }, [socket]);
+  // WebSocket message handling will be done in the WebSocket context
+  // Messages will be received and handled there
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !user) return;
+    console.log('handleSendMessage called');
+    console.log('message:', message);
+    console.log('user:', user);
+    console.log('isConnected:', isConnected);
+    
+    if (!message.trim() || !user) {
+      console.log('Message empty or no user, returning');
+      return;
+    }
 
-    if (!socket || !isConnected) {
+    if (!isConnected) {
+      console.error('Socket not connected!');
       toast.error('Not connected to server. Please wait for connection...');
       return;
     }
 
-    const messageData = {
-      content: message,
-      sender_id: user.id,
-      channel_id: selectedChannel
-    };
-
-    console.log('Sending message:', messageData);
-    socket.emit('send_message', messageData);
+    console.log('Sending message via context:', message);
+    sendMessage(message, selectedChannel);
     setMessage('');
   };
 
@@ -208,6 +184,7 @@ const ChatPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <DebugPanel />
     </div>
   );
 };

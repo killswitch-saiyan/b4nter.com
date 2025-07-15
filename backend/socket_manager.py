@@ -23,19 +23,19 @@ async def connect(sid, environ, auth):
     try:
         logger.info(f"Connection attempt from {sid}")
         logger.info(f"Auth data: {auth}")
-        logger.info(f"Environ: {environ}")
         
-        # Extract user info from auth (you'll need to implement this)
+        # Extract user info from auth
         user_id = auth.get('user_id') if auth else None
+        
+        # Always allow connection for now (for testing)
         if user_id:
             connected_users[user_id] = sid
             await sio.emit('user_connected', {'user_id': user_id}, skip_sid=sid)
             logger.info(f"User {user_id} connected with session {sid}")
-            return True
         else:
-            # For now, allow connection without auth for testing
-            logger.warning(f"No user_id in auth, but allowing connection for testing")
-            return True
+            logger.info(f"Anonymous user connected with session {sid}")
+        
+        return True
     except Exception as e:
         logger.error(f"Error in connect: {e}")
         return False
