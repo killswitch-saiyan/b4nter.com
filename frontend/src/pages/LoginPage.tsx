@@ -55,27 +55,41 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col items-stretch justify-center overflow-hidden font-sans">
-      {/* Background Video with Fallback */}
+    <div 
+      className="relative min-h-screen flex flex-col items-stretch justify-center overflow-hidden font-sans"
+      style={{
+        background: 'linear-gradient(135deg, #fef9e7 0%, #fcf3cf 25%, #f9e79f 50%, #f7dc6f 75%, #f4d03f 100%)',
+        backgroundSize: '400% 400%',
+        animation: 'gradientShift 8s ease infinite'
+      }}
+    >
+      <style>
+        {`
+          @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+        `}
+      </style>
+      {/* Background Video - Hidden by default, shown only if it loads */}
       <video
         autoPlay
         loop
         muted
         playsInline
-        className="absolute inset-0 w-full h-full object-cover z-0"
+        className="absolute inset-0 w-full h-full object-cover z-0 opacity-0 transition-opacity duration-1000"
         style={{ filter: 'brightness(0.7)' }}
+        onCanPlay={() => {
+          console.log('Video can play - showing it');
+          const video = document.querySelector('video');
+          if (video) {
+            video.style.opacity = '1';
+          }
+        }}
         onError={(e) => {
           console.error('Video failed to load:', e);
-          // Hide video and show background image instead
-          const video = e.currentTarget;
-          video.style.display = 'none';
-          const container = video.parentElement;
-          if (container) {
-            container.style.backgroundImage = 'url(/background.png)';
-            container.style.backgroundSize = 'cover';
-            container.style.backgroundPosition = 'center';
-            container.style.backgroundRepeat = 'no-repeat';
-          }
+          // Video will remain hidden, background image will show
         }}
       >
         <source src="/bgvideo.mp4" type="video/mp4" />
