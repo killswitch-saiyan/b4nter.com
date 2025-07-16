@@ -18,5 +18,18 @@ export default defineConfig({
         ws: true
       }
     }
+  },
+  build: {
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name?.endsWith('.mp4')) {
+            return 'assets/[name].[ext]'
+          }
+          return 'assets/[name]-[hash].[ext]'
+        }
+      }
+    }
   }
 }) 

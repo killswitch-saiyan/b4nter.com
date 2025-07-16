@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import { FaFutbol, FaPoll, FaSmile, FaUserFriends } from 'react-icons/fa';
+// Video will be handled via public path
 
 const trendingRooms = [
   {
@@ -55,7 +56,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="relative min-h-screen flex flex-col items-stretch justify-center overflow-hidden font-sans">
-      {/* Background Video */}
+      {/* Background Video with Fallback */}
       <video
         autoPlay
         loop
@@ -63,8 +64,22 @@ const LoginPage: React.FC = () => {
         playsInline
         className="absolute inset-0 w-full h-full object-cover z-0"
         style={{ filter: 'brightness(0.7)' }}
+        onError={(e) => {
+          console.error('Video failed to load:', e);
+          // Hide video and show background image instead
+          const video = e.currentTarget;
+          video.style.display = 'none';
+          const container = video.parentElement;
+          if (container) {
+            container.style.backgroundImage = 'url(/background.png)';
+            container.style.backgroundSize = 'cover';
+            container.style.backgroundPosition = 'center';
+            container.style.backgroundRepeat = 'no-repeat';
+          }
+        }}
       >
-        <source src="/backgroundvideo.mp4" type="video/mp4" />
+        <source src="/bgvideo.mp4" type="video/mp4" />
+        <source src="https://b4nter.onrender.com/bgvideo.mp4" type="video/mp4" />
         Your browser does not support the video tag.
       </video>
       {/* Animated Gradient Background */}
