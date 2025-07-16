@@ -72,6 +72,7 @@ const LoginPage: React.FC = () => {
       {/* Background Video - Hidden by default, shown only if it loads */}
       <video
         autoPlay
+        loop
         muted
         playsInline
         className="absolute inset-0 w-full h-full object-cover z-0 opacity-0 transition-opacity duration-1000"
@@ -100,7 +101,7 @@ const LoginPage: React.FC = () => {
         {/* Left: Hero & Trending Rooms, top-left aligned */}
         <div className="flex-1 flex flex-col items-start justify-start pt-16 pl-10 md:pt-24 md:pl-24">
           <div className="flex items-center gap-3 mb-6 relative">
-            <img src={brandLogo} alt="Banter Logo" className="w-[100px] h-[100px] rounded-full object-contain shadow-lg" />
+            <img src={brandLogo} alt="Banter Logo" className="w-[80px] h-[80px] rounded-full object-contain shadow-lg" />
             <span className="text-7xl md:text-7xl font-bold tracking-tight text-white select-none" style={{letterSpacing: '-0.0009em', fontFamily: 'Azeret Mono, monospace'}}>b4nter</span>
           </div>
           <h2 className="text-3xl md:text-3xl font-bold text-white mb-3" style={{letterSpacing: '-0.01em', fontFamily: 'Syne Mono, monospace'}}>Where pettiness trumps over peace. Talk trash and vibe !</h2>
