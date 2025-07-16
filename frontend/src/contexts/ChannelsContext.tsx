@@ -31,13 +31,19 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   const [loading, setLoading] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
 
+  // Get backend URL from environment variable or default to localhost
+  const getBackendUrl = () => {
+    return import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+  };
+
   const fetchChannels = async () => {
     if (!user) return;
 
     setLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://127.0.0.1:8000/channels/', {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/channels/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

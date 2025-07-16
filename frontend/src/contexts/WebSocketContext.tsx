@@ -32,6 +32,13 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
 
+  // Get backend URL from environment variable or default to localhost
+  const getBackendUrl = () => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+    // Convert HTTP URL to WebSocket URL
+    return backendUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+  };
+
   useEffect(() => {
     if (!user) {
       if (wsRef.current) {
@@ -47,7 +54,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     console.log('Initializing WebSocket connection for user:', user.id);
 
     // Initialize WebSocket connection
-    const ws = new WebSocket(`ws://127.0.0.1:8000/ws/${user.id}`);
+    const backendUrl = getBackendUrl();
+    const ws = new WebSocket(`${backendUrl}/ws/${user.id}`);
 
     wsRef.current = ws;
 
