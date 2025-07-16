@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import { FaFutbol, FaPoll, FaSmile, FaUserFriends } from 'react-icons/fa';
+import banterLogo from '../assets/banter-logo.png';
 
 const trendingRooms = [
   {
@@ -62,7 +63,11 @@ const LoginPage: React.FC = () => {
       <div className="relative z-10 flex flex-col md:flex-row w-full h-full min-h-[80vh]">
         {/* Left: Hero & Trending Rooms, top-left aligned */}
         <div className="flex-1 flex flex-col items-start justify-start pt-16 pl-10 md:pt-24 md:pl-24">
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-6 relative">
+            <div className="relative w-36 h-36 flex-shrink-0 rounded-full" style={{background: '#FAE5DF'}}>
+              <img src={banterLogo} alt="Banter Logo" className="w-full h-full object-contain" />
+              <span className="absolute inset-0 flex items-center justify-center text-black text-base font-bold select-none pointer-events-none" style={{fontFamily: 'Bangers, monospace', letterSpacing: '0.05em'}}>%#$</span>
+            </div>
             <span className="text-7xl md:text-7xl font-bold tracking-tight text-black select-none" style={{letterSpacing: '-0.0009em', fontFamily: 'Azeret Mono, monospace'}}>b4nter</span>
           </div>
           <h2 className="text-3xl md:text-3xl font-bold text-black mb-3" style={{letterSpacing: '-0.01em', fontFamily: 'Syne Mono, monospace'}}>Where pettiness trumps over peace. Talk trash and vibe !</h2>
