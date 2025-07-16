@@ -57,7 +57,7 @@ const LoginPage: React.FC = () => {
     <div 
       className="relative min-h-screen flex flex-col items-stretch justify-center overflow-hidden font-sans" 
       style={{
-        backgroundImage: `url('/src/assets/generated-image-2-1 (1).png')`,
+        backgroundImage: `url('/src/assets/background.png')`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat'
