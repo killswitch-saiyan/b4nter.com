@@ -3,7 +3,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import { useChannels } from '../contexts/ChannelsContext';
 import { toast } from 'react-hot-toast';
-import DebugPanel from '../components/DebugPanel';
 import MessageInput from '../components/MessageInput';
 import MessageDisplay from '../components/MessageDisplay';
 import { userAPI } from '../lib/api';
@@ -487,7 +486,6 @@ const ChatPage: React.FC = () => {
           )}
         </div>
       </div>
-      <DebugPanel />
     </div>
   );
 };

@@ -86,11 +86,29 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             break;
           case 'new_channel_message':
             console.log('New channel message:', data.message);
-            setMessages((prev) => [...prev, data.message]);
+            // Add sender information to the message
+            const channelMessage = {
+              ...data.message,
+              sender: {
+                username: user?.username || 'Unknown',
+                full_name: user?.full_name || user?.username || 'Unknown',
+                avatar_url: user?.avatar_url
+              }
+            };
+            setMessages((prev) => [...prev, channelMessage]);
             break;
           case 'new_direct_message':
             console.log('New direct message:', data.message);
-            setMessages((prev) => [...prev, data.message]);
+            // Add sender information to the message
+            const directMessage = {
+              ...data.message,
+              sender: {
+                username: user?.username || 'Unknown',
+                full_name: user?.full_name || user?.username || 'Unknown',
+                avatar_url: user?.avatar_url
+              }
+            };
+            setMessages((prev) => [...prev, directMessage]);
             break;
           case 'channel_joined':
             console.log('Joined channel:', data.channel_id);

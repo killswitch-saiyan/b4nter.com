@@ -72,6 +72,7 @@ class MessageResponse(MessageBase):
     recipient_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    sender: Optional[dict] = None
     
     class Config:
         from_attributes = True

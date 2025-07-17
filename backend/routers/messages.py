@@ -65,6 +65,11 @@ async def create_message(
         
         # Get sender info
         sender = await db.get_user_by_id(current_user.id)
+        if not sender:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to get sender information"
+            )
         
         # Return message response
         message_response = MessageResponse(
@@ -75,7 +80,13 @@ async def create_message(
             channel_id=message_data.channel_id,
             recipient_id=message_data.recipient_id,
             created_at=new_message["created_at"],
-            updated_at=new_message["updated_at"]
+            updated_at=new_message["updated_at"],
+            sender={
+                "id": current_user.id,
+                "username": sender.get("username"),
+                "full_name": sender.get("full_name"),
+                "avatar_url": sender.get("avatar_url")
+            }
         )
         
         return message_response
@@ -123,7 +134,13 @@ async def get_channel_messages(
                 channel_id=msg["channel_id"],
                 recipient_id=msg.get("recipient_id"),
                 created_at=msg["created_at"],
-                updated_at=msg["updated_at"]
+                updated_at=msg["updated_at"],
+                sender={
+                    "id": msg["sender_id"],
+                    "username": sender_info.get("username"),
+                    "full_name": sender_info.get("full_name"),
+                    "avatar_url": sender_info.get("avatar_url")
+                }
             )
             message_responses.append(message_response)
         
@@ -170,7 +187,13 @@ async def get_direct_messages(
                 channel_id=msg.get("channel_id"),
                 recipient_id=msg.get("recipient_id"),
                 created_at=msg["created_at"],
-                updated_at=msg["updated_at"]
+                updated_at=msg["updated_at"],
+                sender={
+                    "id": msg["sender_id"],
+                    "username": sender_info.get("username"),
+                    "full_name": sender_info.get("full_name"),
+                    "avatar_url": sender_info.get("avatar_url")
+                }
             )
             message_responses.append(message_response)
         

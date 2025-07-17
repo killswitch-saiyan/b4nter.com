@@ -6,6 +6,11 @@ interface MessageDisplayProps {
 }
 
 const MessageDisplay: React.FC<MessageDisplayProps> = ({ message }) => {
+  // Temporary debugging to see what data we're getting
+  console.log('MessageDisplay - Full message:', message);
+  console.log('MessageDisplay - Sender object:', message.sender);
+  console.log('MessageDisplay - Sender ID:', message.sender_id);
+  
   const displayName = message.sender?.full_name || message.sender?.username || 'Unknown';
   const avatarInitial = message.sender?.full_name?.charAt(0) || message.sender?.username?.charAt(0) || 'U';
 

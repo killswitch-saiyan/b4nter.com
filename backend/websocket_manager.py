@@ -118,7 +118,11 @@ class WebSocketManager:
                 'id': saved_message['id'],
                 'content': content,
                 'sender_id': sender_id,
-                'sender_name': sender.get('full_name') or sender.get('username'),
+                'sender': {
+                    'username': sender.get('username'),
+                    'full_name': sender.get('full_name'),
+                    'avatar_url': sender.get('avatar_url')
+                },
                 'channel_id': channel_id,
                 'recipient_id': recipient_id,
                 'created_at': saved_message['created_at'],
