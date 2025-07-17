@@ -49,7 +49,39 @@ async def register(user_data: UserCreate):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create user"
             )
-        
+
+        # Add new user to the 'free-for-all' channel by default
+        try:
+            free_channel = await db.get_channel_by_name('free-for-all')
+            logger.info(f"Found free-for-all channel: {free_channel}")
+            if free_channel:
+                member_data = {
+                    "user_id": new_user["id"],
+                    "channel_id": free_channel["id"],
+                    "role": "user"
+                }
+                logger.info(f"Adding user to free-for-all channel with data: {member_data}")
+                result = await db.add_channel_member(member_data)
+                logger.info(f"Add channel member result: {result}")
+                if not result:
+                    logger.error(f"Failed to add user {new_user['id']} to free-for-all channel {free_channel['id']}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to add user to free-for-all channel. Please contact support."
+                    )
+            else:
+                logger.error("free-for-all channel not found - user will not be added to any default channel")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="free-for-all channel not found. Please contact support."
+                )
+        except Exception as e:
+            logger.error(f"Error adding user to free-for-all channel: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error adding user to free-for-all channel: {e}"
+            )
+
         # Create access token
         access_token = create_access_token(data={"sub": new_user["id"]})
         

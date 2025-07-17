@@ -4,8 +4,12 @@ import { useWebSocket } from '../contexts/WebSocketContext';
 import { useChannels } from '../contexts/ChannelsContext';
 import { toast } from 'react-hot-toast';
 import DebugPanel from '../components/DebugPanel';
+import MessageInput from '../components/MessageInput';
+import MessageDisplay from '../components/MessageDisplay';
 import { userAPI } from '../lib/api';
 import { Message } from '../types';
+// @ts-ignore
+import brandLogo from '../assets/brandlogo.png';
 
 const ChatPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -106,10 +110,9 @@ const ChatPage: React.FC = () => {
       .finally(() => setLoadingUsers(false));
   }, []);
 
-  // When sending a DM, add a local pending message
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!message.trim() || !user || (!selectedChannel && !selectedDMUser)) return;
+  // Enhanced message sending with emoji support
+  const handleSendMessage = (content: string, messageType: 'text' | 'emoji') => {
+    if (!content.trim() || !user || (!selectedChannel && !selectedDMUser)) return;
     if (!isConnected) {
       toast.error('Not connected to server. Please wait for connection...');
       return;
@@ -118,24 +121,29 @@ const ChatPage: React.FC = () => {
       toast.error('You have blocked this user. Unblock to send messages.');
       return;
     }
+    
     if (selectedDMUser) {
       const tempId = 'pending-' + Math.random().toString(36).slice(2);
       const pendingMsg: Message & { pending?: boolean } = {
         id: tempId,
-        content: message,
+        content: content,
         sender_id: user.id,
-        sender_name: user.full_name || user.username,
+        sender: {
+          username: user.username,
+          full_name: user.full_name || user.username,
+          avatar_url: user.avatar_url
+        },
         recipient_id: selectedDMUser.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        message_type: messageType,
         pending: true,
       };
       setPendingDMMessages(prev => [...prev, pendingMsg]);
-      sendMessage(message, undefined, selectedDMUser.id);
+      sendMessage(content, undefined, selectedDMUser.id);
     } else if (selectedChannel) {
-      sendMessage(message, selectedChannel.id);
+      sendMessage(content, selectedChannel.id);
     }
-    setMessage('');
   };
 
   // When DM history is fetched, merge with local pending messages (deduplicate by content/timestamp)
@@ -302,7 +310,8 @@ const ChatPage: React.FC = () => {
       <div className="bg-white shadow-sm border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-gray-900">B4nter</h1>
+            <img src={brandLogo} alt="b4nter Logo" className="w-8 h-8 rounded-full object-contain shadow-sm" />
+            <h1 className="text-2xl font-bold text-gray-900">b4nter</h1>
             <span className="text-sm text-gray-500">Where the game never stops talking</span>
           </div>
           <div className="flex items-center space-x-4">
@@ -432,27 +441,15 @@ const ChatPage: React.FC = () => {
                 dmMessages.map((msg, index) => {
                   const m = msg as Message & { pending?: boolean };
                   return (
-                    <div key={m.id} className={`flex items-start space-x-3 ${m.pending ? 'opacity-60' : ''}`}>
-                      <div className="flex-shrink-0">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
-                          <span className="text-white text-sm font-medium">
-                            {m.sender_name?.charAt(0) || 'U'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-baseline space-x-2">
-                          <span className="text-sm font-medium text-gray-900">
-                            {m.sender_name || 'Unknown'}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(m.created_at).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-700 mt-1">{m.content}</p>
-                        {m.pending && <span className="ml-2 text-xs text-gray-400 animate-pulse">Sending...</span>}
-                      </div>
-                    </div>
+                    <MessageDisplay
+                      key={m.id}
+                      message={m}
+                      isPending={m.pending}
+                      isBlocked={isBlocked}
+                      onBlockUser={handleBlockUser}
+                      onUnblockUser={handleUnblockUser}
+                      loadingBlock={loadingBlock}
+                    />
                   );
                 })
               )
@@ -465,54 +462,29 @@ const ChatPage: React.FC = () => {
                 </div>
               ) : (
                 filteredMessages.map((msg, index) => (
-                  <div key={index} className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
-                        <span className="text-white text-sm font-medium">
-                          {msg.sender_name?.charAt(0) || 'U'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-baseline space-x-2">
-                        <span className="text-sm font-medium text-gray-900">
-                          {msg.sender_name || 'Unknown'}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(msg.created_at).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700 mt-1">{msg.content}</p>
-                    </div>
-                  </div>
+                  <MessageDisplay
+                    key={msg.id}
+                    message={msg}
+                    isPending={false} // Channel messages are not pending
+                    isBlocked={false} // Channel messages are not blocked
+                    onBlockUser={() => {}} // No block/unblock for channel messages
+                    onUnblockUser={() => {}}
+                    loadingBlock={false}
+                  />
                 ))
               )
             )}
           </div>
 
-          {/* Message Input */}
-          <div className="bg-white border-t p-4">
-            <form onSubmit={handleSendMessage} className="flex space-x-4">
-              <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message #${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
-                disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-              />
-              <button
-                type="submit"
-                disabled={!message.trim() || (!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Send
-              </button>
-            </form>
-            {selectedDMUser && isBlocked && (
-              <div className="text-center text-xs text-red-500">You have blocked this user. Unblock to send messages.</div>
-            )}
-          </div>
+          {/* Enhanced Message Input with Emoji and GIF Support */}
+          <MessageInput
+            onSendMessage={handleSendMessage}
+            placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message #${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
+            disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
+          />
+          {selectedDMUser && isBlocked && (
+            <div className="text-center text-xs text-red-500">You have blocked this user. Unblock to send messages.</div>
+          )}
         </div>
       </div>
       <DebugPanel />

@@ -23,11 +23,16 @@ export interface Message {
   id: string;
   content: string;
   sender_id: string;
-  sender_name: string;
   channel_id?: string;
   recipient_id?: string;
   created_at: string;
   updated_at: string;
+  sender?: {
+    username: string;
+    full_name: string;
+    avatar_url?: string;
+  };
+  message_type?: 'text' | 'emoji';
 }
 
 export interface ChannelMember {
