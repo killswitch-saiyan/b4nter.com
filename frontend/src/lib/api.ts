@@ -22,4 +22,35 @@ export const authAPI = {
     const res = await axios.post(`${API_BASE}/auth/google`, { id_token: idToken });
     return res.data;
   },
+};
+
+export const userAPI = {
+  async getUsersForDM() {
+    const token = localStorage.getItem('access_token');
+    const res = await axios.get(`${API_BASE}/messages/users`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return res.data;
+  },
+  async blockUser(userId: string) {
+    const token = localStorage.getItem('access_token');
+    const res = await axios.post(`${API_BASE}/users/${userId}/block`, {}, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return res.data;
+  },
+  async unblockUser(userId: string) {
+    const token = localStorage.getItem('access_token');
+    const res = await axios.delete(`${API_BASE}/users/${userId}/block`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return res.data;
+  },
+  async getBlockedUsers() {
+    const token = localStorage.getItem('access_token');
+    const res = await axios.get(`${API_BASE}/users/blocks`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return res.data;
+  },
 }; 

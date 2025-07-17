@@ -188,15 +188,10 @@ async def get_direct_messages(
 
 @router.get("/users")
 async def get_users_for_direct_messages(current_user: UserResponse = Depends(get_current_user)):
-    """Get all users for direct messaging"""
+    """Get all users for direct messaging (excluding blocked users)"""
     try:
-        users = await db.get_all_users()
-        
-        # Filter out current user
-        filtered_users = [user for user in users if user["id"] != current_user.id]
-        
-        return filtered_users
-        
+        users = await db.get_users_for_dm_filtered(current_user.id)
+        return users
     except Exception as e:
         logger.error(f"Error in get_users_for_direct_messages: {e}")
         raise HTTPException(

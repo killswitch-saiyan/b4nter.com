@@ -47,7 +47,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         wsRef.current = null;
         setIsConnected(false);
       }
-      setMessages([]);
+      // Don't clear messages when user logs out - keep them for when they log back in
       return;
     }
 
