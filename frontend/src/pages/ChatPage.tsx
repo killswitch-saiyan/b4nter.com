@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import MessageInput from '../components/MessageInput';
 import MessageDisplay from '../components/MessageDisplay';
 import EncryptionStatus from '../components/EncryptionStatus';
+import UserProfileDropdown from '../components/UserProfileDropdown';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -13,7 +14,7 @@ import { prepareMessageContent, processReceivedMessage } from '../services/e2eeS
 import brandLogo from '../assets/brandlogo.png';
 
 const ChatPage: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent } = useWebSocket();
   const { channels, loading, selectedChannel, setSelectedChannel } = useChannels();
   const [message, setMessage] = useState('');
@@ -434,20 +435,51 @@ const ChatPage: React.FC = () => {
     if (selectedChannel) setSelectedDMUser(null);
   }, [selectedChannel]);
 
-  const handleLogout = () => {
-    logout();
-    toast.success('Logged out successfully');
+  // Function to refresh messages to show updated avatars
+  const refreshMessages = () => {
+    console.log('🔄 Refreshing messages to show updated avatars...');
+    console.log('Current user avatar_url:', user?.avatar_url);
+    
+    if (selectedChannel) {
+      console.log('Refreshing channel messages for:', selectedChannel.name);
+      loadChannelMessages(selectedChannel.id);
+    }
+    if (selectedDMUser) {
+      console.log('Refreshing DM messages for:', selectedDMUser.username);
+      // Refresh DM messages
+      const token = localStorage.getItem('access_token');
+      fetch(`/api/messages/direct/${selectedDMUser.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+        .then(res => res.ok ? res.json() : [])
+        .then(data => {
+          console.log('Refreshed DM messages:', data);
+          const confirmed = Array.isArray(data) ? data : [];
+          setDMMessages(() => {
+            const mergedMessages = confirmed.map(confMsg => {
+              const processedMsg = processReceivedMessage(confMsg, user?.id || '');
+              console.log('Processed message sender:', processedMsg.sender);
+              const existing = pendingDMMessages.find(m => m.id === processedMsg.id);
+              if (existing && Array.isArray(existing.reactions)) {
+                const allReactions = [...(Array.isArray(processedMsg.reactions) ? processedMsg.reactions : []), ...existing.reactions];
+                const deduped = allReactions.filter((r, idx, arr) =>
+                  arr.findIndex(x => x.emoji === r.emoji && x.user_id === r.user_id) === idx
+                );
+                return { ...processedMsg, reactions: deduped };
+              }
+              return processedMsg;
+            });
+            return mergedMessages;
+          });
+        })
+        .catch(error => {
+          console.error('Error refreshing DM messages:', error);
+        });
+    }
   };
-
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Please log in to continue</h2>
-        </div>
-      </div>
-    );
-  }
 
   // Get display name - prefer full_name, fallback to username
   const displayName = user.full_name || user.username || 'Unknown User';
@@ -468,15 +500,13 @@ const ChatPage: React.FC = () => {
             <span className="text-sm text-gray-300" style={{fontFamily: 'Cabin, sans-serif'}}>Start talking smack!</span>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-300" style={{fontFamily: 'Cabin, sans-serif'}}>
-              Welcome, {displayName}!
-            </span>
+            <UserProfileDropdown onAvatarUpdate={refreshMessages} />
             <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-md hover:bg-gray-700"
-              style={{fontFamily: 'Cabin, sans-serif'}}
+              onClick={refreshMessages}
+              className="px-2 py-1 text-xs text-gray-300 hover:text-white bg-gray-800 rounded"
+              title="Refresh messages (debug)"
             >
-              Logout
+              🔄
             </button>
           </div>
         </div>
@@ -548,7 +578,7 @@ const ChatPage: React.FC = () => {
                   </div>
                 ) : (
                   <h2 className="text-lg font-semibold text-gray-900">
-                    {selectedChannel ? `#${selectedChannel.name}` : 'Select a channel or user'}
+                    {selectedChannel ? `# ${selectedChannel.name}` : 'Select a channel or user'}
                   </h2>
                 )}
                 {selectedChannel && !selectedDMUser && (
@@ -632,7 +662,7 @@ const ChatPage: React.FC = () => {
           <div className="flex-shrink-0 p-4 bg-white border-t">
             <MessageInput
               onSendMessage={handleSendMessage}
-              placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message #${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
+              placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message # ${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
               disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
             />
             {selectedDMUser && isBlocked && (

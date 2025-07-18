@@ -24,6 +24,17 @@ class DatabaseManager:
             logger.error(f"Error getting user by email: {e}")
             return None
     
+    async def get_user_by_username(self, username: str):
+        """Get user by username"""
+        try:
+            response = self.client.table('users').select('*').eq('username', username).execute()
+            if response.data:
+                return response.data[0]
+            return None
+        except Exception as e:
+            logger.error(f"Error getting user by username: {e}")
+            return None
+    
     async def get_user_by_id(self, user_id: str):
         """Get user by ID"""
         try:

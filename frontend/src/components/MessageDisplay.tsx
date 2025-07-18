@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Message, MessageReaction } from '../types';
 import { extractYouTubeUrls } from '../utils/youtubeUtils';
 import YouTubeThumbnail from './YouTubeThumbnail';
@@ -15,6 +15,24 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
   const [clickedEmoji, setClickedEmoji] = useState<string | null>(null);
   const [lastClick, setLastClick] = useState<number>(0);
   const [tooltipEmoji, setTooltipEmoji] = useState<string | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  // Handle clicking outside emoji picker to close it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEmojiPicker]);
 
   const displayName = message.sender?.full_name || message.sender?.username || 'Unknown';
   const avatarInitial = message.sender?.full_name?.charAt(0) || message.sender?.username?.charAt(0) || 'U';
@@ -81,7 +99,24 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
     >
       <div className="flex items-start space-x-3 w-full">
         <div className="flex-shrink-0">
-          <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
+          {message.sender?.avatar_url ? (
+            <img
+              src={message.sender.avatar_url}
+              alt={`${displayName}'s avatar`}
+              className="w-8 h-8 rounded-full object-cover"
+              onError={(e) => {
+                // Fallback to initials if image fails to load
+                console.error('Avatar image failed to load:', message.sender?.avatar_url);
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                target.nextElementSibling?.classList.remove('hidden');
+              }}
+              onLoad={() => {
+                console.log('Avatar image loaded successfully:', message.sender?.avatar_url);
+              }}
+            />
+          ) : null}
+          <div className={`w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center ${message.sender?.avatar_url ? 'hidden' : ''}`}>
             <span className="text-white text-sm font-medium">{avatarInitial}</span>
           </div>
         </div>
@@ -134,31 +169,30 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
         ))}
         {/* + Button for Emoji Picker */}
         <button
-          className={`flex items-center justify-center w-4 h-4 rounded-full text-[10px] border bg-gray-100 border-gray-300 hover:bg-indigo-200 transition absolute left-full ml-2 ${hovered ? 'opacity-100' : 'opacity-0 pointer-events-none'} z-10`}
-          style={{ transition: 'opacity 0.2s', minWidth: '16px', minHeight: '16px', padding: 0 }}
+          className={`flex items-center justify-center w-6 h-6 rounded-full text-xs border bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm ${hovered ? 'opacity-100' : 'opacity-0 pointer-events-none'} z-10`}
           onClick={() => setShowEmojiPicker((v) => !v)}
           tabIndex={-1}
         >
-          <span className="font-bold leading-none">+</span>
+          <span className="font-bold text-gray-600">+</span>
         </button>
         {showEmojiPicker && (
-          <div className="absolute z-50 mt-2 left-full ml-2">
-            {/* Replace this with your emoji picker component */}
-            <div className="bg-white border rounded shadow p-2">
-              <div className="flex flex-wrap max-w-xs">
-                {["😀","😂","😍","😎","👍","🔥","🎉","🙏","⚽","🏆","🥅","🥇","🥈","🥉"].map((emoji) => (
+          <div className="absolute z-50 bottom-full left-0 mb-2 animate-in fade-in-0 zoom-in-95 duration-200" ref={emojiPickerRef}>
+            <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-2 relative">
+              {/* Arrow pointer */}
+              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
+              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-200" style={{ marginTop: '-1px' }}></div>
+              
+              <div className="flex items-center space-x-1">
+                {["👍","❤️","😂","😮","😢","😡","🎉","👏","🔥","💯","⚽","🏆"].map((emoji) => (
                   <button
                     key={emoji}
-                    className="text-xl m-1 hover:bg-gray-200 rounded"
+                    className="w-8 h-8 flex items-center justify-center text-lg hover:bg-gray-100 rounded transition-colors"
                     onClick={() => handleAddReaction(emoji)}
                   >
                     {emoji}
                   </button>
                 ))}
               </div>
-              <button className="mt-2 text-xs text-gray-500" onClick={() => setShowEmojiPicker(false)}>
-                Close
-              </button>
             </div>
           </div>
         )}

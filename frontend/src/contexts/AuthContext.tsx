@@ -11,6 +11,7 @@ interface AuthContextType {
   register: (username: string, email: string, password: string, fullName?: string) => Promise<void>;
   logout: () => void;
   googleLogin: (idToken: string) => Promise<void>;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -164,6 +165,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     toast.success('Logged out successfully');
   };
 
+  const updateUser = (updates: Partial<User>) => {
+    setUser(prevUser => {
+      if (prevUser) {
+        return { ...prevUser, ...updates };
+      }
+      return null;
+    });
+  };
+
   const value: AuthContextType = {
     user,
     loading,
@@ -171,6 +181,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     register,
     logout,
     googleLogin,
+    updateUser,
   };
 
   return (
