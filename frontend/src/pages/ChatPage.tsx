@@ -306,6 +306,37 @@ const ChatPage: React.FC = () => {
       setUsers(updatedUsers);
       const blockedUsersFromAPI = updatedUsers.filter(user => user.is_blocked);
       setBlockedUsers(blockedUsersFromAPI);
+      
+      // Refresh DM messages to hide messages from blocked user
+      if (selectedDMUser) {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/api/messages/direct/${selectedDMUser.id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const confirmed = Array.isArray(data) ? data : [];
+          setDMMessages(() => {
+            const mergedMessages = confirmed.map(confMsg => {
+              const processedMsg = processReceivedMessage(confMsg, user?.id || '');
+              const existing = pendingDMMessages.find(m => m.id === processedMsg.id);
+              if (existing && Array.isArray(existing.reactions)) {
+                const allReactions = [...(Array.isArray(processedMsg.reactions) ? processedMsg.reactions : []), ...existing.reactions];
+                const deduped = allReactions.filter((r, idx, arr) =>
+                  arr.findIndex(x => x.emoji === r.emoji && x.user_id === r.user_id) === idx
+                );
+                return { ...processedMsg, reactions: deduped };
+              }
+              return processedMsg;
+            });
+            return mergedMessages;
+          });
+        }
+      }
+      
       toast.success('User blocked');
     } catch {
       toast.error('Failed to block user');
@@ -324,6 +355,37 @@ const ChatPage: React.FC = () => {
       setUsers(updatedUsers);
       const blockedUsersFromAPI = updatedUsers.filter(user => user.is_blocked);
       setBlockedUsers(blockedUsersFromAPI);
+      
+      // Refresh DM messages to show messages from unblocked user
+      if (selectedDMUser) {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/api/messages/direct/${selectedDMUser.id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const confirmed = Array.isArray(data) ? data : [];
+          setDMMessages(() => {
+            const mergedMessages = confirmed.map(confMsg => {
+              const processedMsg = processReceivedMessage(confMsg, user?.id || '');
+              const existing = pendingDMMessages.find(m => m.id === processedMsg.id);
+              if (existing && Array.isArray(existing.reactions)) {
+                const allReactions = [...(Array.isArray(processedMsg.reactions) ? processedMsg.reactions : []), ...existing.reactions];
+                const deduped = allReactions.filter((r, idx, arr) =>
+                  arr.findIndex(x => x.emoji === r.emoji && x.user_id === r.user_id) === idx
+                );
+                return { ...processedMsg, reactions: deduped };
+              }
+              return processedMsg;
+            });
+            return mergedMessages;
+          });
+        }
+      }
+      
       toast.success('User unblocked');
     } catch {
       toast.error('Failed to unblock user');
@@ -503,6 +565,21 @@ const ChatPage: React.FC = () => {
     (msg) => msg.channel_id === selectedChannel?.id
   );
 
+  // Filter DM messages to hide messages from blocked users
+  const filteredDMMessages = dmMessages.filter((msg) => {
+    // If the current user has blocked the selected DM user, hide messages from that user
+    if (selectedDMUser && selectedDMUser.is_blocked) {
+      // Hide messages sent by the blocked user
+      return msg.sender_id !== selectedDMUser.id;
+    }
+    // If the selected DM user has blocked the current user, hide messages from that user
+    if (selectedDMUser && blockedUsers.some(u => u.id === selectedDMUser.id)) {
+      // Hide messages sent by the user who blocked us
+      return msg.sender_id !== selectedDMUser.id;
+    }
+    return true; // Show all messages if no blocking
+  });
+
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
       {/* Header - Fixed */}
@@ -638,12 +715,16 @@ const ChatPage: React.FC = () => {
             {selectedDMUser ? (
               loadingDM ? (
                 <div className="text-center text-gray-500">Loading messages...</div>
-              ) : dmMessages.length === 0 ? (
+              ) : filteredDMMessages.length === 0 ? (
                 <div className="text-center text-gray-500 mt-8">
-                  <p>No messages yet. Start the conversation!</p>
+                  {dmMessages.length === 0 ? (
+                    <p>No messages yet. Start the conversation!</p>
+                  ) : (
+                    <p>Messages from this user are hidden because they are blocked.</p>
+                  )}
                 </div>
               ) : (
-                dmMessages.map((msg, index) => {
+                filteredDMMessages.map((msg, index) => {
                   const m = msg as Message & { pending?: boolean };
                   return (
                     <MessageDisplay

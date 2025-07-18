@@ -195,8 +195,18 @@ async def get_direct_messages(
                 detail="User not found"
             )
         
+        # Check blocking status
+        current_user_blocked_other = await db.is_user_blocked(current_user.id, user_id)
+        other_blocked_current_user = await db.is_user_blocked(user_id, current_user.id)
+        
         # Get direct messages
         messages = await db.get_direct_messages(current_user.id, user_id, limit)
+        
+        # Filter out messages from blocked users
+        if current_user_blocked_other or other_blocked_current_user:
+            # Filter out messages sent by the other user
+            messages = [msg for msg in messages if msg["sender_id"] != user_id]
+        
         message_ids = [msg["id"] for msg in messages]
         reactions_by_message = await db.get_reactions_for_messages(message_ids)
         print("DEBUG: reactions_by_message", reactions_by_message)
