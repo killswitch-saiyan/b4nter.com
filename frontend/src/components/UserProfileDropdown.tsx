@@ -3,6 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import ProfilePictureUpload from './ProfilePictureUpload';
 import toast from 'react-hot-toast';
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
 interface UserProfileDropdownProps {
   className?: string;
   onAvatarUpdate?: () => void;
@@ -64,7 +66,7 @@ const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({ className = "
     setIsSaving(true);
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('/api/users/profile', {
+      const response = await fetch(`${API_BASE}/users/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -135,7 +137,7 @@ const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({ className = "
     setChangingPassword(true);
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('/api/users/change-password', {
+      const response = await fetch(`${API_BASE}/users/change-password`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

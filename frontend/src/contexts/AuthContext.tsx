@@ -4,6 +4,8 @@ import { authAPI } from '../lib/api';
 import { initializeEncryptionKeys, getPublicKey, storePublicKey } from '../utils/encryption';
 import toast from 'react-hot-toast';
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -89,7 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = localStorage.getItem('access_token');
       if (!token) return;
       
-      await fetch('/api/users/public-key', {
+      await fetch(`${API_BASE}/users/public-key`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
