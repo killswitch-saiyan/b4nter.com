@@ -120,8 +120,17 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     setLoadingUsers(true);
     userAPI.getUsersForDM()
-      .then(setUsers)
-      .catch(() => setUsers([]))
+      .then(users => {
+        // Update users with blocking status from API response
+        setUsers(users);
+        // Update blocked users list from the API response
+        const blockedUsersFromAPI = users.filter(user => user.is_blocked);
+        setBlockedUsers(blockedUsersFromAPI);
+      })
+      .catch(() => {
+        setUsers([]);
+        setBlockedUsers([]);
+      })
       .finally(() => setLoadingUsers(false));
   }, []);
 
@@ -132,7 +141,9 @@ const ChatPage: React.FC = () => {
       toast.error('Not connected to server. Please wait for connection...');
       return;
     }
-    if (selectedDMUser && isBlocked) {
+    
+    // Check if current user has blocked the selected DM user
+    if (selectedDMUser && selectedDMUser.is_blocked) {
       toast.error('You have blocked this user. Unblock to send messages.');
       return;
     }
@@ -281,14 +292,8 @@ const ChatPage: React.FC = () => {
     setPendingDMMessages([]);
   }, [selectedDMUser]);
 
-  // Fetch blocked users
-  useEffect(() => {
-    userAPI.getBlockedUsers()
-      .then(setBlockedUsers)
-      .catch(() => setBlockedUsers([]));
-  }, []);
-
-  const isBlocked = selectedDMUser && blockedUsers.some(u => u.id === selectedDMUser.id);
+  // Check if selected DM user is blocked
+  const isBlocked = selectedDMUser && selectedDMUser.is_blocked;
 
   // Block/unblock handlers
   const handleBlockUser = async () => {
@@ -296,7 +301,11 @@ const ChatPage: React.FC = () => {
     setLoadingBlock(true);
     try {
       await userAPI.blockUser(selectedDMUser.id);
-      setBlockedUsers(prev => [...prev, selectedDMUser]);
+      // Refresh users list to get updated blocking status
+      const updatedUsers = await userAPI.getUsersForDM();
+      setUsers(updatedUsers);
+      const blockedUsersFromAPI = updatedUsers.filter(user => user.is_blocked);
+      setBlockedUsers(blockedUsersFromAPI);
       toast.success('User blocked');
     } catch {
       toast.error('Failed to block user');
@@ -304,12 +313,17 @@ const ChatPage: React.FC = () => {
       setLoadingBlock(false);
     }
   };
+  
   const handleUnblockUser = async () => {
     if (!selectedDMUser) return;
     setLoadingBlock(true);
     try {
       await userAPI.unblockUser(selectedDMUser.id);
-      setBlockedUsers(prev => prev.filter(u => u.id !== selectedDMUser.id));
+      // Refresh users list to get updated blocking status
+      const updatedUsers = await userAPI.getUsersForDM();
+      setUsers(updatedUsers);
+      const blockedUsersFromAPI = updatedUsers.filter(user => user.is_blocked);
+      setBlockedUsers(blockedUsersFromAPI);
       toast.success('User unblocked');
     } catch {
       toast.error('Failed to unblock user');
@@ -553,6 +567,9 @@ const ChatPage: React.FC = () => {
                     }`}
                   >
                     {u.full_name || u.username}
+                    {u.is_blocked && (
+                      <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
+                    )}
                   </button>
                 ))}
               </div>

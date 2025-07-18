@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
-from typing import List
-from models import UserResponse
+from typing import List, Optional
+from models import UserResponse, UserResponseWithBlocking, UserCreate, Token, AuthResponse, GoogleAuthRequest
 from auth import get_current_user
 from database import db
 import logging
@@ -26,9 +26,9 @@ async def get_users(current_user: UserResponse = Depends(get_current_user)):
             detail="Internal server error"
         )
 
-@router.get("/for-dm", response_model=List[UserResponse])
+@router.get("/for-dm", response_model=List[UserResponseWithBlocking])
 async def get_users_for_dm(current_user: UserResponse = Depends(get_current_user)):
-    """Get all users for DM (excluding blocked users)"""
+    """Get all users for DM (including blocked users with blocking status)"""
     try:
         users = await db.get_users_for_dm_filtered(current_user.id)
         return users

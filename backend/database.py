@@ -217,7 +217,7 @@ class DatabaseManager:
             return False
 
     async def get_users_for_dm_filtered(self, user_id: str):
-        """Get all users for DM, excluding blocked users"""
+        """Get all users for DM, including blocked users with blocking status"""
         try:
             # Get all users
             all_users = await self.get_all_users()
@@ -227,11 +227,15 @@ class DatabaseManager:
             # Get blocked users
             blocked_users = await self.get_blocked_users(user_id)
             
-            # Filter out current user and blocked users
-            filtered_users = [
-                user for user in all_users 
-                if user['id'] != user_id and user['id'] not in blocked_users
-            ]
+            # Return all users except current user, with blocking status
+            filtered_users = []
+            for user in all_users:
+                if user['id'] != user_id:
+                    user_with_status = {
+                        **user,
+                        'is_blocked': user['id'] in blocked_users
+                    }
+                    filtered_users.append(user_with_status)
             
             return filtered_users
         except Exception as e:

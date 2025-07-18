@@ -51,6 +51,22 @@ async def create_message(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Recipient not found"
                 )
+            
+            # Check if recipient has blocked the sender
+            is_blocked = await db.is_user_blocked(message_data.recipient_id, current_user.id)
+            if is_blocked:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Cannot send message to this user - you have been blocked"
+                )
+            
+            # Check if sender has blocked the recipient
+            sender_blocked_recipient = await db.is_user_blocked(current_user.id, message_data.recipient_id)
+            if sender_blocked_recipient:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Cannot send message to blocked user - unblock them first"
+                )
         
         # Create message data
         message_dict = message_data.dict()

@@ -139,6 +139,22 @@ async def send_message(sid, data):
                 await sio.emit('error', {'message': f"Channel not found: {data.get('channel_id')}"}, room=sid)
                 return
         
+        # Check blocking status for direct messages
+        if recipient_id:
+            # Check if recipient has blocked the sender
+            is_blocked = await db.is_user_blocked(recipient_id, sender_id)
+            if is_blocked:
+                logger.warning(f"User {sender_id} tried to send message to blocked user {recipient_id}")
+                await sio.emit('error', {'message': 'Cannot send message to this user - you have been blocked'}, room=sid)
+                return
+            
+            # Check if sender has blocked the recipient
+            sender_blocked_recipient = await db.is_user_blocked(sender_id, recipient_id)
+            if sender_blocked_recipient:
+                logger.warning(f"User {sender_id} tried to send message to blocked user {recipient_id}")
+                await sio.emit('error', {'message': 'Cannot send message to blocked user - unblock them first'}, room=sid)
+                return
+        
         # Create message data
         message_data = {
             'content': content,

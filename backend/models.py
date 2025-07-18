@@ -35,6 +35,13 @@ class UserResponse(UserBase):
         from_attributes = True
 
 
+class UserResponseWithBlocking(UserResponse):
+    is_blocked: bool = False
+    
+    class Config:
+        from_attributes = True
+
+
 class ChannelBase(BaseModel):
     name: str
     description: Optional[str] = None
