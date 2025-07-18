@@ -1,7 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings, cors_origins_list
-from routers import auth, channels, messages, users
+from routers import auth, channels, messages, users, health
 from websocket_manager import websocket_manager
 import logging
 import json
@@ -29,6 +29,7 @@ app.include_router(auth.router)
 app.include_router(channels.router)
 app.include_router(messages.router)
 app.include_router(users.router)
+app.include_router(health.router)
 
 @app.get("/")
 async def root():
@@ -36,7 +37,17 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    try:
+        from database import db
+        users = await db.get_all_users()
+        return {
+            "status": "healthy", 
+            "database": "connected",
+            "users_count": len(users) if users else 0
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {"status": "unhealthy", "error": str(e)}
 
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):

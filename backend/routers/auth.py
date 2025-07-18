@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from models import UserCreate, UserLogin, UserResponse, Token, GoogleAuthRequest
+from models import UserCreate, UserLogin, UserResponse, Token, AuthResponse, GoogleAuthRequest
 from auth import (
     get_password_hash, 
     verify_password, 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer()
 
 
-@router.post("/register", response_model=Token)
+@router.post("/register", response_model=AuthResponse)
 async def register(user_data: UserCreate):
     """Register a new user"""
     try:
@@ -86,8 +86,9 @@ async def register(user_data: UserCreate):
         access_token = create_access_token(data={"sub": new_user["id"]})
         
         # Return token and user info
-        return Token(
+        return AuthResponse(
             access_token=access_token,
+            token_type="bearer",
             user=UserResponse(**new_user)
         )
         
@@ -101,7 +102,7 @@ async def register(user_data: UserCreate):
         )
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=AuthResponse)
 async def login(user_credentials: UserLogin):
     """Login user with email and password"""
     try:
@@ -118,8 +119,9 @@ async def login(user_credentials: UserLogin):
         access_token = create_access_token(data={"sub": user["id"]})
         
         # Return token and user info
-        return Token(
+        return AuthResponse(
             access_token=access_token,
+            token_type="bearer",
             user=UserResponse(**user)
         )
         
@@ -133,7 +135,7 @@ async def login(user_credentials: UserLogin):
         )
 
 
-@router.post("/google", response_model=Token)
+@router.post("/google", response_model=AuthResponse)
 async def google_auth(auth_request: GoogleAuthRequest):
     """Authenticate user with Google OAuth"""
     try:
@@ -157,8 +159,9 @@ async def google_auth(auth_request: GoogleAuthRequest):
         access_token = create_access_token(data={"sub": user["id"]})
         
         # Return token and user info
-        return Token(
+        return AuthResponse(
             access_token=access_token,
+            token_type="bearer",
             user=UserResponse(**user)
         )
         
