@@ -4,6 +4,7 @@ export interface User {
   email: string;
   full_name?: string;
   avatar_url?: string;
+  public_key?: string;  // Add public key for E2EE
   created_at: string;
   updated_at: string;
 }
@@ -28,18 +29,19 @@ export interface Message {
   id: string;
   content: string;
   sender_id: string;
+  sender_name: string;
   channel_id?: string;
   recipient_id?: string;
   created_at: string;
   updated_at: string;
   sender?: {
     id: string;
-    username?: string;
+    username: string;
     full_name?: string;
     avatar_url?: string;
   };
   reactions?: MessageReaction[];
-  message_type?: 'text' | 'emoji';
+  is_encrypted?: boolean;  // Add flag to indicate if message is encrypted
 }
 
 export interface ChannelMember {

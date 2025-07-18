@@ -1,4 +1,4 @@
-from supabase import create_client, Client
+from supabase.client import create_client, Client
 from config import settings
 from typing import Optional
 import logging
@@ -279,6 +279,29 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error batch fetching reactions: {e}")
             return {}
+
+    async def update_user_public_key(self, user_id: str, public_key: str):
+        """Update user's public key for E2EE"""
+        try:
+            response = self.client.table('users').update({
+                'public_key': public_key,
+                'updated_at': 'now()'
+            }).eq('id', user_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error updating user public key: {e}")
+            return None
+
+    async def get_user_public_key(self, user_id: str):
+        """Get user's public key for E2EE"""
+        try:
+            response = self.client.table('users').select('public_key').eq('id', user_id).execute()
+            if response.data:
+                return response.data[0].get('public_key')
+            return None
+        except Exception as e:
+            logger.error(f"Error getting user public key: {e}")
+            return None
 
 
 # Global database manager instance

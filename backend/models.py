@@ -14,6 +14,7 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    public_key: Optional[str] = None  # Add public key for E2EE
 
 
 class UserCreate(UserBase):
@@ -57,11 +58,13 @@ class ChannelResponse(ChannelBase):
 
 class MessageBase(BaseModel):
     content: str
+    channel_id: Optional[str] = None
+    recipient_id: Optional[str] = None
+    is_encrypted: bool = False  # Add flag to indicate if message is encrypted
 
 
 class MessageCreate(MessageBase):
-    channel_id: Optional[str] = None
-    recipient_id: Optional[str] = None
+    pass
 
 
 class MessageResponse(MessageBase):
@@ -74,6 +77,7 @@ class MessageResponse(MessageBase):
     updated_at: datetime
     sender: Optional[dict] = None
     reactions: Optional[list] = None
+    is_encrypted: bool = False  # Add flag to indicate if message is encrypted
     
     class Config:
         from_attributes = True
@@ -91,8 +95,29 @@ class ChannelMember(BaseModel):
 
 class Token(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str
     user: UserResponse
+
+
+class RegisterData(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+    full_name: Optional[str] = None
+
+
+class CreateChannelData(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class ReactionRequest(BaseModel):
+    emoji: str
 
 
 class GoogleAuthRequest(BaseModel):

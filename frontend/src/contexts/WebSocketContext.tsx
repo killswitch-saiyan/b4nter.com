@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
+import { processReceivedMessage } from '../services/e2eeService';
 
 interface WebSocketContextType {
   isConnected: boolean;
@@ -100,9 +101,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             break;
           case 'new_direct_message':
             console.log('New direct message:', data.message);
+            // Process the message for E2EE decryption
+            const processedMessage = processReceivedMessage(data.message, user?.id || '');
             // Add sender information to the message
             const directMessage = {
-              ...data.message,
+              ...processedMessage,
               sender: {
                 username: user?.username || 'Unknown',
                 full_name: user?.full_name || user?.username || 'Unknown',

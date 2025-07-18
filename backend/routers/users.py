@@ -9,6 +9,78 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+@router.get("/", response_model=List[UserResponse])
+async def get_users(current_user: UserResponse = Depends(get_current_user)):
+    """Get all users (for user search)"""
+    try:
+        users = await db.get_all_users()
+        return users
+    except Exception as e:
+        logger.error(f"Error getting users: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+@router.get("/for-dm", response_model=List[UserResponse])
+async def get_users_for_dm(current_user: UserResponse = Depends(get_current_user)):
+    """Get all users for DM (excluding blocked users)"""
+    try:
+        users = await db.get_users_for_dm_filtered(current_user.id)
+        return users
+    except Exception as e:
+        logger.error(f"Error getting users for DM: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+@router.put("/public-key")
+async def update_public_key(
+    public_key: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Update user's public key for E2EE"""
+    try:
+        result = await db.update_user_public_key(current_user.id, public_key)
+        if result:
+            return {"message": "Public key updated successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update public key"
+            )
+    except Exception as e:
+        logger.error(f"Error updating public key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+@router.get("/{user_id}/public-key")
+async def get_user_public_key(
+    user_id: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Get user's public key for E2EE"""
+    try:
+        public_key = await db.get_user_public_key(user_id)
+        if public_key:
+            return {"public_key": public_key}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Public key not found"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting public key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
 
 @router.post("/{user_id}/block")
 async def block_user(

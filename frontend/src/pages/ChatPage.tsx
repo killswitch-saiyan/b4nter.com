@@ -5,8 +5,10 @@ import { useChannels } from '../contexts/ChannelsContext';
 import { toast } from 'react-hot-toast';
 import MessageInput from '../components/MessageInput';
 import MessageDisplay from '../components/MessageDisplay';
+import EncryptionStatus from '../components/EncryptionStatus';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
+import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
 // @ts-ignore
 import brandLogo from '../assets/brandlogo.png';
 
@@ -122,8 +124,8 @@ const ChatPage: React.FC = () => {
       .finally(() => setLoadingUsers(false));
   }, []);
 
-  // Enhanced message sending with emoji support
-  const handleSendMessage = (content: string, messageType?: 'text' | 'emoji') => {
+  // Enhanced message sending with emoji support and E2EE
+  const handleSendMessage = async (content: string, messageType?: 'text' | 'emoji') => {
     if (!content.trim() || !user || (!selectedChannel && !selectedDMUser)) return;
     if (!isConnected) {
       toast.error('Not connected to server. Please wait for connection...');
@@ -135,11 +137,20 @@ const ChatPage: React.FC = () => {
     }
     
     if (selectedDMUser) {
+      // Prepare message content with E2EE for DMs
+      const { content: processedContent, is_encrypted } = await prepareMessageContent(
+        content,
+        undefined, // channelId
+        selectedDMUser.id, // recipientId
+        user.id // senderId
+      );
+      
       const tempId = 'pending-' + Math.random().toString(36).slice(2);
       const pendingMsg: Message & { pending?: boolean } = {
         id: tempId,
-        content: content,
+        content: content, // Show original content in UI
         sender_id: user.id,
+        sender_name: user.full_name || user.username,
         sender: {
           id: user.id,
           username: user.username,
@@ -149,11 +160,13 @@ const ChatPage: React.FC = () => {
         recipient_id: selectedDMUser.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        message_type: messageType || 'text',
+        is_encrypted: is_encrypted,
         pending: true,
       };
       setPendingDMMessages(prev => [...prev, pendingMsg]);
-      sendMessage(content, undefined, selectedDMUser.id);
+      
+      // Send encrypted content to backend
+      sendMessage(processedContent, undefined, selectedDMUser.id);
     } else if (selectedChannel) {
       sendMessage(content, selectedChannel.id);
     }
@@ -177,16 +190,19 @@ const ChatPage: React.FC = () => {
         setDMMessages(() => {
           // For each confirmed message, merge reactions with any existing DM message with the same id
           const mergedMessages = confirmed.map(confMsg => {
-            const existing = pendingDMMessages.find(m => m.id === confMsg.id);
+            // Process encrypted messages
+            const processedMsg = processReceivedMessage(confMsg, user?.id || '');
+            
+            const existing = pendingDMMessages.find(m => m.id === processedMsg.id);
             if (existing && Array.isArray(existing.reactions)) {
               // Merge reactions, deduplicate by emoji+user_id
-              const allReactions = [...(Array.isArray(confMsg.reactions) ? confMsg.reactions : []), ...existing.reactions];
+              const allReactions = [...(Array.isArray(processedMsg.reactions) ? processedMsg.reactions : []), ...existing.reactions];
               const deduped = allReactions.filter((r, idx, arr) =>
                 arr.findIndex(x => x.emoji === r.emoji && x.user_id === r.user_id) === idx
               );
-              return { ...confMsg, reactions: deduped };
+              return { ...processedMsg, reactions: deduped };
             }
-            return confMsg;
+            return processedMsg;
           });
           // Add any pending messages that are not confirmed
           pendingDMMessages.forEach(pendingMsg => {
@@ -442,9 +458,9 @@ const ChatPage: React.FC = () => {
   );
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b px-6 py-4">
+    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
+      {/* Header - Fixed */}
+      <div className="bg-white shadow-sm border-b px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <img src={brandLogo} alt="b4nter Logo" className="w-8 h-8 rounded-full object-contain shadow-sm" />
@@ -465,10 +481,11 @@ const ChatPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex">
-        {/* Sidebar */}
-        <div className="w-64 bg-white border-r">
-          <div className="p-4">
+      {/* Main Content Area - Fixed height, no scroll */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar - Fixed */}
+        <div className="w-64 bg-white border-r flex-shrink-0">
+          <div className="p-4 h-full overflow-y-auto">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Channels</h3>
             {loading ? (
               <div className="text-sm text-gray-500">Loading channels...</div>
@@ -512,19 +529,22 @@ const ChatPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col">
-          {/* Channel Header */}
-          <div className="bg-white border-b px-6 py-4">
+        {/* Main Chat Area - Fixed height */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Channel Header - Fixed */}
+          <div className="bg-white border-b px-6 py-4 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
                 {selectedDMUser ? (
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Direct Message with {selectedDMUser.full_name || selectedDMUser.username}
-                    {isBlocked && (
-                      <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
-                    )}
-                  </h2>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      Direct Message with {selectedDMUser.full_name || selectedDMUser.username}
+                      {isBlocked && (
+                        <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
+                      )}
+                    </h2>
+                    <EncryptionStatus isEncrypted={true} className="mt-1" />
+                  </div>
                 ) : (
                   <h2 className="text-lg font-semibold text-gray-900">
                     {selectedChannel ? `#${selectedChannel.name}` : 'Select a channel or user'}
@@ -565,8 +585,8 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* Messages Area - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
             {selectedDMUser ? (
               loadingDM ? (
                 <div className="text-center text-gray-500">Loading messages...</div>
@@ -607,15 +627,17 @@ const ChatPage: React.FC = () => {
             )}
           </div>
 
-          {/* Enhanced Message Input with Emoji and GIF Support */}
-          <MessageInput
-            onSendMessage={handleSendMessage}
-            placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message #${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
-            disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
-          />
-          {selectedDMUser && isBlocked && (
-            <div className="text-center text-xs text-red-500">You have blocked this user. Unblock to send messages.</div>
-          )}
+          {/* Message Input - Fixed */}
+          <div className="flex-shrink-0 p-4 bg-white border-t">
+            <MessageInput
+              onSendMessage={handleSendMessage}
+              placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message #${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
+              disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
+            />
+            {selectedDMUser && isBlocked && (
+              <div className="text-center text-xs text-red-500 mt-2">You have blocked this user. Unblock to send messages.</div>
+            )}
+          </div>
         </div>
       </div>
     </div>

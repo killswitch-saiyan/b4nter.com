@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(255),
     avatar_url TEXT,
     password_hash VARCHAR(255),
+    public_key TEXT,  -- Add public key for E2EE
     auth_provider VARCHAR(20) DEFAULT 'email',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

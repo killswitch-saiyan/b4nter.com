@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, AuthResponse } from '../types';
 import { authAPI } from '../lib/api';
+import { initializeEncryptionKeys, getPublicKey, storePublicKey } from '../utils/encryption';
 import toast from 'react-hot-toast';
 
 interface AuthContextType {
@@ -61,11 +62,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initializeAuth();
   }, []);
 
-  const saveAuthData = (authResponse: AuthResponse) => {
+  const saveAuthData = async (authResponse: AuthResponse) => {
     console.log('Saving auth data:', authResponse);
     localStorage.setItem('access_token', authResponse.access_token);
     localStorage.setItem('user', JSON.stringify(authResponse.user));
     setUser(authResponse.user);
+    
+    // Initialize E2EE keys for the user
+    try {
+      const keyPair = initializeEncryptionKeys(authResponse.user.id);
+      console.log('E2EE keys initialized for user:', authResponse.user.id);
+      
+      // Sync public key with server if it's different
+      const existingPublicKey = getPublicKey(authResponse.user.id);
+      if (existingPublicKey && existingPublicKey !== authResponse.user.public_key) {
+        await syncPublicKeyWithServer(authResponse.user.id, existingPublicKey);
+      }
+    } catch (error) {
+      console.error('Error initializing E2EE keys:', error);
+    }
+  };
+
+  const syncPublicKeyWithServer = async (userId: string, publicKey: string) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      
+      await fetch('/api/users/public-key', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ public_key: publicKey }),
+      });
+      console.log('Public key synced with server');
+    } catch (error) {
+      console.error('Error syncing public key with server:', error);
+    }
   };
 
   const login = async (email: string, password: string) => {
