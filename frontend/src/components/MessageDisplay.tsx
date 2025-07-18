@@ -65,8 +65,39 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
     }
   };
 
+  // Track most used emojis in localStorage
+  const DEFAULT_QUICK_EMOJIS = ["👍","❤️","😂","😮","😢","😡","🎉","👏","🔥","💯","⚽","🏆"];
+  const [quickEmojis, setQuickEmojis] = useState<string[]>(DEFAULT_QUICK_EMOJIS);
+
+  useEffect(() => {
+    // On mount, load most used from localStorage
+    const stored = localStorage.getItem('mostUsedEmojis');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setQuickEmojis([...parsed, ...DEFAULT_QUICK_EMOJIS.filter(e => !parsed.includes(e))].slice(0, 12));
+        }
+      } catch {}
+    }
+  }, []);
+
+  const updateMostUsedEmojis = (emoji: string) => {
+    let mostUsed: string[] = [];
+    try {
+      mostUsed = JSON.parse(localStorage.getItem('mostUsedEmojis') || '[]');
+    } catch {}
+    if (!Array.isArray(mostUsed)) mostUsed = [];
+    // Move emoji to front, keep unique
+    mostUsed = [emoji, ...mostUsed.filter(e => e !== emoji)];
+    if (mostUsed.length > 12) mostUsed = mostUsed.slice(0, 12);
+    localStorage.setItem('mostUsedEmojis', JSON.stringify(mostUsed));
+    setQuickEmojis([...mostUsed, ...DEFAULT_QUICK_EMOJIS.filter(e => !mostUsed.includes(e))].slice(0, 12));
+  };
+
   const handleAddReaction = (emoji: string) => {
     setShowEmojiPicker(false);
+    updateMostUsedEmojis(emoji);
     if (onReact) {
       onReact(message.id, emoji, false);
     }
@@ -133,7 +164,7 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
       {hovered && (
         <div className="absolute top-2 right-2 z-30 flex flex-col items-end">
           <div className="flex flex-wrap items-center gap-1 bg-white dark:bg-dark-700 rounded-full shadow px-2 py-1 border border-gray-200 dark:border-dark-400">
-            {["👍","❤️","😂","😮","😢","😡","🎉","👏","🔥","💯","⚽","🏆"].map((emoji) => (
+            {quickEmojis.map((emoji) => (
               <button
                 key={emoji}
                 className="text-lg hover:scale-125 transition-transform"
