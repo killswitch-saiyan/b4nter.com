@@ -93,7 +93,7 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
 
   return (
     <div
-      className={`flex flex-col items-start space-y-1 ${message.pending ? 'opacity-60' : ''} ${hovered ? 'bg-blue-200' : ''}`}
+      className={`flex flex-col items-start space-y-1 ${message.pending ? 'opacity-60' : ''} ${hovered ? 'bg-blue-200 dark:bg-dark-600' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setTooltipEmoji(null); }}
     >
@@ -122,10 +122,10 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
         </div>
         <div className="flex-1">
           <div className="flex items-baseline space-x-2">
-            <span className="text-sm font-medium text-gray-900">{displayName}</span>
-            <span className="text-xs text-gray-700">{new Date(message.created_at).toLocaleTimeString()}</span>
+            <span className="text-sm font-medium text-gray-900 dark:text-white">{displayName}</span>
+            <span className="text-xs text-gray-700 dark:text-gray-300">{new Date(message.created_at).toLocaleTimeString()}</span>
           </div>
-          <p className="text-sm text-gray-700">{renderMessageContent(message.content)}</p>
+          <p className="text-sm text-gray-700 dark:text-white">{renderMessageContent(message.content)}</p>
           {message.image_url && (
             <div className="mt-2">
               <a href={message.image_url} target="_blank" rel="noopener noreferrer">
@@ -161,7 +161,7 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
         {Object.entries(reactionMap).map(([emoji, { count, reacted, users }]) => (
           <div key={emoji} className="relative inline-block">
             <button
-              className={`flex items-center px-2 py-1 rounded-full text-sm border ${reacted ? 'bg-indigo-100 border-indigo-400' : 'bg-gray-100 border-gray-300'} hover:bg-indigo-200 transition ${clickedEmoji === emoji ? 'scale-110 ring-2 ring-indigo-300' : ''}`}
+              className={`flex items-center px-2 py-1 rounded-full text-sm border ${reacted ? 'bg-indigo-100 border-indigo-400 dark:bg-dark-600 dark:border-dark-400' : 'bg-gray-100 border-gray-300 dark:bg-dark-700 dark:border-dark-400'} hover:bg-indigo-200 dark:hover:bg-dark-500 transition ${clickedEmoji === emoji ? 'scale-110 ring-2 ring-indigo-300' : ''}`}
               style={{ transition: 'transform 0.15s, box-shadow 0.15s' }}
               onClick={() => handleReactionClick(emoji)}
               onMouseEnter={() => setTooltipEmoji(emoji)}
@@ -181,7 +181,7 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
         ))}
         {/* + Button for Emoji Picker */}
         <button
-          className={`flex items-center justify-center w-6 h-6 rounded-full text-xs border bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm ${hovered ? 'opacity-100' : 'opacity-0 pointer-events-none'} z-10`}
+          className={`flex items-center justify-center w-6 h-6 rounded-full text-xs border bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400 dark:bg-dark-700 dark:border-dark-400 dark:text-white dark:hover:bg-dark-600 transition-all duration-200 shadow-sm ${hovered ? 'opacity-100' : 'opacity-0 pointer-events-none'} z-10`}
           onClick={() => setShowEmojiPicker((v) => !v)}
           tabIndex={-1}
         >

@@ -142,7 +142,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           />
         </div>
       )}
-      <form onSubmit={handleSubmit} className="flex items-center gap-2 p-4 bg-gray-50 border-t">
+      <form onSubmit={handleSubmit} className="flex items-center gap-2 p-4 bg-gray-50 border-t dark:bg-dark-800 dark:border-dark-700">
         <div className="flex-1 relative max-w-8xl">
           {/* Sports Emoji Row */}
           {showEmojiPicker && (
@@ -166,7 +166,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             onChange={(e) => setMessage(e.target.value)}
             placeholder={placeholder}
             disabled={disabled || uploading}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
             rows={1}
             style={{ minHeight: 48, maxHeight: 120 }}
             onKeyDown={(e) => {

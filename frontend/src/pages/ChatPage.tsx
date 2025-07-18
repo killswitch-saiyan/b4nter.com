@@ -31,6 +31,20 @@ const ChatPage: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = React.useState(true);
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return document.documentElement.classList.contains('dark');
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDark]);
 
   // Debug: Log user data
   useEffect(() => {
@@ -138,7 +152,7 @@ const ChatPage: React.FC = () => {
   }, []);
 
   // Enhanced message sending with emoji support, E2EE, and image/meme sharing
-  const handleSendMessage = async (content: string, messageType?: 'text' | 'emoji', imageUrl?: string) => {
+  const handleSendMessage = async (content: string, messageType?: 'text' | 'emoji' | 'image', imageUrl?: string) => {
     if ((!content.trim() && !imageUrl) || !user || (!selectedChannel && !selectedDMUser)) return;
     if (!isConnected) {
       toast.error('Not connected to server. Please wait for connection...');
@@ -642,32 +656,32 @@ const ChatPage: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
       {/* Header - Fixed */}
-      <div className="bg-black shadow-sm border-b px-6 py-4 flex-shrink-0">
+      <div className="bg-black shadow-sm border-b px-6 py-4 flex-shrink-0 dark:bg-dark-800 dark:border-dark-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <img src={brandLogo} alt="b4nter Logo" className="w-8 h-8 rounded-full object-contain shadow-sm" />
             <h1 className="text-2xl font-bold text-white tracking-tight" style={{letterSpacing: '-0.0009em', fontFamily: 'Azeret Mono, monospace'}}>b4nter</h1>
-            <span className="text-sm text-gray-300" style={{fontFamily: 'Cabin, sans-serif'}}>Start talking smack!</span>
+            <span className="text-sm text-gray-300 dark:text-dark-200" style={{fontFamily: 'Cabin, sans-serif'}}>Start talking smack!</span>
           </div>
           <div className="flex items-center space-x-4">
             <UserProfileDropdown onAvatarUpdate={refreshMessages} />
             <button
-              onClick={refreshMessages}
-              className="px-2 py-1 text-xs text-gray-300 hover:text-white bg-gray-800 rounded"
-              title="Refresh messages (debug)"
+              onClick={() => setIsDark((d) => !d)}
+              className="px-2 py-1 text-xs text-gray-300 hover:text-white bg-gray-800 dark:bg-dark-700 dark:text-dark-200 rounded"
+              title="Toggle dark mode"
             >
-              🔄
+              {isDark ? '🌙' : '☀️'}
             </button>
           </div>
         </div>
       </div>
 
       {/* Main Content Area - Fixed height, no scroll */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden bg-gray-100 dark:bg-dark-900">
         {/* Sidebar - Fixed */}
-        <div className="w-64 bg-white border-r flex-shrink-0">
+        <div className="w-64 bg-white border-r flex-shrink-0 dark:bg-dark-800 dark:border-dark-700">
           <div className="p-4 h-full overflow-y-auto">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Channels</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-white">Channels</h3>
             {loading ? (
               <div className="text-sm text-gray-500">Loading channels...</div>
             ) : (
@@ -676,18 +690,14 @@ const ChatPage: React.FC = () => {
                   <button
                     key={channel.id}
                     onClick={() => setSelectedChannel(channel)}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
-                      selectedChannel?.id === channel.id
-                        ? 'bg-indigo-100 text-indigo-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${selectedChannel?.id === channel.id ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'}`}
                   >
                     # {channel.name}
                   </button>
                 ))}
               </div>
             )}
-            <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-4">Direct Messages</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-4 dark:text-white">Direct Messages</h3>
             {loadingUsers ? (
               <div className="text-sm text-gray-500">Loading users...</div>
             ) : (
@@ -696,11 +706,7 @@ const ChatPage: React.FC = () => {
                   <button
                     key={u.id}
                     onClick={() => { setSelectedDMUser(u); setSelectedChannel(null); }}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
-                      selectedDMUser?.id === u.id
-                        ? 'bg-indigo-100 text-indigo-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${selectedDMUser?.id === u.id ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'}`}
                   >
                     {u.full_name || u.username}
                     {u.is_blocked && (
@@ -714,14 +720,14 @@ const ChatPage: React.FC = () => {
         </div>
 
         {/* Main Chat Area - Fixed height */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-dark-700">
           {/* Channel Header - Fixed */}
-          <div className="bg-white border-b px-6 py-4 flex-shrink-0">
+          <div className="bg-white border-b px-6 py-4 flex-shrink-0 dark:bg-dark-800 dark:border-dark-700">
             <div className="flex items-center justify-between">
               <div>
                 {selectedDMUser ? (
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                       Direct Message with {selectedDMUser.full_name || selectedDMUser.username}
                       {isBlocked && (
                         <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
@@ -730,12 +736,12 @@ const ChatPage: React.FC = () => {
                     <EncryptionStatus isEncrypted={true} className="mt-1" />
                   </div>
                 ) : (
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                     {selectedChannel ? `# ${selectedChannel.name}` : 'Select a channel or user'}
                   </h2>
                 )}
                 {selectedChannel && !selectedDMUser && (
-                  <p className="text-sm text-gray-500">{selectedChannel.description}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-300">{selectedChannel.description}</p>
                 )}
               </div>
               <div className="flex items-center space-x-4">
@@ -758,7 +764,7 @@ const ChatPage: React.FC = () => {
                     </button>
                   )
                 )}
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-gray-500 dark:text-gray-300">
                   {isConnected ? (
                     <span className="text-green-600">● Connected</span>
                   ) : (
@@ -770,12 +776,12 @@ const ChatPage: React.FC = () => {
           </div>
 
           {/* Messages Area - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative" ref={messagesAreaRef} onScroll={handleScroll}>
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">
             {selectedDMUser ? (
               loadingDM ? (
-                <div className="text-center text-gray-500">Loading messages...</div>
+                <div className="text-center text-gray-500 dark:text-gray-300">Loading messages...</div>
               ) : dmMessages.length === 0 ? (
-                <div className="text-center text-gray-500 mt-8">
+                <div className="text-center text-gray-500 mt-8 dark:text-gray-300">
                   {dmMessages.length === 0 ? (
                     <p>No messages yet. Start the conversation!</p>
                   ) : (
@@ -797,7 +803,7 @@ const ChatPage: React.FC = () => {
               )
             ) : (
               loadingMessages ? (
-                <div className="text-center text-gray-500">Loading messages...</div>
+                <div className="text-center text-gray-500 dark:text-gray-300">Loading messages...</div>
               ) : filteredMessages.length === 0 ? (
                 <div className="text-center text-gray-500 mt-8">
                   <p>No messages yet. Start the conversation!</p>
@@ -826,7 +832,7 @@ const ChatPage: React.FC = () => {
           </div>
 
           {/* Message Input - Fixed */}
-          <div className="flex-shrink-0 p-4 bg-white border-t">
+          <div className="flex-shrink-0 p-4 bg-white border-t dark:bg-dark-800 dark:border-dark-700">
             {user && (
               <MessageInput
                 onSendMessage={handleSendMessage}

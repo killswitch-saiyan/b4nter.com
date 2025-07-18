@@ -4,6 +4,7 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -30,7 +31,18 @@ export default {
           700: '#15803d',
           800: '#166534',
           900: '#14532d',
-        }
+        },
+        dark: {
+          900: '#18181b', // main background
+          800: '#23272f', // sidebar
+          700: '#2e323d', // chat area
+          600: '#393e4f', // input, cards
+          500: '#5865f2', // accent (Discord blurple)
+          400: '#7289da', // accent lighter
+          300: '#99aab5', // muted text
+          200: '#b9bbbe', // secondary text
+          100: '#e3e5e8', // borders, highlights
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
