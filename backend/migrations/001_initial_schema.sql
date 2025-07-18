@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS messages (
     sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     channel_id UUID REFERENCES channels(id) ON DELETE CASCADE,
     recipient_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    image_url TEXT, -- Add image_url for image/meme sharing
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     -- Ensure message is either to channel or user, not both

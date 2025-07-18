@@ -126,6 +126,18 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
             <span className="text-xs text-gray-700">{new Date(message.created_at).toLocaleTimeString()}</span>
           </div>
           <p className="text-sm text-gray-700">{renderMessageContent(message.content)}</p>
+          {message.image_url && (
+            <div className="mt-2">
+              <a href={message.image_url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={message.image_url}
+                  alt="attachment"
+                  className="max-h-64 rounded-lg border shadow-sm hover:shadow-lg transition-all duration-200"
+                  style={{ maxWidth: '320px', objectFit: 'contain' }}
+                />
+              </a>
+            </div>
+          )}
           {message.pending && <span className="ml-2 text-xs text-gray-400 animate-pulse">Sending...</span>}
           
           {/* YouTube Thumbnails */}

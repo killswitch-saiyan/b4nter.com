@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { FaSmile, FaPaperPlane } from 'react-icons/fa';
+import { FaSmile, FaPaperPlane, FaPaperclip, FaTimes } from 'react-icons/fa';
 import EmojiPicker from './EmojiPicker';
 
 interface MessageInputProps {
-  onSendMessage: (message: string, messageType?: 'text' | 'emoji') => void;
+  onSendMessage: (message: string, messageType?: 'text' | 'emoji', imageUrl?: string) => void;
   placeholder?: string;
   disabled?: boolean;
 }
@@ -26,13 +26,46 @@ const MessageInput: React.FC<MessageInputProps> = ({
 }) => {
   const [message, setMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !disabled) {
-      onSendMessage(message.trim());
+    if ((message.trim() || imageFile) && !disabled && !uploading) {
+      let imageUrl = '';
+      if (imageFile) {
+        setUploading(true);
+        try {
+          const formData = new FormData();
+          formData.append('file', imageFile);
+          const token = localStorage.getItem('access_token');
+          const res = await fetch('/api/messages/upload-image', {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: formData,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            imageUrl = data.url;
+          } else {
+            alert('Failed to upload image');
+            setUploading(false);
+            return;
+          }
+        } catch (err) {
+          alert('Failed to upload image');
+          setUploading(false);
+          return;
+        }
+        setUploading(false);
+      }
+      onSendMessage(message.trim(), imageFile ? 'image' : 'text', imageUrl);
       setMessage('');
+      setImageFile(null);
+      setImagePreview(null);
       setShowEmojiPicker(false);
     }
   };
@@ -61,6 +94,31 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
   const toggleEmojiPicker = () => setShowEmojiPicker((prev) => !prev);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  // Paste image from clipboard
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+      const file = e.clipboardData.files[0];
+      if (file.type.startsWith('image/')) {
+        setImageFile(file);
+        setImagePreview(URL.createObjectURL(file));
+        e.preventDefault();
+      }
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+  };
+
   return (
     <div className="relative">
       <form onSubmit={handleSubmit} className="flex items-center gap-2 p-4 bg-gray-50 border-t">
@@ -86,7 +144,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={placeholder}
-            disabled={disabled}
+            disabled={disabled || uploading}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             rows={1}
             style={{ minHeight: 48, maxHeight: 120 }}
@@ -96,25 +154,50 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 handleSubmit(e);
               }
             }}
+            onPaste={handlePaste}
           />
           <EmojiPicker
             isOpen={showEmojiPicker}
             onEmojiSelect={handleEmojiSelect}
             onClose={() => setShowEmojiPicker(false)}
           />
+          {/* Image Preview */}
+          {imagePreview && (
+            <div className="mt-2 flex items-center gap-2">
+              <img src={imagePreview} alt="preview" className="max-h-24 rounded border" />
+              <button type="button" onClick={handleRemoveImage} className="text-red-500 hover:text-red-700"><FaTimes /></button>
+            </div>
+          )}
         </div>
         <div className="flex items-end gap-2">
           <button
             type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="h-12 w-12 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center"
+            disabled={disabled || uploading}
+            title="Attach image"
+          >
+            <FaPaperclip size={22} />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+            disabled={disabled || uploading}
+          />
+          <button
+            type="button"
             onClick={toggleEmojiPicker}
             className="h-12 w-12 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center"
-            disabled={disabled}
+            disabled={disabled || uploading}
           >
             <FaSmile size={24} />
           </button>
           <button
             type="submit"
-            disabled={!message.trim() || disabled}
+            disabled={(!message.trim() && !imageFile) || disabled || uploading}
             className="h-12 w-12 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center -mt-1"
           >
             <FaPaperPlane size={20} />

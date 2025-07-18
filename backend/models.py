@@ -68,6 +68,7 @@ class MessageBase(BaseModel):
     channel_id: Optional[str] = None
     recipient_id: Optional[str] = None
     is_encrypted: bool = False  # Add flag to indicate if message is encrypted
+    image_url: Optional[str] = None  # Add image_url for image/meme sharing
 
 
 class MessageCreate(MessageBase):
@@ -85,6 +86,7 @@ class MessageResponse(MessageBase):
     sender: Optional[dict] = None
     reactions: Optional[list] = None
     is_encrypted: bool = False  # Add flag to indicate if message is encrypted
+    image_url: Optional[str] = None  # Add image_url for image/meme sharing
     
     class Config:
         from_attributes = True

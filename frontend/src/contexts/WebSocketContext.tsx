@@ -2,9 +2,16 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { useAuth } from './AuthContext';
 import { processReceivedMessage } from '../services/e2eeService';
 
+interface NotificationType {
+  id: string;
+  message: string;
+  type?: string;
+  [key: string]: any;
+}
+
 interface WebSocketContextType {
   isConnected: boolean;
-  sendMessage: (content: string, channelId?: string, recipientId?: string) => void;
+  sendMessage: (content: string, channelId?: string, recipientId?: string, imageUrl?: string) => void;
   joinChannel: (channelId: string) => void;
   leaveChannel: (channelId: string) => void;
   startTyping: (channelId?: string, recipientId?: string) => void;
@@ -12,6 +19,11 @@ interface WebSocketContextType {
   messages: any[];
   setMessages: React.Dispatch<React.SetStateAction<any[]>>;
   sendCustomEvent: (event: any) => void;
+  typingUsers: { [key: string]: boolean };
+  userStatus: { [userId: string]: 'online' | 'offline' };
+  notifications: NotificationType[];
+  clearNotifications: () => void;
+  connectedUsers: string[];
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -33,6 +45,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
+  const [typingUsers, setTypingUsers] = useState<{ [key: string]: boolean }>({});
+  const [userStatus, setUserStatus] = useState<{ [userId: string]: 'online' | 'offline' }>({});
+  const [notifications, setNotifications] = useState<NotificationType[]>([]);
+  const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
 
   // Get backend URL from environment variable or default to localhost
   const getBackendUrl = () => {
@@ -120,6 +136,40 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           case 'channel_left':
             console.log('Left channel:', data.channel_id);
             break;
+          case 'user_typing': {
+            // For channels: key is channel_id, for DMs: key is recipient_id
+            const key = data.channel_id || data.recipient_id;
+            setTypingUsers((prev) => ({ ...prev, [key]: true }));
+            break;
+          }
+          case 'user_stopped_typing': {
+            const key = data.channel_id || data.recipient_id;
+            setTypingUsers((prev) => {
+              const updated = { ...prev };
+              delete updated[key];
+              return updated;
+            });
+            break;
+          }
+          case 'user_status': {
+            setUserStatus((prev) => ({ ...prev, [data.user_id]: data.status }));
+            setConnectedUsers((prev) => {
+              if (data.status === 'online' && !prev.includes(data.user_id)) {
+                return [...prev, data.user_id];
+              } else if (data.status === 'offline') {
+                return prev.filter((id) => id !== data.user_id);
+              }
+              return prev;
+            });
+            break;
+          }
+          case 'notification': {
+            setNotifications((prev) => [
+              ...prev,
+              { id: data.id || Date.now().toString(), ...data }
+            ]);
+            break;
+          }
           default:
             console.log('Unknown message type:', data.type);
         }
@@ -147,16 +197,17 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     }
   };
 
-  const sendMessage = (content: string, channelId?: string, recipientId?: string) => {
-    console.log('sendMessage called with:', { content, channelId, recipientId });
+  const sendMessage = (content: string, channelId?: string, recipientId?: string, imageUrl?: string) => {
+    console.log('sendMessage called with:', { content, channelId, recipientId, imageUrl });
     
     if (wsRef.current && user) {
-      const messageData = {
+      const messageData: any = {
         type: 'send_message',
         content,
         channel_id: channelId,
         recipient_id: recipientId,
       };
+      if (imageUrl) messageData.image_url = imageUrl;
       console.log('Sending message via WebSocket:', messageData);
       sendWebSocketMessage(messageData);
     } else {
@@ -218,6 +269,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     }
   };
 
+  const clearNotifications = () => setNotifications([]);
+
   const value: WebSocketContextType = {
     isConnected,
     sendMessage,
@@ -228,22 +281,15 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     messages,
     setMessages,
     sendCustomEvent,
+    typingUsers,
+    userStatus,
+    notifications,
+    clearNotifications,
+    connectedUsers,
   };
 
   return (
-    <WebSocketContext.Provider
-      value={{
-        isConnected,
-        sendMessage,
-        joinChannel,
-        leaveChannel,
-        startTyping,
-        stopTyping,
-        messages,
-        setMessages,
-        sendCustomEvent,
-      }}
-    >
+    <WebSocketContext.Provider value={value}>
       {children}
     </WebSocketContext.Provider>
   );

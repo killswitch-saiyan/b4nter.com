@@ -28,6 +28,9 @@ const ChatPage: React.FC = () => {
   const [loadingBlock, setLoadingBlock] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [pendingDMMessages, setPendingDMMessages] = useState<Message[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesAreaRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = React.useState(true);
 
   // Debug: Log user data
   useEffect(() => {
@@ -134,9 +137,9 @@ const ChatPage: React.FC = () => {
       .finally(() => setLoadingUsers(false));
   }, []);
 
-  // Enhanced message sending with emoji support and E2EE
-  const handleSendMessage = async (content: string, messageType?: 'text' | 'emoji') => {
-    if (!content.trim() || !user || (!selectedChannel && !selectedDMUser)) return;
+  // Enhanced message sending with emoji support, E2EE, and image/meme sharing
+  const handleSendMessage = async (content: string, messageType?: 'text' | 'emoji', imageUrl?: string) => {
+    if ((!content.trim() && !imageUrl) || !user || (!selectedChannel && !selectedDMUser)) return;
     if (!isConnected) {
       toast.error('Not connected to server. Please wait for connection...');
       return;
@@ -174,13 +177,14 @@ const ChatPage: React.FC = () => {
         updated_at: new Date().toISOString(),
         is_encrypted: is_encrypted,
         pending: true,
+        image_url: imageUrl || undefined,
       };
       setPendingDMMessages(prev => [...prev, pendingMsg]);
       
-      // Send encrypted content to backend
-      sendMessage(processedContent, undefined, selectedDMUser.id);
+      // Send encrypted content and image to backend
+      sendMessage(processedContent, undefined, selectedDMUser.id, imageUrl);
     } else if (selectedChannel) {
-      sendMessage(content, selectedChannel.id);
+      sendMessage(content, selectedChannel.id, undefined, imageUrl);
     }
   };
 
@@ -200,21 +204,24 @@ const ChatPage: React.FC = () => {
         // Remove pending messages that are now confirmed by the server
         const confirmed = Array.isArray(data) ? data : [];
         setDMMessages(() => {
-          // For each confirmed message, merge reactions with any existing DM message with the same id
+          // For each confirmed message, merge reactions and image_url with any existing DM message with the same id
           const mergedMessages = confirmed.map(confMsg => {
             // Process encrypted messages
             const processedMsg = processReceivedMessage(confMsg, user?.id || '');
-            
             const existing = pendingDMMessages.find(m => m.id === processedMsg.id);
+            let image_url = processedMsg.image_url;
+            if ((!image_url || image_url === '') && existing && existing.image_url) {
+              image_url = existing.image_url;
+            }
             if (existing && Array.isArray(existing.reactions)) {
               // Merge reactions, deduplicate by emoji+user_id
               const allReactions = [...(Array.isArray(processedMsg.reactions) ? processedMsg.reactions : []), ...existing.reactions];
               const deduped = allReactions.filter((r, idx, arr) =>
                 arr.findIndex(x => x.emoji === r.emoji && x.user_id === r.user_id) === idx
               );
-              return { ...processedMsg, reactions: deduped };
+              return { ...processedMsg, reactions: deduped, image_url };
             }
-            return processedMsg;
+            return { ...processedMsg, image_url };
           });
           // Add any pending messages that are not confirmed
           pendingDMMessages.forEach(pendingMsg => {
@@ -567,6 +574,63 @@ const ChatPage: React.FC = () => {
 
   // (No filtering for DMs: always show full dmMessages)
 
+  // Auto-scroll to latest message when messages change, unless user scrolled up
+  useEffect(() => {
+    const area = messagesAreaRef.current;
+    if (!area) return;
+    if (autoScroll) {
+      area.scrollTop = area.scrollHeight;
+    }
+  }, [filteredMessages, dmMessages, autoScroll]);
+
+  // Always scroll to bottom when switching channels or loading new channel messages (smooth)
+  useEffect(() => {
+    if (selectedChannel && messagesAreaRef.current) {
+      messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [selectedChannel, filteredMessages.length]);
+
+  // Always scroll to bottom after sending a message or uploading an image in channels (smooth)
+  useEffect(() => {
+    if (messagesAreaRef.current) {
+      messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages.length]);
+
+  // Always scroll to bottom when switching DMs or loading new DM messages (smooth)
+  useEffect(() => {
+    if (selectedDMUser && messagesAreaRef.current) {
+      messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [selectedDMUser, dmMessages.length]);
+
+  // Always scroll to bottom after sending a message or uploading an image in DMs (smooth)
+  useEffect(() => {
+    if (messagesAreaRef.current) {
+      messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [pendingDMMessages.length]);
+
+  // Detect if user scrolls up, disable auto-scroll
+  const handleScroll = () => {
+    const area = messagesAreaRef.current;
+    if (!area) return;
+    // If user is near the bottom, enable auto-scroll
+    if (area.scrollHeight - area.scrollTop - area.clientHeight < 50) {
+      setAutoScroll(true);
+    } else {
+      setAutoScroll(false);
+    }
+  };
+
+  // Scroll to bottom function for Jump to Latest (smooth)
+  const scrollToBottom = () => {
+    const area = messagesAreaRef.current;
+    if (area) {
+      area.scrollTo({ top: area.scrollHeight, behavior: 'smooth' });
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
       {/* Header - Fixed */}
@@ -698,7 +762,7 @@ const ChatPage: React.FC = () => {
           </div>
 
           {/* Messages Area - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative" ref={messagesAreaRef} onScroll={handleScroll}>
             {selectedDMUser ? (
               loadingDM ? (
                 <div className="text-center text-gray-500">Loading messages...</div>
@@ -711,7 +775,7 @@ const ChatPage: React.FC = () => {
                   )}
                 </div>
               ) : (
-                dmMessages.map((msg, index) => {
+                user && dmMessages.map((msg, index) => {
                   const m = msg as Message & { pending?: boolean };
                   return (
                     <MessageDisplay
@@ -731,7 +795,7 @@ const ChatPage: React.FC = () => {
                   <p>No messages yet. Start the conversation!</p>
                 </div>
               ) : (
-                filteredMessages.map((msg, index) => (
+                user && filteredMessages.map((msg, index) => (
                   <MessageDisplay
                     key={msg.id}
                     message={msg}
@@ -741,15 +805,27 @@ const ChatPage: React.FC = () => {
                 ))
               )
             )}
+            <div ref={messagesEndRef} />
+            {!autoScroll && (
+              <button
+                onClick={scrollToBottom}
+                className="fixed bottom-24 right-12 z-50 px-4 py-2 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition-all duration-200"
+                style={{ position: 'absolute', right: 0, bottom: 0, margin: '16px' }}
+              >
+                Jump to Latest
+              </button>
+            )}
           </div>
 
           {/* Message Input - Fixed */}
           <div className="flex-shrink-0 p-4 bg-white border-t">
-            <MessageInput
-              onSendMessage={handleSendMessage}
-              placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message # ${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
-              disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
-            />
+            {user && (
+              <MessageInput
+                onSendMessage={handleSendMessage}
+                placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message # ${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
+                disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
+              />
+            )}
             {selectedDMUser && isBlocked && (
               <div className="text-center text-xs text-red-500 mt-2">You have blocked this user. Unblock to send messages.</div>
             )}

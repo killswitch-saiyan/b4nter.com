@@ -84,7 +84,7 @@ class WebSocketManager:
                 }))
             logger.info(f"User {user_id} left channel {channel_id}")
 
-    async def send_message(self, content: str, sender_id: str, channel_id: str | None = None, recipient_id: str | None = None):
+    async def send_message(self, content: str, sender_id: str, channel_id: str | None = None, recipient_id: str | None = None, image_url: str | None = None):
         try:
             # Map channel_id string to UUID if needed
             if channel_id:
@@ -98,7 +98,8 @@ class WebSocketManager:
                 'content': content,
                 'sender_id': sender_id,
                 'channel_id': channel_id,
-                'recipient_id': recipient_id
+                'recipient_id': recipient_id,
+                'image_url': image_url
             }
             
             # Save message to database
@@ -126,7 +127,8 @@ class WebSocketManager:
                 'channel_id': channel_id,
                 'recipient_id': recipient_id,
                 'created_at': saved_message['created_at'],
-                'updated_at': saved_message['updated_at']
+                'updated_at': saved_message['updated_at'],
+                'image_url': saved_message.get('image_url')
             }
             
             # Send message to appropriate recipients
@@ -230,6 +232,29 @@ class WebSocketManager:
         else:
             logger.warning(f"No valid channel_id or recipient_id for reaction remove: {message}")
 
+    def get_connected_users(self) -> list:
+        return list(self.user_connections.keys())
+
+    def is_user_connected(self, user_id: str) -> bool:
+        return user_id in self.user_connections
+
+    async def broadcast_user_status(self, user_id: str, status: str):
+        # Broadcast user status (online/offline) to all users
+        payload = {"type": "user_status", "user_id": user_id, "status": status}
+        for ws in self.user_connections.values():
+            try:
+                await ws.send_text(json.dumps(payload))
+            except Exception as e:
+                logger.error(f"Error broadcasting user status: {e}")
+
+    async def send_notification_to_user(self, user_id: str, notification: dict):
+        # Send a notification to a specific user
+        if user_id in self.user_connections:
+            try:
+                await self.user_connections[user_id].send_text(json.dumps({"type": "notification", **notification}))
+            except Exception as e:
+                logger.error(f"Error sending notification to user {user_id}: {e}")
+
     async def handle_websocket_message(self, websocket: WebSocket, user_id: str):
         """Handle incoming WebSocket messages"""
         try:
@@ -246,21 +271,46 @@ class WebSocketManager:
                         content=message.get('content'),
                         sender_id=user_id,
                         channel_id=message.get('channel_id'),
-                        recipient_id=message.get('recipient_id')
+                        recipient_id=message.get('recipient_id'),
+                        image_url=message.get('image_url')
                     )
                 elif message_type == 'add_reaction':
                     await self.add_reaction(user_id, message)
                 elif message_type == 'remove_reaction':
                     await self.remove_reaction(user_id, message)
                 elif message_type == 'typing_start':
-                    pass
+                    await self.handle_typing(user_id, message, typing=True)
                 elif message_type == 'typing_stop':
-                    pass
+                    await self.handle_typing(user_id, message, typing=False)
         except WebSocketDisconnect:
             self.disconnect(user_id)
-        except Exception as e:
-            logger.error(f"Error handling WebSocket message: {e}")
-            self.disconnect(user_id)
+            # Broadcast offline status
+            await self.broadcast_user_status(user_id, "offline")
+
+    async def handle_typing(self, user_id: str, message: dict, typing: bool):
+        channel_id = message.get('channel_id')
+        recipient_id = message.get('recipient_id')
+        payload = {
+            "type": "user_typing" if typing else "user_stopped_typing",
+            "user_id": user_id
+        }
+        if channel_id:
+            payload["channel_id"] = channel_id
+            # Broadcast to all users in the channel
+            for uid, channels in user_channels.items():
+                if channel_id in channels and uid in self.user_connections and uid != user_id:
+                    try:
+                        await self.user_connections[uid].send_text(json.dumps(payload))
+                    except Exception as e:
+                        logger.error(f"Error sending typing indicator to user {uid}: {e}")
+        elif recipient_id:
+            payload["recipient_id"] = recipient_id
+            # Send to the DM recipient only
+            if recipient_id in self.user_connections:
+                try:
+                    await self.user_connections[recipient_id].send_text(json.dumps(payload))
+                except Exception as e:
+                    logger.error(f"Error sending typing indicator to user {recipient_id}: {e}")
 
 # Global WebSocket manager instance
 websocket_manager = WebSocketManager() 

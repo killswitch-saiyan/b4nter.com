@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Body
+from fastapi import APIRouter, HTTPException, status, Depends, Body, UploadFile, File
 from typing import List, Optional
 from models import MessageCreate, MessageResponse, UserResponse
 from auth import get_current_user
 from database import db
 import logging
 from pydantic import BaseModel
+from config import settings
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +165,8 @@ async def get_channel_messages(
                     "full_name": sender_info.get("full_name"),
                     "avatar_url": sender_info.get("avatar_url")
                 },
-                reactions=reactions
+                reactions=reactions,
+                image_url=msg.get("image_url")
             )
             message_responses.append(message_response)
         
@@ -228,7 +231,8 @@ async def get_direct_messages(
                     "full_name": sender_info.get("full_name"),
                     "avatar_url": sender_info.get("avatar_url")
                 },
-                reactions=reactions
+                reactions=reactions,
+                image_url=msg.get("image_url")
             )
             message_responses.append(message_response)
         
@@ -278,3 +282,39 @@ async def remove_reaction(message_id: str, data: ReactionRequest = Body(...), cu
 async def get_reactions(message_id: str, current_user: UserResponse = Depends(get_current_user)):
     reactions = await db.get_reactions_for_message(message_id)
     return reactions 
+
+@router.post("/upload-image")
+async def upload_image(
+    file: UploadFile = File(...),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Upload an image to Supabase Storage and return its public URL"""
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be an image"
+            )
+        # Generate a unique filename
+        ext = file.filename.split('.')[-1]
+        filename = f"{current_user.id}/{uuid.uuid4()}.{ext}"
+        bucket = "chat-images"
+        # Read file content
+        file_bytes = await file.read()
+        # Upload to Supabase Storage
+        storage = db.client.storage
+        res = storage.from_(bucket).upload(filename, file_bytes, {"content-type": file.content_type})
+        if hasattr(res, "status_code") and res.status_code >= 400:
+            # Try to get error message from response
+            try:
+                error_detail = res.json() if hasattr(res, "json") else res.text
+            except Exception:
+                error_detail = str(res)
+            raise HTTPException(status_code=500, detail=f"Failed to upload image: {error_detail}")
+        # Get public URL
+        public_url = storage.from_(bucket).get_public_url(filename)
+        return {"url": public_url}
+    except Exception as e:
+        logger.error(f"Error uploading image: {e}")
+        raise HTTPException(status_code=500, detail=f"Error uploading image: {e}") 

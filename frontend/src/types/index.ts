@@ -42,6 +42,7 @@ export interface Message {
   };
   reactions?: MessageReaction[];
   is_encrypted?: boolean;  // Add flag to indicate if message is encrypted
+  image_url?: string;      // Add image_url for image/meme sharing
 }
 
 export interface ChannelMember {

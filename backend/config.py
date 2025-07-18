@@ -31,8 +31,8 @@ class Settings(BaseSettings):
         case_sensitive = False
 
 
-# Load settings
+# Load settings with required environment variables
 settings = Settings()
 
 # Parse CORS origins from environment variable
-cors_origins_list = [origin.strip() for origin in settings.cors_origins.split(',')] 
+cors_origins_list = [origin.strip() for origin in settings.cors_origins.split(',') if origin.strip()]
