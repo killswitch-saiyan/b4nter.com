@@ -34,7 +34,8 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
     };
   }, [showEmojiPicker]);
 
-  const displayName = message.sender?.full_name || message.sender?.username || 'Unknown';
+  // Use username only for displayName
+  const displayName = message.sender?.username || 'Unknown';
   const avatarInitial = message.sender?.full_name?.charAt(0) || message.sender?.username?.charAt(0) || 'U';
 
   // Group reactions by emoji and count, and collect user names

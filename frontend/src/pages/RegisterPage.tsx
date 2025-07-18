@@ -64,8 +64,12 @@ const RegisterPage: React.FC = () => {
       await register(formData.username, formData.email, formData.password, formData.fullName);
       toast.success('Registration successful! Welcome to b4nter!');
       navigate('/chat');
-    } catch (error) {
-      toast.error('Registration failed. Please try again.');
+    } catch (error: any) {
+      if (error.response?.data?.detail === 'User with this username already exists') {
+        toast.error('Username already exists. Please choose another.');
+      } else {
+        toast.error('Registration failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }

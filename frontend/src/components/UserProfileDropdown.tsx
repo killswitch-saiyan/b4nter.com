@@ -116,6 +116,47 @@ const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({ className = "
     }
   }, [isOpen, user]);
 
+  // Add state for password change
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_new_password: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const handlePasswordInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setPasswordData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangingPassword(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/users/change-password', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(passwordData),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.detail || 'Failed to change password');
+      }
+      toast.success('Password updated successfully!');
+      setShowPasswordForm(false);
+      setPasswordData({ current_password: '', new_password: '', confirm_new_password: '' });
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       {/* User Button */}
@@ -264,6 +305,57 @@ const UserProfileDropdown: React.FC<UserProfileDropdownProps> = ({ className = "
                       placeholder="Enter email"
                     />
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordForm((v) => !v)}
+                    className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors"
+                  >
+                    {showPasswordForm ? 'Cancel Password Change' : 'Change Password'}
+                  </button>
+                  {showPasswordForm && (
+                    <form onSubmit={handleChangePassword} className="space-y-2 mt-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                        <input
+                          type="password"
+                          name="current_password"
+                          value={passwordData.current_password}
+                          onChange={handlePasswordInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                        <input
+                          type="password"
+                          name="new_password"
+                          value={passwordData.new_password}
+                          onChange={handlePasswordInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                        <input
+                          type="password"
+                          name="confirm_new_password"
+                          value={passwordData.confirm_new_password}
+                          onChange={handlePasswordInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+                        disabled={changingPassword}
+                      >
+                        {changingPassword ? 'Changing...' : 'Update Password'}
+                      </button>
+                    </form>
+                  )}
                 </div>
 
                 {/* Action Buttons */}

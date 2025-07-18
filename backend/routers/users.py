@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from typing import List, Optional
 from models import UserResponse, UserResponseWithBlocking, UserCreate, Token, AuthResponse, GoogleAuthRequest
-from auth import get_current_user
+from auth import get_current_user, verify_password, get_password_hash
 from database import db
 import logging
 import base64
@@ -311,3 +311,37 @@ async def update_profile(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
         ) 
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_new_password: str
+
+@router.put("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Change user password"""
+    try:
+        # Get user from DB
+        user = await db.get_user_by_id(current_user.id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        # Verify current password
+        if not verify_password(data.current_password, user["password_hash"]):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        # Check new password match
+        if data.new_password != data.confirm_new_password:
+            raise HTTPException(status_code=400, detail="New passwords do not match")
+        # Hash and update new password
+        hashed = get_password_hash(data.new_password)
+        result = await db.update_user(current_user.id, {"password_hash": hashed})
+        if not result:
+            raise HTTPException(status_code=500, detail="Failed to update password")
+        return {"message": "Password updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error changing password: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error") 

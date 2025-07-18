@@ -23,12 +23,18 @@ security = HTTPBearer()
 async def register(user_data: UserCreate):
     """Register a new user"""
     try:
-        # Check if user already exists
+        # Check if user already exists (email or username)
         existing_user = await db.get_user_by_email(user_data.email)
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User with this email already exists"
+            )
+        existing_username = await db.get_user_by_username(user_data.username)
+        if existing_username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this username already exists"
             )
         
         # Hash password

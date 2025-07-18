@@ -37,6 +37,8 @@ const ChatPage: React.FC = () => {
     }
     return false;
   });
+  const [userSearch, setUserSearch] = useState('');
+  const [channelSearch, setChannelSearch] = useState('');
 
   useEffect(() => {
     if (isDark) {
@@ -682,11 +684,18 @@ const ChatPage: React.FC = () => {
         <div className="w-64 bg-white border-r flex-shrink-0 dark:bg-dark-800 dark:border-dark-700">
           <div className="p-4 h-full overflow-y-auto">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-white">Channels</h3>
+            <input
+              type="text"
+              value={channelSearch}
+              onChange={e => setChannelSearch(e.target.value)}
+              placeholder="Search channels..."
+              className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
+            />
             {loading ? (
               <div className="text-sm text-gray-500">Loading channels...</div>
             ) : (
               <div className="space-y-2">
-                {channels.map((channel) => (
+                {channels.filter(channel => channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
                   <button
                     key={channel.id}
                     onClick={() => setSelectedChannel(channel)}
@@ -698,17 +707,24 @@ const ChatPage: React.FC = () => {
               </div>
             )}
             <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-4 dark:text-white">Direct Messages</h3>
+            <input
+              type="text"
+              value={userSearch}
+              onChange={e => setUserSearch(e.target.value)}
+              placeholder="Search users..."
+              className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
+            />
             {loadingUsers ? (
               <div className="text-sm text-gray-500">Loading users...</div>
             ) : (
               <div className="space-y-2">
-                {users.map((u) => (
+                {users.filter(u => u.username.toLowerCase().includes(userSearch.toLowerCase())).map((u) => (
                   <button
                     key={u.id}
                     onClick={() => { setSelectedDMUser(u); setSelectedChannel(null); }}
                     className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${selectedDMUser?.id === u.id ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'}`}
                   >
-                    {u.full_name || u.username}
+                    {u.username}
                     {u.is_blocked && (
                       <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
                     )}
@@ -728,7 +744,7 @@ const ChatPage: React.FC = () => {
                 {selectedDMUser ? (
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      Direct Message with {selectedDMUser.full_name || selectedDMUser.username}
+                      Direct Message with {selectedDMUser.username}
                       {isBlocked && (
                         <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
                       )}
@@ -836,7 +852,7 @@ const ChatPage: React.FC = () => {
             {user && (
               <MessageInput
                 onSendMessage={handleSendMessage}
-                placeholder={selectedDMUser ? `Message @${selectedDMUser.full_name || selectedDMUser.username}...` : selectedChannel ? `Message # ${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
+                placeholder={selectedDMUser ? `Message @${selectedDMUser.username}...` : selectedChannel ? `Message # ${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
                 disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
               />
             )}
