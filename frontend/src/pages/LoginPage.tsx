@@ -90,7 +90,6 @@ const LoginPage: React.FC = () => {
         }}
       >
         <source src="/brandvid.mp4" type="video/mp4" />
-        <source src="https://b4nter.onrender.com/brandvid.mp4" type="video/mp4" />
         Your browser does not support the video tag.
       </video>
       {/* Animated Gradient Background */}
