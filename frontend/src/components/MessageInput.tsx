@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { FaSmile, FaPaperPlane, FaPaperclip, FaTimes } from 'react-icons/fa';
 import EmojiPicker from './EmojiPicker';
+import GifPicker from 'gif-picker-react';
 
 interface MessageInputProps {
-  onSendMessage: (message: string, messageType?: 'text' | 'emoji', imageUrl?: string) => void;
+  onSendMessage: (message: string, messageType?: 'text' | 'emoji' | 'image', imageUrl?: string) => void;
   placeholder?: string;
   disabled?: boolean;
 }
@@ -19,6 +20,8 @@ const SPORTS_EMOJIS = [
   '👟', // Soccer Shoe
 ];
 
+const TENOR_API_KEY = import.meta.env.VITE_TENOR_API_KEY;
+
 const MessageInput: React.FC<MessageInputProps> = ({
   onSendMessage,
   placeholder = 'Type a message...',
@@ -31,6 +34,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showGifPicker, setShowGifPicker] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,8 +123,25 @@ const MessageInput: React.FC<MessageInputProps> = ({
     setImagePreview(null);
   };
 
+  const handleGifSelect = (gif: any) => {
+    // gif.url is the direct GIF URL
+    onSendMessage('', 'image', gif.url);
+    setShowGifPicker(false);
+  };
+
   return (
     <div className="relative">
+      {showGifPicker && (
+        <div className="absolute bottom-16 left-0 z-50">
+          <GifPicker
+            tenorApiKey={TENOR_API_KEY}
+            onGifClick={handleGifSelect}
+            width={350}
+            height={400}
+            theme={"light" as any}
+          />
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="flex items-center gap-2 p-4 bg-gray-50 border-t">
         <div className="flex-1 relative max-w-8xl">
           {/* Sports Emoji Row */}
@@ -170,6 +191,15 @@ const MessageInput: React.FC<MessageInputProps> = ({
           )}
         </div>
         <div className="flex items-end gap-2">
+          <button
+            type="button"
+            onClick={() => setShowGifPicker((prev) => !prev)}
+            className="h-12 w-12 text-pink-500 hover:text-pink-700 hover:bg-pink-100 rounded-lg transition-colors flex items-center justify-center"
+            disabled={disabled || uploading}
+            title="Send GIF"
+          >
+            <span role="img" aria-label="GIF" style={{ fontWeight: 'bold', fontSize: 20 }}>GIF</span>
+          </button>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
