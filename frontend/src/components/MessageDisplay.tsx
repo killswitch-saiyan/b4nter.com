@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Message, MessageReaction } from '../types';
 import { extractYouTubeUrls } from '../utils/youtubeUtils';
 import YouTubeThumbnail from './YouTubeThumbnail';
+import EmojiPicker from './EmojiPicker'; // Added EmojiPicker import
 
 interface MessageDisplayProps {
   message: Message & { pending?: boolean };
@@ -16,6 +17,8 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
   const [lastClick, setLastClick] = useState<number>(0);
   const [tooltipEmoji, setTooltipEmoji] = useState<string | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  // Add a ref to track hover state for the message bubble and emoji picker
+  const hoverTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Handle clicking outside emoji picker to close it
   useEffect(() => {
@@ -72,32 +75,102 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
   // Function to render message content with clickable links
   const renderMessageContent = (content: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const imageRegex = /\.(gif|jpe?g|tiff?|png|webp|bmp)$/i;
     const parts = content.split(urlRegex);
-    
+
     return parts.map((part, index) => {
       if (part.match(urlRegex)) {
-        return (
-          <a
-            key={index}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-800 underline"
-          >
-            {part}
-          </a>
-        );
+        if (imageRegex.test(part)) {
+          // Render as image, not link
+          return (
+            <img
+              key={index}
+              src={part}
+              alt="attachment"
+              className="max-h-64 rounded-lg border shadow-sm hover:shadow-lg transition-all duration-200 my-2"
+              style={{ maxWidth: '320px', objectFit: 'contain' }}
+              onClick={e => e.stopPropagation()}
+            />
+          );
+        } else {
+          // Render as clickable link
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 underline"
+              onClick={e => e.stopPropagation()}
+            >
+              {part}
+            </a>
+          );
+        }
       }
       return part;
     });
   };
 
+  const handleMouseEnter = () => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    setHovered(true);
+  };
+  const handleMouseLeave = () => {
+    hoverTimeout.current = setTimeout(() => {
+      setHovered(false);
+      setShowEmojiPicker(false);
+    }, 100);
+  };
+
   return (
     <div
-      className={`flex flex-col items-start space-y-1 ${message.pending ? 'opacity-60' : ''} ${hovered ? 'bg-blue-200 dark:bg-dark-600' : ''}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setTooltipEmoji(null); }}
+      className={`flex flex-col items-start space-y-1 ${message.pending ? 'opacity-60' : ''} ${hovered ? 'bg-blue-200 dark:bg-dark-600' : ''} relative`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
+      {/* Emoji bar and picker in top-right of message bubble, overlayed */}
+      {hovered && (
+        <div className="absolute top-2 right-2 z-30 flex flex-col items-end">
+          <div className="flex flex-wrap items-center gap-1 bg-white dark:bg-dark-700 rounded-full shadow px-2 py-1 border border-gray-200 dark:border-dark-400">
+            {["👍","❤️","😂","😮","😢","😡","🎉","👏","🔥","💯","⚽","🏆"].map((emoji) => (
+              <button
+                key={emoji}
+                className="text-lg hover:scale-125 transition-transform"
+                onClick={e => { e.stopPropagation(); handleAddReaction(emoji); }}
+                tabIndex={-1}
+                title={`React with ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+            <button
+              className="text-lg font-bold px-1 hover:bg-gray-100 dark:hover:bg-dark-600 rounded-full"
+              onClick={e => { e.stopPropagation(); setShowEmojiPicker((v) => !v); }}
+              tabIndex={-1}
+              title="More emojis"
+              aria-expanded={showEmojiPicker}
+            >
+              ...
+            </button>
+          </div>
+          {showEmojiPicker && (
+            <div
+              className="w-[360px] mt-2 bg-white border border-gray-200 rounded-lg shadow-lg dark:bg-dark-700 dark:border-dark-400 overflow-y-auto"
+              style={{ maxHeight: '400px', overflowX: 'hidden' }}
+              ref={emojiPickerRef}
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+            >
+              <EmojiPicker
+                isOpen={showEmojiPicker}
+                onEmojiSelect={handleAddReaction}
+                onClose={() => setShowEmojiPicker(false)}
+              />
+            </div>
+          )}
+        </div>
+      )}
       <div className="flex items-start space-x-3 w-full">
         <div className="flex-shrink-0">
           {message.sender?.avatar_url ? (
@@ -127,18 +200,6 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
             <span className="text-xs text-gray-700 dark:text-gray-300">{new Date(message.created_at).toLocaleTimeString()}</span>
           </div>
           <p className="text-sm text-gray-700 dark:text-white">{renderMessageContent(message.content)}</p>
-          {message.image_url && (
-            <div className="mt-2">
-              <a href={message.image_url} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={message.image_url}
-                  alt="attachment"
-                  className="max-h-64 rounded-lg border shadow-sm hover:shadow-lg transition-all duration-200"
-                  style={{ maxWidth: '320px', objectFit: 'contain' }}
-                />
-              </a>
-            </div>
-          )}
           {message.pending && <span className="ml-2 text-xs text-gray-400 animate-pulse">Sending...</span>}
           
           {/* YouTube Thumbnails */}
@@ -180,35 +241,6 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
             )}
           </div>
         ))}
-        {/* + Button for Emoji Picker */}
-        <button
-          className={`flex items-center justify-center w-6 h-6 rounded-full text-xs border bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400 dark:bg-dark-700 dark:border-dark-400 dark:text-white dark:hover:bg-dark-600 transition-all duration-200 shadow-sm ${hovered ? 'opacity-100' : 'opacity-0 pointer-events-none'} z-10`}
-          onClick={() => setShowEmojiPicker((v) => !v)}
-          tabIndex={-1}
-        >
-          <span className="font-bold text-gray-600">+</span>
-        </button>
-        {showEmojiPicker && (
-          <div className="absolute z-50 bottom-full left-0 mb-2 animate-in fade-in-0 zoom-in-95 duration-200" ref={emojiPickerRef}>
-            <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-2 relative">
-              {/* Arrow pointer */}
-              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
-              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-200" style={{ marginTop: '-1px' }}></div>
-              
-              <div className="flex items-center space-x-1">
-                {["👍","❤️","😂","😮","😢","😡","🎉","👏","🔥","💯","⚽","🏆"].map((emoji) => (
-                  <button
-                    key={emoji}
-                    className="w-8 h-8 flex items-center justify-center text-lg hover:bg-gray-100 rounded transition-colors"
-                    onClick={() => handleAddReaction(emoji)}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

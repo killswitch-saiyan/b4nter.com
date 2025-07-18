@@ -17,17 +17,16 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({ onEmojiSelect, isOpen, onClos
   };
 
   return (
-    <div className="absolute bottom-full mb-2 z-50">
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200">
-        <Picker
-          data={data}
-          onEmojiSelect={handleEmojiSelect}
-          theme="light"
-          set="native"
-          previewPosition="none"
-          skinTonePosition="none"
-        />
-      </div>
+    <div className="w-full h-full">
+      <Picker
+        data={data}
+        onEmojiSelect={handleEmojiSelect}
+        theme="light"
+        set="native"
+        previewPosition="none"
+        skinTonePosition="none"
+        style={{ width: '100%', height: '100%' }}
+      />
     </div>
   );
 };
