@@ -1,6 +1,6 @@
 # B4nter Test Scripts
 
-This directory contains comprehensive test scripts to verify all B4nter features including user creation, login, direct messaging, and channel messaging.
+This directory contains comprehensive test scripts to verify all B4nter features including user creation, login, direct messaging, and channel messaging...
 
 ## Test Structure
 
