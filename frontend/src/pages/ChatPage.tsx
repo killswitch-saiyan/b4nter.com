@@ -460,20 +460,21 @@ const ChatPage: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
       {/* Header - Fixed */}
-      <div className="bg-white shadow-sm border-b px-6 py-4 flex-shrink-0">
+      <div className="bg-black shadow-sm border-b px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <img src={brandLogo} alt="b4nter Logo" className="w-8 h-8 rounded-full object-contain shadow-sm" />
-            <h1 className="text-2xl font-bold text-gray-900">b4nter</h1>
-            <span className="text-sm text-gray-500">Where the game never stops talking</span>
+            <h1 className="text-2xl font-bold text-white tracking-tight" style={{letterSpacing: '-0.0009em', fontFamily: 'Azeret Mono, monospace'}}>b4nter</h1>
+            <span className="text-sm text-gray-300" style={{fontFamily: 'Cabin, sans-serif'}}>Start talking smack!</span>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-gray-300" style={{fontFamily: 'Cabin, sans-serif'}}>
               Welcome, {displayName}!
             </span>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+              className="px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-md hover:bg-gray-700"
+              style={{fontFamily: 'Cabin, sans-serif'}}
             >
               Logout
             </button>
@@ -501,7 +502,7 @@ const ChatPage: React.FC = () => {
                         : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >
-                    #{channel.name}
+                    # {channel.name}
                   </button>
                 ))}
               </div>

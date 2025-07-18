@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Message, MessageReaction } from '../types';
+import { extractYouTubeUrls } from '../utils/youtubeUtils';
+import YouTubeThumbnail from './YouTubeThumbnail';
 
 interface MessageDisplayProps {
   message: Message & { pending?: boolean };
@@ -48,6 +50,29 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
     }
   };
 
+  // Function to render message content with clickable links
+  const renderMessageContent = (content: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 underline"
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
     <div
       className={`flex flex-col items-start space-y-1 ${message.pending ? 'opacity-60' : ''} ${hovered ? 'bg-blue-200' : ''}`}
@@ -65,8 +90,23 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
             <span className="text-sm font-medium text-gray-900">{displayName}</span>
             <span className="text-xs text-gray-700">{new Date(message.created_at).toLocaleTimeString()}</span>
           </div>
-          <p className="text-sm text-gray-700">{message.content}</p>
+          <p className="text-sm text-gray-700">{renderMessageContent(message.content)}</p>
           {message.pending && <span className="ml-2 text-xs text-gray-400 animate-pulse">Sending...</span>}
+          
+          {/* YouTube Thumbnails */}
+          {(() => {
+            const youtubeUrls = extractYouTubeUrls(message.content);
+            if (youtubeUrls.length > 0) {
+              return (
+                <div className="mt-2 space-y-2">
+                  {youtubeUrls.map((url, index) => (
+                    <YouTubeThumbnail key={index} url={url} className="max-w-sm" />
+                  ))}
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
       </div>
       {/* Emoji Reactions Row */}
