@@ -597,17 +597,25 @@ const ChatPage: React.FC = () => {
     }
   }, [messages.length]);
 
-  // Always scroll to bottom when switching DMs or loading new DM messages (smooth)
+  // Always scroll to bottom when switching DMs or loading new DM messages (smooth, after DOM update)
   useEffect(() => {
     if (selectedDMUser && messagesAreaRef.current) {
-      messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
+      setTimeout(() => {
+        if (messagesAreaRef.current) {
+          messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
+        }
+      }, 0);
     }
   }, [selectedDMUser, dmMessages.length]);
 
-  // Always scroll to bottom after sending a message or uploading an image in DMs (smooth)
+  // Always scroll to bottom after sending a message or uploading an image in DMs (smooth, after DOM update)
   useEffect(() => {
     if (messagesAreaRef.current) {
-      messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
+      setTimeout(() => {
+        if (messagesAreaRef.current) {
+          messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
+        }
+      }, 0);
     }
   }, [pendingDMMessages.length]);
 
