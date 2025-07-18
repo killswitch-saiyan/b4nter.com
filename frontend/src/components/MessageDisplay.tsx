@@ -231,6 +231,28 @@ const MessageDisplay: React.FC<MessageDisplayProps> = ({ message, onReact, curre
             <span className="text-xs text-gray-700 dark:text-gray-300">{new Date(message.created_at).toLocaleTimeString()}</span>
           </div>
           <p className="text-sm text-gray-700 dark:text-white">{renderMessageContent(message.content)}</p>
+          
+          {/* Display image if image_url is present */}
+          {message.image_url && (
+            <div className="mt-2">
+              <img
+                src={message.image_url}
+                alt="attachment"
+                className="max-h-64 rounded-lg border shadow-sm hover:shadow-lg transition-all duration-200"
+                style={{ maxWidth: '320px', objectFit: 'contain' }}
+                onClick={e => e.stopPropagation()}
+                onError={(e) => {
+                  console.error('Image failed to load:', message.image_url);
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+                onLoad={() => {
+                  console.log('Image loaded successfully:', message.image_url);
+                }}
+              />
+            </div>
+          )}
+          
           {message.pending && <span className="ml-2 text-xs text-gray-400 animate-pulse">Sending...</span>}
           
           {/* YouTube Thumbnails */}
