@@ -201,11 +201,7 @@ async def get_direct_messages(
         
         # Get direct messages
         messages = await db.get_direct_messages(current_user.id, user_id, limit)
-        
-        # Filter out messages from blocked users
-        if current_user_blocked_other or other_blocked_current_user:
-            # Filter out messages sent by the other user
-            messages = [msg for msg in messages if msg["sender_id"] != user_id]
+        # (No filtering here: always return all messages between the two users)
         
         message_ids = [msg["id"] for msg in messages]
         reactions_by_message = await db.get_reactions_for_messages(message_ids)

@@ -565,20 +565,7 @@ const ChatPage: React.FC = () => {
     (msg) => msg.channel_id === selectedChannel?.id
   );
 
-  // Filter DM messages to hide messages from blocked users
-  const filteredDMMessages = dmMessages.filter((msg) => {
-    // If the current user has blocked the selected DM user, hide messages from that user
-    if (selectedDMUser && selectedDMUser.is_blocked) {
-      // Hide messages sent by the blocked user
-      return msg.sender_id !== selectedDMUser.id;
-    }
-    // If the selected DM user has blocked the current user, hide messages from that user
-    if (selectedDMUser && blockedUsers.some(u => u.id === selectedDMUser.id)) {
-      // Hide messages sent by the user who blocked us
-      return msg.sender_id !== selectedDMUser.id;
-    }
-    return true; // Show all messages if no blocking
-  });
+  // (No filtering for DMs: always show full dmMessages)
 
   return (
     <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
@@ -715,7 +702,7 @@ const ChatPage: React.FC = () => {
             {selectedDMUser ? (
               loadingDM ? (
                 <div className="text-center text-gray-500">Loading messages...</div>
-              ) : filteredDMMessages.length === 0 ? (
+              ) : dmMessages.length === 0 ? (
                 <div className="text-center text-gray-500 mt-8">
                   {dmMessages.length === 0 ? (
                     <p>No messages yet. Start the conversation!</p>
@@ -724,7 +711,7 @@ const ChatPage: React.FC = () => {
                   )}
                 </div>
               ) : (
-                filteredDMMessages.map((msg, index) => {
+                dmMessages.map((msg, index) => {
                   const m = msg as Message & { pending?: boolean };
                   return (
                     <MessageDisplay
