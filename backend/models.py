@@ -73,6 +73,7 @@ class MessageResponse(MessageBase):
     created_at: datetime
     updated_at: datetime
     sender: Optional[dict] = None
+    reactions: Optional[list] = None
     
     class Config:
         from_attributes = True

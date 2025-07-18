@@ -84,7 +84,7 @@ class WebSocketManager:
                 }))
             logger.info(f"User {user_id} left channel {channel_id}")
 
-    async def send_message(self, content: str, sender_id: str, channel_id: str = None, recipient_id: str = None):
+    async def send_message(self, content: str, sender_id: str, channel_id: str | None = None, recipient_id: str | None = None):
         try:
             # Map channel_id string to UUID if needed
             if channel_id:
@@ -170,21 +170,77 @@ class WebSocketManager:
             except Exception as e:
                 logger.error(f"Error sending to user {user_id}: {e}")
 
+    async def add_reaction(self, user_id: str, message: dict):
+        message_id = message.get('message_id')
+        emoji = message.get('emoji')
+        channel_id = message.get('channel_id')
+        recipient_id = message.get('recipient_id')
+        if not message_id or not emoji:
+            logger.warning(f"Missing message_id or emoji in add_reaction: {message}")
+            return
+        await db.add_reaction(message_id, user_id, emoji)
+        all_reactions = await db.get_reactions_for_message(message_id)
+        emoji_count = sum(1 for r in all_reactions if r['emoji'] == emoji)
+        payload = {
+            'type': 'reaction_update',
+            'message_id': message_id,
+            'emoji': emoji,
+            'user_id': user_id,
+            'action': 'add',
+            'count': emoji_count
+        }
+        if isinstance(channel_id, str) and channel_id:
+            logger.info(f"Broadcasting reaction add to channel {channel_id}")
+            await self.broadcast_to_channel(channel_id, payload)
+        elif isinstance(recipient_id, str) and recipient_id:
+            logger.info(f"Sending reaction add to DM users {user_id} and {recipient_id}")
+            # Always send to both users in the DM conversation
+            await self.send_to_user(recipient_id, payload)
+            await self.send_to_user(user_id, payload)
+        else:
+            logger.warning(f"No valid channel_id or recipient_id for reaction add: {message}")
+
+    async def remove_reaction(self, user_id: str, message: dict):
+        message_id = message.get('message_id')
+        emoji = message.get('emoji')
+        channel_id = message.get('channel_id')
+        recipient_id = message.get('recipient_id')
+        if not message_id or not emoji:
+            logger.warning(f"Missing message_id or emoji in remove_reaction: {message}")
+            return
+        await db.remove_reaction(message_id, user_id, emoji)
+        all_reactions = await db.get_reactions_for_message(message_id)
+        emoji_count = sum(1 for r in all_reactions if r['emoji'] == emoji)
+        payload = {
+            'type': 'reaction_update',
+            'message_id': message_id,
+            'emoji': emoji,
+            'user_id': user_id,
+            'action': 'remove',
+            'count': emoji_count
+        }
+        if isinstance(channel_id, str) and channel_id:
+            logger.info(f"Broadcasting reaction remove to channel {channel_id}")
+            await self.broadcast_to_channel(channel_id, payload)
+        elif isinstance(recipient_id, str) and recipient_id:
+            logger.info(f"Sending reaction remove to DM users {user_id} and {recipient_id}")
+            # Always send to both users in the DM conversation
+            await self.send_to_user(recipient_id, payload)
+            await self.send_to_user(user_id, payload)
+        else:
+            logger.warning(f"No valid channel_id or recipient_id for reaction remove: {message}")
+
     async def handle_websocket_message(self, websocket: WebSocket, user_id: str):
         """Handle incoming WebSocket messages"""
         try:
             while True:
                 data = await websocket.receive_text()
                 message = json.loads(data)
-                
                 message_type = message.get('type')
-                
                 if message_type == 'join_channel':
                     await self.join_channel(user_id, message.get('channel_id'))
-                
                 elif message_type == 'leave_channel':
                     await self.leave_channel(user_id, message.get('channel_id'))
-                
                 elif message_type == 'send_message':
                     await self.send_message(
                         content=message.get('content'),
@@ -192,15 +248,14 @@ class WebSocketManager:
                         channel_id=message.get('channel_id'),
                         recipient_id=message.get('recipient_id')
                     )
-                
+                elif message_type == 'add_reaction':
+                    await self.add_reaction(user_id, message)
+                elif message_type == 'remove_reaction':
+                    await self.remove_reaction(user_id, message)
                 elif message_type == 'typing_start':
-                    # Handle typing indicator
                     pass
-                
                 elif message_type == 'typing_stop':
-                    # Handle typing indicator
                     pass
-                
         except WebSocketDisconnect:
             self.disconnect(user_id)
         except Exception as e:

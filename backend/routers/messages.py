@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List
+from fastapi import APIRouter, HTTPException, status, Depends, Body
+from typing import List, Optional
 from models import MessageCreate, MessageResponse, UserResponse
 from auth import get_current_user
 from database import db
 import logging
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -121,11 +122,16 @@ async def get_channel_messages(
         
         # Get messages
         messages = await db.get_channel_messages(channel_id, limit)
+        message_ids = [msg["id"] for msg in messages]
+        reactions_by_message = await db.get_reactions_for_messages(message_ids)
+        print("DEBUG: reactions_by_message", reactions_by_message)
         
         # Convert to response format
         message_responses = []
         for msg in messages:
             sender_info = msg.get("users", {})
+            reactions = reactions_by_message.get(msg["id"], [])
+            print(f"DEBUG: msg id {msg['id']} reactions: {reactions}")
             message_response = MessageResponse(
                 id=msg["id"],
                 content=msg["content"],
@@ -140,7 +146,8 @@ async def get_channel_messages(
                     "username": sender_info.get("username"),
                     "full_name": sender_info.get("full_name"),
                     "avatar_url": sender_info.get("avatar_url")
-                }
+                },
+                reactions=reactions
             )
             message_responses.append(message_response)
         
@@ -174,11 +181,16 @@ async def get_direct_messages(
         
         # Get direct messages
         messages = await db.get_direct_messages(current_user.id, user_id, limit)
+        message_ids = [msg["id"] for msg in messages]
+        reactions_by_message = await db.get_reactions_for_messages(message_ids)
+        print("DEBUG: reactions_by_message", reactions_by_message)
         
         # Convert to response format
         message_responses = []
         for msg in messages:
             sender_info = msg.get("users", {})
+            reactions = reactions_by_message.get(msg["id"], [])
+            print(f"DEBUG: msg id {msg['id']} reactions: {reactions}")
             message_response = MessageResponse(
                 id=msg["id"],
                 content=msg["content"],
@@ -193,7 +205,8 @@ async def get_direct_messages(
                     "username": sender_info.get("username"),
                     "full_name": sender_info.get("full_name"),
                     "avatar_url": sender_info.get("avatar_url")
-                }
+                },
+                reactions=reactions
             )
             message_responses.append(message_response)
         
@@ -221,3 +234,25 @@ async def get_users_for_direct_messages(current_user: UserResponse = Depends(get
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
         ) 
+
+class ReactionRequest(BaseModel):
+    emoji: str
+
+@router.post("/message/{message_id}/reactions", status_code=201)
+async def add_reaction(message_id: str, data: ReactionRequest, current_user: UserResponse = Depends(get_current_user)):
+    reaction = await db.add_reaction(message_id, current_user.id, data.emoji)
+    if not reaction:
+        raise HTTPException(status_code=400, detail="Could not add reaction")
+    return reaction
+
+@router.delete("/message/{message_id}/reactions", status_code=204)
+async def remove_reaction(message_id: str, data: ReactionRequest = Body(...), current_user: UserResponse = Depends(get_current_user)):
+    result = await db.remove_reaction(message_id, current_user.id, data.emoji)
+    if not result:
+        raise HTTPException(status_code=404, detail="Reaction not found")
+    return {"ok": True}
+
+@router.get("/message/{message_id}/reactions")
+async def get_reactions(message_id: str, current_user: UserResponse = Depends(get_current_user)):
+    reactions = await db.get_reactions_for_message(message_id)
+    return reactions 

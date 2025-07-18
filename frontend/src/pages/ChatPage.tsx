@@ -6,13 +6,13 @@ import { toast } from 'react-hot-toast';
 import MessageInput from '../components/MessageInput';
 import MessageDisplay from '../components/MessageDisplay';
 import { userAPI } from '../lib/api';
-import { Message } from '../types';
+import { Message, MessageReaction } from '../types';
 // @ts-ignore
 import brandLogo from '../assets/brandlogo.png';
 
 const ChatPage: React.FC = () => {
   const { user, logout } = useAuth();
-  const { isConnected, sendMessage, joinChannel, messages, setMessages } = useWebSocket();
+  const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent } = useWebSocket();
   const { channels, loading, selectedChannel, setSelectedChannel } = useChannels();
   const [message, setMessage] = useState('');
   const prevChannelRef = useRef<string | null>(null);
@@ -56,10 +56,23 @@ const ChatPage: React.FC = () => {
       if (response.ok) {
         const historicalMessages: Message[] = await response.json();
         console.log('Loaded historical messages:', historicalMessages);
-        // Clear existing messages for this channel and add historical ones
+        // Merge with existing messages for this channel, deduplicating reactions
         setMessages(prevMessages => {
           const otherChannelMessages = prevMessages.filter(msg => msg.channel_id !== channelId);
-          return [...otherChannelMessages, ...historicalMessages];
+          // For each historical message, merge reactions with any existing message with the same id
+          const mergedMessages = historicalMessages.map(histMsg => {
+            const existing = prevMessages.find(m => m.id === histMsg.id);
+            if (existing && Array.isArray(existing.reactions)) {
+              // Merge reactions, deduplicate by emoji+user_id
+              const allReactions = [...(Array.isArray(histMsg.reactions) ? histMsg.reactions : []), ...existing.reactions];
+              const deduped = allReactions.filter((r, idx, arr) =>
+                arr.findIndex(x => x.emoji === r.emoji && x.user_id === r.user_id) === idx
+              );
+              return { ...histMsg, reactions: deduped };
+            }
+            return histMsg;
+          });
+          return [...otherChannelMessages, ...mergedMessages];
         });
       } else {
         const errorText = await response.text();
@@ -110,7 +123,7 @@ const ChatPage: React.FC = () => {
   }, []);
 
   // Enhanced message sending with emoji support
-  const handleSendMessage = (content: string, messageType: 'text' | 'emoji') => {
+  const handleSendMessage = (content: string, messageType?: 'text' | 'emoji') => {
     if (!content.trim() || !user || (!selectedChannel && !selectedDMUser)) return;
     if (!isConnected) {
       toast.error('Not connected to server. Please wait for connection...');
@@ -128,6 +141,7 @@ const ChatPage: React.FC = () => {
         content: content,
         sender_id: user.id,
         sender: {
+          id: user.id,
           username: user.username,
           full_name: user.full_name || user.username,
           avatar_url: user.avatar_url
@@ -135,7 +149,7 @@ const ChatPage: React.FC = () => {
         recipient_id: selectedDMUser.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        message_type: messageType,
+        message_type: messageType || 'text',
         pending: true,
       };
       setPendingDMMessages(prev => [...prev, pendingMsg]);
@@ -161,19 +175,31 @@ const ChatPage: React.FC = () => {
         // Remove pending messages that are now confirmed by the server
         const confirmed = Array.isArray(data) ? data : [];
         setDMMessages(() => {
-          // Remove pending messages that match confirmed ones (by content, sender, and created_at within 5s)
-          const merged = [...confirmed];
+          // For each confirmed message, merge reactions with any existing DM message with the same id
+          const mergedMessages = confirmed.map(confMsg => {
+            const existing = pendingDMMessages.find(m => m.id === confMsg.id);
+            if (existing && Array.isArray(existing.reactions)) {
+              // Merge reactions, deduplicate by emoji+user_id
+              const allReactions = [...(Array.isArray(confMsg.reactions) ? confMsg.reactions : []), ...existing.reactions];
+              const deduped = allReactions.filter((r, idx, arr) =>
+                arr.findIndex(x => x.emoji === r.emoji && x.user_id === r.user_id) === idx
+              );
+              return { ...confMsg, reactions: deduped };
+            }
+            return confMsg;
+          });
+          // Add any pending messages that are not confirmed
           pendingDMMessages.forEach(pendingMsg => {
             const exists = confirmed.some(msg =>
               msg.content === pendingMsg.content &&
               msg.sender_id === pendingMsg.sender_id &&
               Math.abs(new Date(msg.created_at).getTime() - new Date(pendingMsg.created_at).getTime()) < 5000
             );
-            if (!exists) merged.push(pendingMsg);
+            if (!exists) mergedMessages.push(pendingMsg);
           });
           // Sort by created_at
-          merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-          return merged;
+          mergedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          return mergedMessages;
         });
       })
       .catch(() => setDMMessages([]))
@@ -274,6 +300,118 @@ const ChatPage: React.FC = () => {
       setLoadingBlock(false);
     }
   };
+
+  // --- Emoji Reaction Logic ---
+  // Add or remove a reaction
+  const handleReact = (messageId: string, emoji: string, reacted: boolean) => {
+    if (!user) return;
+    // Check both messages and dmMessages arrays to find the message
+    const message = messages.find(m => m.id === messageId) || dmMessages.find(m => m.id === messageId);
+    const channel_id = message?.channel_id;
+    const recipient_id = message?.recipient_id;
+    
+    // Optimistically update reactions in state
+    console.log('Optimistically updating reactions for message', messageId, 'emoji', emoji, 'reacted', reacted);
+    
+    // Update channel messages
+    setMessages(prevMessages => {
+      const updated = prevMessages.map(msg => {
+        if (msg.id !== messageId) return msg;
+        let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+        if (reacted) {
+          reactions = reactions.filter(r => !(r.emoji === emoji && r.user_id === user.id));
+        } else {
+          if (!reactions.some(r => r.emoji === emoji && r.user_id === user.id)) {
+            reactions.push({ emoji, user_id: user.id });
+          }
+        }
+        return { ...msg, reactions };
+      });
+      return updated;
+    });
+    
+    // Update DM messages
+    setDMMessages(prevDMMessages => {
+      const updated = prevDMMessages.map(msg => {
+        if (msg.id !== messageId) return msg;
+        let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+        if (reacted) {
+          reactions = reactions.filter(r => !(r.emoji === emoji && r.user_id === user.id));
+        } else {
+          if (!reactions.some(r => r.emoji === emoji && r.user_id === user.id)) {
+            reactions.push({ emoji, user_id: user.id });
+          }
+        }
+        return { ...msg, reactions };
+      });
+      return updated;
+    });
+    
+    // Send to backend
+    if (window && (window as any).wsRef?.current) {
+      if (typeof sendCustomEvent === 'function') {
+        sendCustomEvent({
+          type: reacted ? 'remove_reaction' : 'add_reaction',
+          message_id: messageId,
+          user_id: user.id,
+          emoji,
+          channel_id,
+          recipient_id,
+        });
+      }
+    }
+  };
+
+  // Listen for real-time reaction updates
+  useEffect(() => {
+    const handleReactionUpdate = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'reaction_update') {
+          const { message_id, emoji, user_id, action } = data;
+          // Update channel messages
+          setMessages(prevMessages => {
+            const updated = prevMessages.map(msg => {
+              if (msg.id !== message_id) return msg;
+              let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+              if (action === 'add') {
+                if (!reactions.some(r => r.emoji === emoji && r.user_id === user_id)) {
+                  reactions.push({ emoji, user_id });
+                }
+              } else if (action === 'remove') {
+                reactions = reactions.filter(r => !(r.emoji === emoji && r.user_id === user_id));
+              }
+              return { ...msg, reactions };
+            });
+            return updated;
+          });
+          // Update DM messages
+          setDMMessages(prevDMMessages => {
+            const updated = prevDMMessages.map(msg => {
+              if (msg.id !== message_id) return msg;
+              let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+              if (action === 'add') {
+                if (!reactions.some(r => r.emoji === emoji && r.user_id === user_id)) {
+                  reactions.push({ emoji, user_id });
+                }
+              } else if (action === 'remove') {
+                reactions = reactions.filter(r => !(r.emoji === emoji && r.user_id === user_id));
+              }
+              return { ...msg, reactions };
+            });
+            return updated;
+          });
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    };
+    const ws = (window as any).wsRef?.current || null;
+    if (ws) {
+      ws.addEventListener('message', handleReactionUpdate);
+      return () => ws.removeEventListener('message', handleReactionUpdate);
+    }
+  }, [setMessages, setDMMessages]);
 
   // When switching channels, clear DM selection
   useEffect(() => {
@@ -443,11 +581,8 @@ const ChatPage: React.FC = () => {
                     <MessageDisplay
                       key={m.id}
                       message={m}
-                      isPending={m.pending}
-                      isBlocked={isBlocked}
-                      onBlockUser={handleBlockUser}
-                      onUnblockUser={handleUnblockUser}
-                      loadingBlock={loadingBlock}
+                      onReact={handleReact}
+                      currentUserId={user.id}
                     />
                   );
                 })
@@ -464,11 +599,8 @@ const ChatPage: React.FC = () => {
                   <MessageDisplay
                     key={msg.id}
                     message={msg}
-                    isPending={false} // Channel messages are not pending
-                    isBlocked={false} // Channel messages are not blocked
-                    onBlockUser={() => {}} // No block/unblock for channel messages
-                    onUnblockUser={() => {}}
-                    loadingBlock={false}
+                    onReact={handleReact}
+                    currentUserId={user.id}
                   />
                 ))
               )

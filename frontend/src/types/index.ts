@@ -19,6 +19,11 @@ export interface Channel {
   member_count: number;
 }
 
+export interface MessageReaction {
+  emoji: string;
+  user_id: string;
+}
+
 export interface Message {
   id: string;
   content: string;
@@ -28,10 +33,12 @@ export interface Message {
   created_at: string;
   updated_at: string;
   sender?: {
-    username: string;
-    full_name: string;
+    id: string;
+    username?: string;
+    full_name?: string;
     avatar_url?: string;
   };
+  reactions?: MessageReaction[];
   message_type?: 'text' | 'emoji';
 }
 

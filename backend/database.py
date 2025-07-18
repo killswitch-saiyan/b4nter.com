@@ -227,6 +227,59 @@ class DatabaseManager:
             logger.error(f"Error getting filtered users for DM: {e}")
             return []
 
+    async def add_reaction(self, message_id: str, user_id: str, emoji: str):
+        """Add a reaction to a message"""
+        try:
+            logger.info(f"Attempting to add reaction: message_id={message_id}, user_id={user_id}, emoji={emoji}")
+            response = self.client.table('message_reactions').insert({
+                'message_id': message_id,
+                'user_id': user_id,
+                'emoji': emoji
+            }).execute()
+            logger.info(f"add_reaction response: {response.data}")
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error adding reaction: {e}")
+            return None
+
+    async def remove_reaction(self, message_id: str, user_id: str, emoji: str):
+        """Remove a reaction from a message"""
+        try:
+            response = self.client.table('message_reactions').delete()\
+                .eq('message_id', message_id)\
+                .eq('user_id', user_id)\
+                .eq('emoji', emoji).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error removing reaction: {e}")
+            return None
+
+    async def get_reactions_for_message(self, message_id: str):
+        """Get all reactions for a message"""
+        try:
+            response = self.client.table('message_reactions').select('*').eq('message_id', message_id).execute()
+            return response.data if response.data else []
+        except Exception as e:
+            logger.error(f"Error getting reactions for message: {e}")
+            return []
+
+    async def get_reactions_for_messages(self, message_ids: list):
+        """Batch fetch all reactions for a list of message IDs"""
+        if not message_ids:
+            return {}
+        try:
+            response = self.client.table('message_reactions').select('*').in_('message_id', message_ids).execute()
+            reactions_by_message = {}
+            for reaction in response.data or []:
+                mid = reaction['message_id']
+                if mid not in reactions_by_message:
+                    reactions_by_message[mid] = []
+                reactions_by_message[mid].append(reaction)
+            return reactions_by_message
+        except Exception as e:
+            logger.error(f"Error batch fetching reactions: {e}")
+            return {}
+
 
 # Global database manager instance
 db = DatabaseManager() 

@@ -10,6 +10,7 @@ interface WebSocketContextType {
   stopTyping: (channelId?: string, recipientId?: string) => void;
   messages: any[];
   setMessages: React.Dispatch<React.SetStateAction<any[]>>;
+  sendCustomEvent: (event: any) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -206,6 +207,14 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     }
   };
 
+  const sendCustomEvent = (event: any) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(event));
+    } else {
+      console.error('WebSocket is not connected');
+    }
+  };
+
   const value: WebSocketContextType = {
     isConnected,
     sendMessage,
@@ -215,10 +224,23 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     stopTyping,
     messages,
     setMessages,
+    sendCustomEvent,
   };
 
   return (
-    <WebSocketContext.Provider value={value}>
+    <WebSocketContext.Provider
+      value={{
+        isConnected,
+        sendMessage,
+        joinChannel,
+        leaveChannel,
+        startTyping,
+        stopTyping,
+        messages,
+        setMessages,
+        sendCustomEvent,
+      }}
+    >
       {children}
     </WebSocketContext.Provider>
   );

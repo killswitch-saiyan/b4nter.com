@@ -270,3 +270,71 @@ def get_connected_users() -> List[str]:
 def is_user_connected(user_id: str) -> bool:
     """Check if user is connected"""
     return user_id in connected_users 
+
+@sio.event
+async def add_reaction(sid, data):
+    """Handle adding a reaction to a message"""
+    try:
+        message_id = data.get('message_id')
+        user_id = data.get('user_id')
+        emoji = data.get('emoji')
+        channel_id = data.get('channel_id')
+        recipient_id = data.get('recipient_id')
+        if not message_id or not user_id or not emoji:
+            logger.warning(f"Missing data in add_reaction: {data}")
+            return
+        reaction = await db.add_reaction(message_id, user_id, emoji)
+        # Get new count for this emoji on this message
+        all_reactions = await db.get_reactions_for_message(message_id)
+        emoji_count = sum(1 for r in all_reactions if r['emoji'] == emoji)
+        payload = {
+            'message_id': message_id,
+            'emoji': emoji,
+            'user_id': user_id,
+            'action': 'add',
+            'count': emoji_count
+        }
+        # Broadcast to channel or DM
+        if channel_id:
+            await sio.emit('reaction_update', payload, room=f"channel_{channel_id}")
+        elif recipient_id:
+            recipient_sid = connected_users.get(recipient_id)
+            if recipient_sid:
+                await sio.emit('reaction_update', payload, room=recipient_sid)
+            await sio.emit('reaction_update', payload, room=sid)
+    except Exception as e:
+        logger.error(f"Error in add_reaction: {e}")
+
+@sio.event
+async def remove_reaction(sid, data):
+    """Handle removing a reaction from a message"""
+    try:
+        message_id = data.get('message_id')
+        user_id = data.get('user_id')
+        emoji = data.get('emoji')
+        channel_id = data.get('channel_id')
+        recipient_id = data.get('recipient_id')
+        if not message_id or not user_id or not emoji:
+            logger.warning(f"Missing data in remove_reaction: {data}")
+            return
+        await db.remove_reaction(message_id, user_id, emoji)
+        # Get new count for this emoji on this message
+        all_reactions = await db.get_reactions_for_message(message_id)
+        emoji_count = sum(1 for r in all_reactions if r['emoji'] == emoji)
+        payload = {
+            'message_id': message_id,
+            'emoji': emoji,
+            'user_id': user_id,
+            'action': 'remove',
+            'count': emoji_count
+        }
+        # Broadcast to channel or DM
+        if channel_id:
+            await sio.emit('reaction_update', payload, room=f"channel_{channel_id}")
+        elif recipient_id:
+            recipient_sid = connected_users.get(recipient_id)
+            if recipient_sid:
+                await sio.emit('reaction_update', payload, room=recipient_sid)
+            await sio.emit('reaction_update', payload, room=sid)
+    except Exception as e:
+        logger.error(f"Error in remove_reaction: {e}") 
