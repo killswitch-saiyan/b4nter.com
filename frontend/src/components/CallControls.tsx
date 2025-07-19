@@ -26,7 +26,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   socket 
 }) => {
   const { user } = useAuth();
-  const { createCallChannel, removeCallChannel, joinCallChannel, leaveCallChannel } = useChannels();
+  const { createCallChannel, removeCallChannel, joinCallChannel, leaveCallChannel, setCallDuration, setActiveCallChannelId } = useChannels();
   const [callState, setCallState] = useState<CallState>({
     isIncoming: false,
     isOutgoing: false,
@@ -41,9 +41,22 @@ const CallControls: React.FC<CallControlsProps> = ({
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
   const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
+  
+  // Call timer and voice activity detection
+  const [callStartTime, setCallStartTime] = useState<Date | null>(null);
+  const [isLocalTalking, setIsLocalTalking] = useState(false);
+  const [isRemoteTalking, setIsRemoteTalking] = useState(false);
+  const [localAudioLevel, setLocalAudioLevel] = useState(0);
+  const [remoteAudioLevel, setRemoteAudioLevel] = useState(0);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localAudioContextRef = useRef<AudioContext | null>(null);
+  const remoteAudioContextRef = useRef<AudioContext | null>(null);
+  const localAnalyserRef = useRef<AnalyserNode | null>(null);
+  const remoteAnalyserRef = useRef<AnalyserNode | null>(null);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // WebRTC configuration
   const rtcConfig = {
@@ -75,6 +88,112 @@ const CallControls: React.FC<CallControlsProps> = ({
       Notification.requestPermission();
     }
   }, []);
+
+  // Voice Activity Detection for local audio
+  const setupVoiceActivityDetection = (stream: MediaStream, isLocal: boolean = true) => {
+    try {
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(stream);
+      
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      
+      microphone.connect(analyser);
+      
+      if (isLocal) {
+        localAudioContextRef.current = audioContext;
+        localAnalyserRef.current = analyser;
+      } else {
+        remoteAudioContextRef.current = audioContext;
+        remoteAnalyserRef.current = analyser;
+      }
+      
+      // Start monitoring audio levels
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      const checkAudioLevel = () => {
+        analyser.getByteFrequencyData(dataArray);
+        
+        // Calculate average audio level
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        const normalizedLevel = average / 255; // Normalize to 0-1
+        
+        if (isLocal) {
+          setLocalAudioLevel(normalizedLevel);
+          setIsLocalTalking(normalizedLevel > 0.1); // Threshold for talking
+        } else {
+          setRemoteAudioLevel(normalizedLevel);
+          setIsRemoteTalking(normalizedLevel > 0.1); // Threshold for talking
+        }
+      };
+      
+      // Check audio levels every 100ms
+      const interval = setInterval(checkAudioLevel, 100);
+      
+      if (isLocal) {
+        audioLevelIntervalRef.current = interval;
+      }
+      
+      return () => {
+        clearInterval(interval);
+        audioContext.close();
+      };
+    } catch (error) {
+      console.error('Error setting up voice activity detection:', error);
+    }
+  };
+
+  // Call timer effect
+  useEffect(() => {
+    if (callState.isConnected && !callStartTime) {
+      setCallStartTime(new Date());
+    }
+    
+    if (callStartTime) {
+      timerIntervalRef.current = setInterval(() => {
+        const now = new Date();
+        const duration = Math.floor((now.getTime() - callStartTime.getTime()) / 1000);
+        setCallDuration(duration); // Use shared state from context
+      }, 1000);
+    }
+    
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, [callState.isConnected, callStartTime, setCallDuration]);
+
+  // Cleanup audio contexts on unmount
+  useEffect(() => {
+    return () => {
+      if (localAudioContextRef.current) {
+        localAudioContextRef.current.close();
+      }
+      if (remoteAudioContextRef.current) {
+        remoteAudioContextRef.current.close();
+      }
+      if (audioLevelIntervalRef.current) {
+        clearInterval(audioLevelIntervalRef.current);
+      }
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Format call duration
+  const formatCallDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     if (localStream && localVideoRef.current) {
@@ -182,6 +301,11 @@ const CallControls: React.FC<CallControlsProps> = ({
     pc.ontrack = (event) => {
       console.log('Received remote stream:', event.streams[0]);
       setRemoteStream(event.streams[0]);
+      
+      // Set up voice activity detection for remote audio
+      if (event.streams[0]) {
+        setupVoiceActivityDetection(event.streams[0], false);
+      }
     };
 
     pc.onicecandidate = (event) => {
@@ -266,6 +390,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       const participants = [user?.id || '', targetUserId];
       const callChannel = createCallChannel(callType, participants);
       setCurrentCallChannel(callChannel.id);
+      setActiveCallChannelId(callChannel.id); // Set active call channel in context
       
       // Notify target user about call channel creation
       if (socket) {
@@ -286,6 +411,9 @@ const CallControls: React.FC<CallControlsProps> = ({
       });
       
       console.log('Media stream obtained:', stream.getTracks().map(t => t.kind));
+      
+      // Set up voice activity detection for local audio
+      setupVoiceActivityDetection(stream, true);
       
       setLocalStream(stream);
       setCallState(prev => ({ 
@@ -340,6 +468,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       // Join the call channel if it exists
       if (currentCallChannel) {
         joinCallChannel(currentCallChannel, user?.id || '');
+        setActiveCallChannelId(currentCallChannel); // Set active call channel in context
       }
       
       // Get user media for the call
@@ -347,6 +476,9 @@ const CallControls: React.FC<CallControlsProps> = ({
         audio: true,
         video: pendingOffer ? true : false // Assume video if we have an offer
       });
+      
+      // Set up voice activity detection for local audio
+      setupVoiceActivityDetection(stream, true);
       
       setLocalStream(stream);
       setCallState(prev => ({ 
@@ -419,6 +551,10 @@ const CallControls: React.FC<CallControlsProps> = ({
       isAudioEnabled: false,
       isMuted: false
     });
+    
+    // Clear call timer and active channel
+    setCallDuration(0);
+    setActiveCallChannelId(null);
     
     // Remove call channel
     if (currentCallChannel) {
@@ -501,10 +637,42 @@ const CallControls: React.FC<CallControlsProps> = ({
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover rounded-lg border-2 border-white"
+                className={`w-full h-full object-cover rounded-lg border-2 transition-all duration-200 ${
+                  isLocalTalking ? 'border-green-400 shadow-lg shadow-green-400/50' : 'border-white'
+                }`}
               />
+              {/* Local audio level indicator */}
+              <div className="absolute bottom-2 left-2 right-2 h-1 bg-black bg-opacity-50 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-green-400 transition-all duration-100"
+                  style={{ width: `${localAudioLevel * 100}%` }}
+                ></div>
+              </div>
             </div>
           )}
+          
+          {/* Call timer */}
+          <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg">
+            <div className="font-mono text-lg">{formatCallDuration(callDuration)}</div>
+          </div>
+          
+          {/* Voice activity indicators */}
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">You</span>
+                <div className={`w-3 h-3 rounded-full transition-all duration-200 ${
+                  isLocalTalking ? 'bg-green-400 animate-pulse' : 'bg-gray-400'
+                }`}></div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">{targetUsername}</span>
+                <div className={`w-3 h-3 rounded-full transition-all duration-200 ${
+                  isRemoteTalking ? 'bg-green-400 animate-pulse' : 'bg-gray-400'
+                }`}></div>
+              </div>
+            </div>
+          </div>
           
           {/* Call controls */}
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
@@ -546,7 +714,7 @@ const CallControls: React.FC<CallControlsProps> = ({
           </div>
           
           {/* Call info */}
-          <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg">
+          <div className="absolute bottom-20 left-4 bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg">
             <div className="font-semibold">{targetUsername}</div>
             <div className="text-sm text-gray-300">
               {callState.isVideoEnabled ? 'Video call' : 'Voice call'}

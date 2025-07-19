@@ -13,6 +13,10 @@ interface ChannelsContextType {
   removeCallChannel: (channelId: string) => void;
   joinCallChannel: (channelId: string, userId: string) => void;
   leaveCallChannel: (channelId: string, userId: string) => void;
+  callDuration: number;
+  setCallDuration: (duration: number) => void;
+  activeCallChannelId: string | null;
+  setActiveCallChannelId: (channelId: string | null) => void;
 }
 
 const ChannelsContext = createContext<ChannelsContextType | undefined>(undefined);
@@ -34,6 +38,8 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const [activeCallChannelId, setActiveCallChannelId] = useState<string | null>(null);
 
   // Get backend URL from environment variable or default to localhost
   const getBackendUrl = () => {
@@ -208,6 +214,10 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     removeCallChannel,
     joinCallChannel,
     leaveCallChannel,
+    callDuration,
+    setCallDuration,
+    activeCallChannelId,
+    setActiveCallChannelId,
   };
 
   return (

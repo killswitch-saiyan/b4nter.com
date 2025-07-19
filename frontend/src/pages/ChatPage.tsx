@@ -28,7 +28,7 @@ import brandLogo from '../assets/brandlogo.png';
 const ChatPage: React.FC = () => {
   const { user, logout, updateUser } = useAuth();
   const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent, socket } = useWebSocket();
-  const { channels, loading, selectedChannel, setSelectedChannel, removeCallChannel } = useChannels();
+  const { channels, loading, selectedChannel, setSelectedChannel, removeCallChannel, callDuration, setCallDuration } = useChannels();
   const [message, setMessage] = useState('');
   const prevChannelRef = useRef<string | null>(null);
   const [users, setUsers] = useState<any[]>([]);
@@ -66,6 +66,41 @@ const ChatPage: React.FC = () => {
     
     return 'Unknown User';
   };
+
+  // Timer effect for call channels
+  useEffect(() => {
+    let timerInterval: NodeJS.Timeout | null = null;
+    
+    if (selectedChannel?.is_call_channel) {
+      console.log('Starting timer for call channel:', selectedChannel.name);
+      
+      // Use call_started_at if available, otherwise start from now
+      const startTime = selectedChannel.call_started_at 
+        ? new Date(selectedChannel.call_started_at)
+        : new Date();
+      
+      console.log('Call started at:', startTime);
+      
+      // Start timer for call channel
+      timerInterval = setInterval(() => {
+        const now = new Date();
+        const duration = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+        console.log('Timer tick - Duration:', duration, 'seconds');
+        setCallDuration(duration);
+      }, 1000);
+    } else {
+      console.log('No call channel selected');
+      // Reset timer when not in a call channel
+      setCallDuration(0);
+    }
+    
+    return () => {
+      if (timerInterval) {
+        console.log('Clearing timer interval');
+        clearInterval(timerInterval);
+      }
+    };
+  }, [selectedChannel?.id, selectedChannel?.is_call_channel, selectedChannel?.call_started_at, setCallDuration]);
 
   // Function to end call and remove call channel
   const handleEndCall = () => {
@@ -105,9 +140,11 @@ const ChatPage: React.FC = () => {
       ).length,
       pendingDMMessagesCount: pendingDMMessages.length,
       currentMessagesCount: currentMessages.length,
-      currentMessages: currentMessages.slice(-5) // Last 5 messages
+      currentMessages: currentMessages.slice(-5), // Last 5 messages
+      callDuration: callDuration, // Add call duration to debug
+      isCallChannel: selectedChannel?.is_call_channel
     });
-  }, [currentMessages, selectedChannel, selectedDMUser, messages.length, pendingDMMessages.length]);
+  }, [currentMessages, selectedChannel, selectedDMUser, messages.length, pendingDMMessages.length, callDuration]);
 
   useEffect(() => {
     if (isDark) {
@@ -958,6 +995,20 @@ const ChatPage: React.FC = () => {
                 <h3 className="text-2xl font-bold mb-4 dark:text-white">
                   {selectedChannel.call_type === 'voice' ? 'Voice Call' : 'Video Call'}
                 </h3>
+                
+                {/* Call Timer */}
+                <div className="mb-6">
+                  <div className="text-3xl font-mono text-gray-600 dark:text-gray-300">
+                    {(() => {
+                      const hours = Math.floor(callDuration / 3600);
+                      const minutes = Math.floor((callDuration % 3600) / 60);
+                      const seconds = callDuration % 60;
+                      return `${hours > 0 ? hours + ':' : ''}${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    })()}
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Call Duration</p>
+                </div>
+                
                 <p className="text-gray-600 dark:text-gray-300 mb-6">
                   {selectedChannel.member_count} participants in this call
                 </p>
@@ -975,13 +1026,26 @@ const ChatPage: React.FC = () => {
                 
                 <div className="bg-gray-100 dark:bg-dark-600 rounded-lg p-4 max-w-md mx-auto">
                   <h4 className="font-semibold mb-3 dark:text-white">Participants</h4>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {selectedChannel.call_participants?.map((participantId, index) => (
-                      <div key={participantId} className="flex items-center gap-2 text-sm">
-                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                        <span className="text-gray-700 dark:text-gray-300">
-                          {getParticipantName(participantId)}
-                        </span>
+                      <div key={participantId} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                            {/* Voice activity indicator - would be connected to actual audio detection */}
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse opacity-0"></div>
+                          </div>
+                          <span className="text-gray-700 dark:text-gray-300 font-medium">
+                            {getParticipantName(participantId)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Online</span>
+                          {/* Audio level indicator */}
+                          <div className="w-8 h-1 bg-gray-300 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-400 rounded-full" style={{ width: '60%' }}></div>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
