@@ -218,6 +218,12 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       console.log(`🔄 Updated channels state:`, updatedChannels.map(ch => ({ id: ch.id, name: ch.name, participants: ch.call_participants })));
       return updatedChannels;
     });
+    
+    // Force a re-render of the channels list
+    setTimeout(() => {
+      console.log(`🔄 Forcing channels refresh after join`);
+      fetchChannels();
+    }, 200);
   };
 
   const leaveCallChannel = (channelId: string, userId: string) => {

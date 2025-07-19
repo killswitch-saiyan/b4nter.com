@@ -201,7 +201,7 @@ const ChatPage: React.FC = () => {
             console.log('🔚 User left call channel:', data);
             // Update the call channel to remove the participant
             leaveCallChannel(data.channelId, data.userId);
-            toast.info(`${data.username} left the call`);
+            toast.success(`${data.username} left the call`);
           }
           
           if (data.type === 'call_incoming') {
@@ -1234,6 +1234,7 @@ const ChatPage: React.FC = () => {
                     try {
                       console.log('🎯 Accepting incoming call from:', incomingCall.from);
                       console.log('🎯 Call channel ID:', incomingCall.channelId);
+                      console.log('🎯 Current channels:', channels.map(ch => ({ id: ch.id, name: ch.name, isCall: ch.is_call_channel })));
                       
                       // Find the existing call channel (don't create a new one)
                       let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
@@ -1254,6 +1255,12 @@ const ChatPage: React.FC = () => {
                       console.log('🎯 Joining call channel:', incomingCall.channelId);
                       joinCallChannel(incomingCall.channelId, user?.id || '');
                       setActiveCallChannelId(incomingCall.channelId);
+                      
+                      // Force a refresh of channels to get the updated state
+                      setTimeout(() => {
+                        console.log('🎯 Refreshing channels after join...');
+                        refreshChannels();
+                      }, 100);
                       
                       // Switch to the call channel view
                       console.log('🎯 Switching to call channel:', callChannel);
