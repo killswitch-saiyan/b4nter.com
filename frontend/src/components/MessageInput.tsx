@@ -20,6 +20,7 @@ const SPORTS_EMOJIS = [
   '👟', // Soccer Shoe
 ];
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 const TENOR_API_KEY = import.meta.env.VITE_TENOR_API_KEY;
 
 const MessageInput: React.FC<MessageInputProps> = ({
@@ -46,7 +47,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           const formData = new FormData();
           formData.append('file', imageFile);
           const token = localStorage.getItem('access_token');
-          const res = await fetch('/api/messages/upload-image', {
+          const res = await fetch(`${API_BASE}/messages/upload-image`, {
             method: 'POST',
             headers: token ? { Authorization: `Bearer ${token}` } : {},
             body: formData,

@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
 interface ProfilePictureUploadProps {
   onUploadSuccess?: (avatarUrl: string) => void;
   className?: string;
@@ -53,7 +55,7 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
       formData.append('file', file);
 
       const token = localStorage.getItem('access_token');
-      const response = await fetch('/api/users/profile-picture', {
+      const response = await fetch(`${API_BASE}/users/profile-picture`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

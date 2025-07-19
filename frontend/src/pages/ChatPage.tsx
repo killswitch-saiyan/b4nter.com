@@ -11,6 +11,8 @@ import CallControls from '../components/CallControls';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
+
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 // @ts-ignore
 import brandLogo from '../assets/brandlogo.png';
 
@@ -68,12 +70,7 @@ const ChatPage: React.FC = () => {
     try {
       const token = localStorage.getItem('access_token');
       console.log('Loading messages for channel:', channelId, 'with token:', token ? 'present' : 'missing');
-      
-      // Debug: Log the full URL being requested
-      const url = `/api/messages/channel/${channelId}`;
-      console.log('Requesting URL:', url);
-      
-      const response = await fetch(url, {
+      const response = await fetch(`${API_BASE}/messages/channel/${channelId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -232,7 +229,7 @@ const ChatPage: React.FC = () => {
     if (!selectedDMUser) return;
     setLoadingDM(true);
     const token = localStorage.getItem('access_token');
-    fetch(`/api/messages/direct/${selectedDMUser.id}`, {
+    fetch(`${API_BASE}/messages/direct/${selectedDMUser.id}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -356,7 +353,7 @@ const ChatPage: React.FC = () => {
       // Refresh DM messages to hide messages from blocked user
       if (selectedDMUser) {
         const token = localStorage.getItem('access_token');
-        const response = await fetch(`/api/messages/direct/${selectedDMUser.id}`, {
+        const response = await fetch(`${API_BASE}/messages/direct/${selectedDMUser.id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -405,7 +402,7 @@ const ChatPage: React.FC = () => {
       // Refresh DM messages to show messages from unblocked user
       if (selectedDMUser) {
         const token = localStorage.getItem('access_token');
-        const response = await fetch(`/api/messages/direct/${selectedDMUser.id}`, {
+        const response = await fetch(`${API_BASE}/messages/direct/${selectedDMUser.id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -570,7 +567,7 @@ const ChatPage: React.FC = () => {
       console.log('Refreshing DM messages for:', selectedDMUser.username);
       // Refresh DM messages
       const token = localStorage.getItem('access_token');
-      fetch(`/api/messages/direct/${selectedDMUser.id}`, {
+      fetch(`${API_BASE}/messages/direct/${selectedDMUser.id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
