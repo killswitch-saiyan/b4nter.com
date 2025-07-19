@@ -477,6 +477,7 @@ const CallControls: React.FC<CallControlsProps> = ({
             to: targetUserId,
             answer: answer
           }));
+          console.log('🔊 Answer sent successfully');
         } else {
           console.error('🔊 Socket not available for sending answer');
         }
@@ -485,6 +486,8 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     } catch (error) {
       console.error('🔊 Error handling offer:', error);
+      // Don't end the call on error, just log it
+      toast.error('Error establishing voice connection');
     }
   };
 
@@ -647,21 +650,26 @@ const CallControls: React.FC<CallControlsProps> = ({
         isAudioEnabled: true 
       }));
 
-      const pc = createPeerConnection();
-      
-      if (pc && pendingOffer) {
-        // Add local tracks to peer connection
-        stream.getTracks().forEach(track => {
-          console.log('🎯 Adding track to peer connection:', track.kind, track.enabled);
-          pc.addTrack(track, stream);
-        });
+      // Create peer connection and handle the offer
+      if (pendingOffer) {
+        console.log('🎯 Creating peer connection for incoming call');
+        const pc = createPeerConnection();
+        
+        if (pc) {
+          // Add local tracks to peer connection
+          stream.getTracks().forEach(track => {
+            console.log('🎯 Adding track to peer connection:', track.kind, track.enabled);
+            pc.addTrack(track, stream);
+          });
 
-        // Handle the incoming offer
-        console.log('🎯 Handling incoming offer:', pendingOffer);
-        await handleOffer(pendingOffer);
-        setPendingOffer(null);
+          // Handle the incoming offer
+          console.log('🎯 Handling incoming offer:', pendingOffer);
+          await handleOffer(pendingOffer);
+          setPendingOffer(null);
+        }
       }
       
+      // Send call accepted message
       if (socket) {
         socket.send(JSON.stringify({
           type: 'call_accepted',
@@ -836,6 +844,12 @@ const CallControls: React.FC<CallControlsProps> = ({
                   });
                 }
               }}
+              onPlay={() => {
+                console.log('🔊 Voice call audio started playing');
+              }}
+              onError={(e) => {
+                console.error('🔊 Voice call audio error:', e);
+              }}
             />
           )}
           
@@ -856,7 +870,14 @@ const CallControls: React.FC<CallControlsProps> = ({
                 <div className="text-8xl mb-8">📞</div>
                 <h2 className="text-3xl font-bold mb-4">{targetUsername}</h2>
                 <p className="text-xl opacity-80">Voice Call</p>
-                <p className="text-sm opacity-60 mt-2">Audio should be working now</p>
+                <p className="text-sm opacity-60 mt-2">
+                  {remoteStream ? 'Audio connected' : 'Connecting audio...'}
+                </p>
+                {remoteStream && (
+                  <p className="text-xs opacity-50 mt-1">
+                    You should be able to hear each other now
+                  </p>
+                )}
               </div>
             </div>
           )}

@@ -204,6 +204,24 @@ const ChatPage: React.FC = () => {
             toast.success(`${data.username} left the call`);
           }
           
+          // Handle WebRTC offers globally
+          if (data.type === 'webrtc_offer') {
+            console.log('🔊 Global WebRTC offer received:', data);
+            // This will be handled by the CallControls component
+          }
+          
+          // Handle WebRTC answers globally
+          if (data.type === 'webrtc_answer') {
+            console.log('🔊 Global WebRTC answer received:', data);
+            // This will be handled by the CallControls component
+          }
+          
+          // Handle WebRTC ICE candidates globally
+          if (data.type === 'webrtc_ice_candidate') {
+            console.log('🔊 Global WebRTC ICE candidate received:', data);
+            // This will be handled by the CallControls component
+          }
+          
           if (data.type === 'call_incoming') {
             console.log('🎯 Global incoming call received:', data);
             setIncomingCall({
