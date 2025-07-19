@@ -30,19 +30,32 @@ class WebSocketManager:
         self.user_connections: Dict[str, WebSocket] = {}
 
     async def connect(self, websocket: WebSocket, user_id: str):
-        await websocket.accept()
+        # Don't call websocket.accept() here - FastAPI already accepts it in the main endpoint
+        logger.info(f"Adding user {user_id} to connection tracking")
         self.active_connections.append(websocket)
         self.user_connections[user_id] = websocket
         connected_users[user_id] = websocket
         user_channels[user_id] = []
         
-        logger.info(f"User {user_id} connected")
+        logger.info(f"User {user_id} connected successfully")
+        logger.info(f"Total active connections: {len(self.active_connections)}")
+        logger.info(f"Total user connections: {len(self.user_connections)}")
         
-        # Send connection confirmation
-        await websocket.send_text(json.dumps({
-            "type": "connection_established",
-            "user_id": user_id
-        }))
+        # Send connection confirmation with error handling
+        try:
+            logger.info(f"Sending connection confirmation to user {user_id}")
+            await websocket.send_text(json.dumps({
+                "type": "connection_established",
+                "user_id": user_id
+            }))
+            logger.info(f"Connection confirmation sent successfully to user {user_id}")
+        except Exception as e:
+            logger.error(f"Error sending connection confirmation to user {user_id}: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            logger.error(f"Exception details: {str(e)}")
+            # If we can't send the confirmation, the connection might be broken
+            self.disconnect(user_id)
+            return
 
     def disconnect(self, user_id: str):
         if user_id in self.user_connections:
@@ -157,12 +170,19 @@ class WebSocketManager:
 
     async def broadcast_to_channel(self, channel_id: str, message: dict):
         """Send message to all users in a channel"""
+        disconnected_users = []
         for user_id, channels in user_channels.items():
             if channel_id in channels and user_id in self.user_connections:
                 try:
                     await self.user_connections[user_id].send_text(json.dumps(message))
                 except Exception as e:
                     logger.error(f"Error sending to user {user_id}: {e}")
+                    # Mark user for disconnection
+                    disconnected_users.append(user_id)
+        
+        # Clean up disconnected users
+        for user_id in disconnected_users:
+            self.disconnect(user_id)
 
     async def send_to_user(self, user_id: str, message: dict):
         """Send message to a specific user"""
@@ -171,6 +191,9 @@ class WebSocketManager:
                 await self.user_connections[user_id].send_text(json.dumps(message))
             except Exception as e:
                 logger.error(f"Error sending to user {user_id}: {e}")
+                # If we can't send to the user, they might be disconnected
+                # Clean up the connection
+                self.disconnect(user_id)
 
     async def add_reaction(self, user_id: str, message: dict):
         message_id = message.get('message_id')
@@ -262,7 +285,19 @@ class WebSocketManager:
                 data = await websocket.receive_text()
                 message = json.loads(data)
                 message_type = message.get('type')
-                if message_type == 'join_channel':
+                
+                logger.info(f"Received message from user {user_id}: {message_type}")
+                
+                if message_type == 'ping':
+                    # Respond to ping with pong to keep connection alive
+                    try:
+                        await websocket.send_text(json.dumps({"type": "pong"}))
+                        logger.debug(f"Sent pong to user {user_id}")
+                    except Exception as e:
+                        logger.error(f"Error sending pong to user {user_id}: {e}")
+                        self.disconnect(user_id)
+                        break
+                elif message_type == 'join_channel':
                     await self.join_channel(user_id, message.get('channel_id'))
                 elif message_type == 'leave_channel':
                     await self.leave_channel(user_id, message.get('channel_id'))
@@ -282,10 +317,31 @@ class WebSocketManager:
                     await self.handle_typing(user_id, message, typing=True)
                 elif message_type == 'typing_stop':
                     await self.handle_typing(user_id, message, typing=False)
+                # WebRTC signaling handlers
+                elif message_type == 'call_incoming':
+                    await self.handle_call_incoming(user_id, message)
+                elif message_type == 'call_accepted':
+                    await self.handle_call_accepted(user_id, message)
+                elif message_type == 'call_rejected':
+                    await self.handle_call_rejected(user_id, message)
+                elif message_type == 'call_ended':
+                    await self.handle_call_ended(user_id, message)
+                elif message_type == 'webrtc_offer':
+                    await self.handle_webrtc_offer(user_id, message)
+                elif message_type == 'webrtc_answer':
+                    await self.handle_webrtc_answer(user_id, message)
+                elif message_type == 'webrtc_ice_candidate':
+                    await self.handle_webrtc_ice_candidate(user_id, message)
+                else:
+                    logger.warning(f"Unknown message type: {message_type}")
         except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected for user {user_id}")
             self.disconnect(user_id)
             # Broadcast offline status
             await self.broadcast_user_status(user_id, "offline")
+        except Exception as e:
+            logger.error(f"Error handling WebSocket message for user {user_id}: {e}")
+            self.disconnect(user_id)
 
     async def handle_typing(self, user_id: str, message: dict, typing: bool):
         channel_id = message.get('channel_id')
@@ -311,6 +367,111 @@ class WebSocketManager:
                     await self.user_connections[recipient_id].send_text(json.dumps(payload))
                 except Exception as e:
                     logger.error(f"Error sending typing indicator to user {recipient_id}: {e}")
+
+    # WebRTC signaling handlers
+    async def handle_call_incoming(self, user_id: str, message: dict):
+        """Handle incoming call notification"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "call_incoming",
+                    "from": user_id,
+                    "offer": message.get('offer'),
+                    "isVideo": message.get('isVideo', False)
+                }))
+                logger.info(f"Call incoming from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending call incoming to user {target_user_id}: {e}")
+                # If we can't send to the user, they might be disconnected
+                self.disconnect(target_user_id)
+
+    async def handle_call_accepted(self, user_id: str, message: dict):
+        """Handle call acceptance"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "call_accepted",
+                    "from": user_id
+                }))
+                logger.info(f"Call accepted by {user_id} from {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending call accepted to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_call_rejected(self, user_id: str, message: dict):
+        """Handle call rejection"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "call_rejected",
+                    "from": user_id
+                }))
+                logger.info(f"Call rejected by {user_id} from {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending call rejected to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_call_ended(self, user_id: str, message: dict):
+        """Handle call end"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "call_ended",
+                    "from": user_id
+                }))
+                logger.info(f"Call ended by {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending call ended to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_webrtc_offer(self, user_id: str, message: dict):
+        """Handle WebRTC offer"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "webrtc_offer",
+                    "from": user_id,
+                    "offer": message.get('offer')
+                }))
+                logger.info(f"WebRTC offer from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending WebRTC offer to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_webrtc_answer(self, user_id: str, message: dict):
+        """Handle WebRTC answer"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "webrtc_answer",
+                    "from": user_id,
+                    "answer": message.get('answer')
+                }))
+                logger.info(f"WebRTC answer from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending WebRTC answer to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_webrtc_ice_candidate(self, user_id: str, message: dict):
+        """Handle WebRTC ICE candidate"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "webrtc_ice_candidate",
+                    "from": user_id,
+                    "candidate": message.get('candidate')
+                }))
+                logger.info(f"WebRTC ICE candidate from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending WebRTC ICE candidate to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
 
 # Global WebSocket manager instance
 websocket_manager = WebSocketManager() 

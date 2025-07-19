@@ -76,6 +76,34 @@ async def get_user_channels(current_user: UserResponse = Depends(get_current_use
         )
 
 
+@router.get("/available", response_model=List[ChannelResponse])
+async def get_available_channels(current_user: UserResponse = Depends(get_current_user)):
+    """Get all available channels that the user can join"""
+    try:
+        # Get all channels
+        all_channels = await db.get_all_channels()
+        
+        # Get user's current channels
+        user_channels = await db.get_user_channels(current_user.id)
+        user_channel_ids = [c.get("channel_id") for c in user_channels]
+        
+        # Filter out channels the user is already a member of
+        available_channels = []
+        for channel in all_channels:
+            if channel.get("id") not in user_channel_ids:
+                channel_response = ChannelResponse(**channel)
+                available_channels.append(channel_response)
+        
+        return available_channels
+        
+    except Exception as e:
+        logger.error(f"Error in get_available_channels: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+
 @router.get("/{channel_id}", response_model=ChannelResponse)
 async def get_channel(
     channel_id: str,

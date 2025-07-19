@@ -51,13 +51,21 @@ async def health_check():
 
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    logger.info(f"WebSocket connection request from user {user_id}")
+    await websocket.accept()
+    logger.info(f"WebSocket accepted for user {user_id}")
+    
     await websocket_manager.connect(websocket, user_id)
+    logger.info(f"WebSocket manager connected for user {user_id}")
+    
     try:
+        logger.info(f"Starting message handling loop for user {user_id}")
         await websocket_manager.handle_websocket_message(websocket, user_id)
     except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for user {user_id}")
         websocket_manager.disconnect(user_id)
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error for user {user_id}: {e}")
         websocket_manager.disconnect(user_id)
 
 # Export the ASGI app for uvicorn

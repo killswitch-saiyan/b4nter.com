@@ -7,6 +7,7 @@ import MessageInput from '../components/MessageInput';
 import MessageDisplay from '../components/MessageDisplay';
 import EncryptionStatus from '../components/EncryptionStatus';
 import UserProfileDropdown from '../components/UserProfileDropdown';
+import CallControls from '../components/CallControls';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -15,7 +16,7 @@ import brandLogo from '../assets/brandlogo.png';
 
 const ChatPage: React.FC = () => {
   const { user, logout, updateUser } = useAuth();
-  const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent } = useWebSocket();
+  const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent, socket } = useWebSocket();
   const { channels, loading, selectedChannel, setSelectedChannel } = useChannels();
   const [message, setMessage] = useState('');
   const prevChannelRef = useRef<string | null>(null);
@@ -39,6 +40,7 @@ const ChatPage: React.FC = () => {
   });
   const [userSearch, setUserSearch] = useState('');
   const [channelSearch, setChannelSearch] = useState('');
+  const [isInCall, setIsInCall] = useState(false);
 
   useEffect(() => {
     if (isDark) {
@@ -66,7 +68,12 @@ const ChatPage: React.FC = () => {
     try {
       const token = localStorage.getItem('access_token');
       console.log('Loading messages for channel:', channelId, 'with token:', token ? 'present' : 'missing');
-      const response = await fetch(`/api/messages/channel/${channelId}`, {
+      
+      // Debug: Log the full URL being requested
+      const url = `/api/messages/channel/${channelId}`;
+      console.log('Requesting URL:', url);
+      
+      const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -75,6 +82,8 @@ const ChatPage: React.FC = () => {
       });
       clearTimeout(timeoutId);
       console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (response.ok) {
         const historicalMessages: Message[] = await response.json();
         console.log('Loaded historical messages:', historicalMessages);
@@ -99,13 +108,27 @@ const ChatPage: React.FC = () => {
       } else {
         const errorText = await response.text();
         console.error('Failed to load channel messages:', response.status, errorText);
-        toast.error(`Failed to load message history: ${response.status}`);
+        console.error('Response URL:', response.url);
+        console.error('Response status text:', response.statusText);
+        
+        if (response.status === 401) {
+          toast.error('Authentication failed. Please log in again.');
+        } else if (response.status === 403) {
+          toast.error('You do not have permission to view messages in this channel.');
+        } else if (response.status === 404) {
+          toast.error('Channel not found.');
+        } else {
+          toast.error(`Failed to load message history: ${response.status} - ${errorText}`);
+        }
       }
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
         console.error('Request timed out after 10 seconds');
         toast.error('Request timed out - server may be unresponsive');
+      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        console.error('Network error - server may be down:', error);
+        toast.error('Cannot connect to server. Please check if the backend is running.');
       } else {
         console.error('Error loading channel messages:', error);
         toast.error('Failed to load message history');
@@ -761,6 +784,14 @@ const ChatPage: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center space-x-4">
+                {selectedDMUser && !isBlocked && (
+                  <CallControls
+                    targetUserId={selectedDMUser.id}
+                    targetUsername={selectedDMUser.username}
+                    onCallEnd={() => setIsInCall(false)}
+                    socket={socket}
+                  />
+                )}
                 {selectedDMUser && (
                   isBlocked ? (
                     <button

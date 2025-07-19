@@ -24,6 +24,7 @@ interface WebSocketContextType {
   notifications: NotificationType[];
   clearNotifications: () => void;
   connectedUsers: string[];
+  socket: WebSocket | null;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -52,7 +53,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
   // Get backend URL from environment variable or default to localhost
   const getBackendUrl = () => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+    const backendUrl = (import.meta as any).env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
     // Convert HTTP URL to WebSocket URL
     return backendUrl.replace('http://', 'ws://').replace('https://', 'wss://');
   };
@@ -73,7 +74,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
     // Initialize WebSocket connection
     const backendUrl = getBackendUrl();
-    const ws = new WebSocket(`${backendUrl}/ws/${user.id}`);
+    const wsUrl = `${backendUrl}/ws/${user.id}`;
+    console.log('Connecting to WebSocket URL:', wsUrl);
+    
+    const ws = new WebSocket(wsUrl);
 
     wsRef.current = ws;
 
@@ -84,11 +88,30 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
     ws.onclose = (event) => {
       console.log('WebSocket disconnected:', event.code, event.reason);
+      console.log('Close event details:', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+        type: event.type
+      });
       setIsConnected(false);
+      
+      // Don't automatically reconnect if the connection was closed cleanly
+      // or if there's no user (user logged out)
+      if (event.code !== 1000 && user) {
+        console.log('Attempting to reconnect in 3 seconds...');
+        setTimeout(() => {
+          if (user && !wsRef.current) {
+            console.log('Reconnecting WebSocket...');
+            // This will trigger the useEffect again
+          }
+        }, 3000);
+      }
     };
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
+      console.error('WebSocket readyState:', ws.readyState);
       setIsConnected(false);
     };
 
@@ -101,6 +124,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         switch (data.type) {
           case 'connection_established':
             console.log('Connection established for user:', data.user_id);
+            // Send a ping to keep the connection alive
+            setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+              }
+            }, 15000); // Send ping every 15 seconds instead of 30
             break;
           case 'new_channel_message':
             console.log('New channel message:', data.message);
@@ -170,6 +199,21 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             ]);
             break;
           }
+          case 'pong':
+            console.log('Received pong from server');
+            break;
+          // Call-related messages are handled by CallControls component
+          case 'call_incoming':
+          case 'call_accepted':
+          case 'call_rejected':
+          case 'call_ended':
+          case 'webrtc_offer':
+          case 'webrtc_answer':
+          case 'webrtc_ice_candidate':
+            // These messages are handled by the CallControls component
+            // We don't need to do anything here as CallControls listens to the socket directly
+            console.log('Call-related message received:', data.type);
+            break;
           default:
             console.log('Unknown message type:', data.type);
         }
@@ -182,7 +226,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     return () => {
       console.log('Cleaning up WebSocket connection');
       if (ws) {
-        ws.close();
+        ws.close(1000, 'Component unmounting');
         wsRef.current = null;
         setIsConnected(false);
       }
@@ -286,6 +330,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     notifications,
     clearNotifications,
     connectedUsers,
+    socket: wsRef.current,
   };
 
   return (

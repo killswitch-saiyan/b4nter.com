@@ -2,11 +2,39 @@ from supabase.client import create_client, Client
 from config import settings
 from typing import Optional
 import logging
+import asyncio
+from functools import wraps
+import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
 # Initialize Supabase client with service role key for backend operations
 supabase: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+
+# Thread pool for running synchronous Supabase operations
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+
+def run_sync_in_thread(func, *args, **kwargs):
+    """Run a synchronous function in a thread pool"""
+    loop = asyncio.get_event_loop()
+    return loop.run_in_executor(thread_pool, lambda: func(*args, **kwargs))
+
+def with_timeout(timeout_seconds=10):
+    """Decorator to add timeout to database operations"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                # Run the database operation with timeout
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_seconds)
+            except asyncio.TimeoutError:
+                logger.error(f"Database operation timed out after {timeout_seconds} seconds: {func.__name__}")
+                return None
+            except Exception as e:
+                logger.error(f"Database operation failed: {func.__name__} - {e}")
+                return None
+        return wrapper
+    return decorator
 
 
 class DatabaseManager:
@@ -16,7 +44,9 @@ class DatabaseManager:
     async def get_user_by_email(self, email: str):
         """Get user by email"""
         try:
-            response = self.client.table('users').select('*').eq('email', email).execute()
+            response = await run_sync_in_thread(
+                lambda: self.client.table('users').select('*').eq('email', email).execute()
+            )
             if response.data:
                 return response.data[0]
             return None
@@ -27,7 +57,9 @@ class DatabaseManager:
     async def get_user_by_username(self, username: str):
         """Get user by username"""
         try:
-            response = self.client.table('users').select('*').eq('username', username).execute()
+            response = await run_sync_in_thread(
+                lambda: self.client.table('users').select('*').eq('username', username).execute()
+            )
             if response.data:
                 return response.data[0]
             return None
@@ -38,7 +70,9 @@ class DatabaseManager:
     async def get_user_by_id(self, user_id: str):
         """Get user by ID"""
         try:
-            response = self.client.table('users').select('*').eq('id', user_id).execute()
+            response = await run_sync_in_thread(
+                lambda: self.client.table('users').select('*').eq('id', user_id).execute()
+            )
             if response.data:
                 return response.data[0]
             return None
@@ -135,34 +169,47 @@ class DatabaseManager:
             logger.error(f"Error creating message: {e}")
             return None
     
+    @with_timeout(8)
     async def get_channel_messages(self, channel_id: str, limit: int = 50):
-        """Get messages for a channel"""
+        """Get messages for a channel with timeout"""
         try:
-            response = self.client.table('messages').select(
-                '*, users:users!messages_sender_id_fkey(username, full_name, avatar_url)'
-            ).eq('channel_id', channel_id).order('created_at', desc=False).limit(limit).execute()
+            response = await run_sync_in_thread(
+                self.client.table('messages').select(
+                    '*, users:users!messages_sender_id_fkey(username, full_name, avatar_url)'
+                ).eq('channel_id', channel_id).order('created_at', desc=False).limit(limit).execute
+            )
             return response.data
         except Exception as e:
             logger.error(f"Error getting channel messages: {e}")
             return []
     
+    @with_timeout(10)
     async def get_direct_messages(self, user1_id: str, user2_id: str, limit: int = 50):
-        """Get direct messages between two users"""
+        """Get direct messages between two users - optimized single query"""
         try:
-            # Fetch messages sent from user1 to user2
-            resp1 = self.client.table('messages').select(
+            # Use a simpler approach with two separate queries but run them concurrently
+            query1 = self.client.table('messages').select(
                 '*, users:users!messages_sender_id_fkey(username, full_name, avatar_url)'
-            ).eq('sender_id', user1_id).eq('recipient_id', user2_id).order('created_at', desc=False).limit(limit).execute()
-            # Fetch messages sent from user2 to user1
-            resp2 = self.client.table('messages').select(
+            ).eq('sender_id', user1_id).eq('recipient_id', user2_id).order('created_at', desc=False).limit(limit).execute
+            
+            query2 = self.client.table('messages').select(
                 '*, users:users!messages_sender_id_fkey(username, full_name, avatar_url)'
-            ).eq('sender_id', user2_id).eq('recipient_id', user1_id).order('created_at', desc=False).limit(limit).execute()
+            ).eq('sender_id', user2_id).eq('recipient_id', user1_id).order('created_at', desc=False).limit(limit).execute
+            
+            # Run both queries concurrently
+            resp1, resp2 = await asyncio.gather(
+                run_sync_in_thread(lambda: query1),
+                run_sync_in_thread(lambda: query2)
+            )
+            
+            # Combine and sort messages
             messages = (resp1.data or []) + (resp2.data or [])
-            # Sort all messages by created_at ascending
             messages.sort(key=lambda m: m['created_at'])
-            # Optionally, limit to the most recent 'limit' messages
+            
+            # Limit to the most recent messages
             if len(messages) > limit:
                 messages = messages[-limit:]
+            
             return messages
         except Exception as e:
             logger.error(f"Error getting direct messages: {e}")
@@ -171,7 +218,9 @@ class DatabaseManager:
     async def get_all_users(self):
         """Get all users (for user search)"""
         try:
-            response = self.client.table('users').select('*').execute()
+            response = await run_sync_in_thread(
+                lambda: self.client.table('users').select('*').execute()
+            )
             return response.data
         except Exception as e:
             logger.error(f"Error getting all users: {e}")
@@ -180,10 +229,12 @@ class DatabaseManager:
     async def block_user(self, blocker_id: str, blocked_id: str):
         """Block a user"""
         try:
-            response = self.client.table('user_blocks').insert({
-                'blocker_id': blocker_id,
-                'blocked_id': blocked_id
-            }).execute()
+            response = await run_sync_in_thread(
+                lambda: self.client.table('user_blocks').insert({
+                    'blocker_id': blocker_id,
+                    'blocked_id': blocked_id
+                }).execute()
+            )
             return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Error blocking user: {e}")
@@ -192,7 +243,9 @@ class DatabaseManager:
     async def unblock_user(self, blocker_id: str, blocked_id: str):
         """Unblock a user"""
         try:
-            response = self.client.table('user_blocks').delete().eq('blocker_id', blocker_id).eq('blocked_id', blocked_id).execute()
+            response = await run_sync_in_thread(
+                lambda: self.client.table('user_blocks').delete().eq('blocker_id', blocker_id).eq('blocked_id', blocked_id).execute()
+            )
             return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Error unblocking user: {e}")
@@ -201,7 +254,9 @@ class DatabaseManager:
     async def get_blocked_users(self, user_id: str):
         """Get list of users blocked by a user"""
         try:
-            response = self.client.table('user_blocks').select('blocked_id').eq('blocker_id', user_id).execute()
+            response = await run_sync_in_thread(
+                lambda: self.client.table('user_blocks').select('blocked_id').eq('blocker_id', user_id).execute()
+            )
             return [block['blocked_id'] for block in response.data]
         except Exception as e:
             logger.error(f"Error getting blocked users: {e}")
@@ -210,7 +265,9 @@ class DatabaseManager:
     async def is_user_blocked(self, blocker_id: str, blocked_id: str):
         """Check if a user is blocked by another user"""
         try:
-            response = self.client.table('user_blocks').select('id').eq('blocker_id', blocker_id).eq('blocked_id', blocked_id).execute()
+            response = await run_sync_in_thread(
+                lambda: self.client.table('user_blocks').select('id').eq('blocker_id', blocker_id).eq('blocked_id', blocked_id).execute()
+            )
             return len(response.data) > 0
         except Exception as e:
             logger.error(f"Error checking if user is blocked: {e}")
@@ -317,6 +374,17 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting user public key: {e}")
             return None
+
+    async def get_all_channels(self):
+        """Get all channels"""
+        try:
+            response = await run_sync_in_thread(
+                self.client.table('channels').select('*').execute
+            )
+            return response.data
+        except Exception as e:
+            logger.error(f"Error getting all channels: {e}")
+            return []
 
 
 # Global database manager instance
