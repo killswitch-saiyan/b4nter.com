@@ -58,11 +58,11 @@ const CallControls: React.FC<CallControlsProps> = ({
   const remoteAudioContextRef = useRef<AudioContext | null>(null);
   const localAnalyserRef = useRef<AnalyserNode | null>(null);
   const remoteAnalyserRef = useRef<AnalyserNode | null>(null);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
+  const audioLevelIntervalRef = useRef<number | null>(null);
 
-  // WebRTC configuration
-  const rtcConfig = {
+  // WebRTC configuration - will be fetched from backend
+  const [rtcConfig, setRtcConfig] = useState<RTCConfiguration>({
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
@@ -71,7 +71,30 @@ const CallControls: React.FC<CallControlsProps> = ({
       { urls: 'stun:stun4.l.google.com:19302' }
     ],
     iceCandidatePoolSize: 10
-  };
+  });
+
+  // Fetch WebRTC configuration from backend
+  useEffect(() => {
+    const fetchWebRTCConfig = async () => {
+      try {
+        // Get the backend URL from the current environment
+        const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/webrtc-config`);
+        if (response.ok) {
+          const config = await response.json();
+          console.log('🔊 Fetched WebRTC config from backend:', config);
+          setRtcConfig(config);
+        } else {
+          console.warn('🔊 Failed to fetch WebRTC config, using fallback');
+        }
+      } catch (error) {
+        console.error('🔊 Error fetching WebRTC config:', error);
+        console.log('🔊 Using fallback WebRTC configuration');
+      }
+    };
+
+    fetchWebRTCConfig();
+  }, []);
 
   useEffect(() => {
     if (socket) {
@@ -409,10 +432,7 @@ const CallControls: React.FC<CallControlsProps> = ({
     console.log('🔊 Creating new peer connection');
     try {
       const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
+        iceServers: rtcConfig.iceServers
       });
 
       pc.onicecandidate = (event) => {
