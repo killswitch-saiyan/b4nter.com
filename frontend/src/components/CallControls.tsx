@@ -8,6 +8,7 @@ interface CallControlsProps {
   targetUsername: string;
   onCallEnd: () => void;
   socket: WebSocket | null;
+  isGlobal?: boolean;
 }
 
 interface CallState {
@@ -829,6 +830,10 @@ const CallControls: React.FC<CallControlsProps> = ({
   }
 
   // Call buttons (when not in call)
+  if (!targetUserId || targetUserId === "") {
+    return null; // Don't render anything for global/invalid components
+  }
+  
   return (
     <div className="flex gap-2">
       <button
