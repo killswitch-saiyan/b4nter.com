@@ -612,12 +612,12 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   const acceptCall = async () => {
     try {
-      console.log('Accepting call');
+      console.log('🎯 Accepting call');
       setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
       
       // Join the existing call channel when accepting the call
       if (currentCallChannel) {
-        console.log('Joining call channel:', currentCallChannel);
+        console.log('🎯 Joining call channel:', currentCallChannel);
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel);
         
@@ -629,10 +629,13 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
       
       // Get user media for the call
+      console.log('🎯 Requesting user media...');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: pendingOffer ? true : false
       });
+      
+      console.log('🎯 Got user media stream:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
       
       // Set up voice activity detection for local audio
       setupVoiceActivityDetection(stream, true);
@@ -649,12 +652,12 @@ const CallControls: React.FC<CallControlsProps> = ({
       if (pc && pendingOffer) {
         // Add local tracks to peer connection
         stream.getTracks().forEach(track => {
-          console.log('Adding track to peer connection:', track.kind, track.enabled);
+          console.log('🎯 Adding track to peer connection:', track.kind, track.enabled);
           pc.addTrack(track, stream);
         });
 
         // Handle the incoming offer
-        console.log('Handling incoming offer:', pendingOffer);
+        console.log('🎯 Handling incoming offer:', pendingOffer);
         await handleOffer(pendingOffer);
         setPendingOffer(null);
       }
@@ -666,7 +669,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         }));
       }
     } catch (error) {
-      console.error('Error accepting call:', error);
+      console.error('🎯 Error accepting call:', error);
       alert('Could not access camera/microphone. Please check permissions.');
     }
   };
@@ -691,19 +694,29 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const endCall = () => {
-    console.log('Ending call');
+    console.log('🔚 Ending call');
+    
+    // Stop local media streams
     if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+      localStream.getTracks().forEach(track => {
+        console.log('🔚 Stopping local track:', track.kind);
+        track.stop();
+      });
       setLocalStream(null);
     }
     
+    // Close peer connection
     if (peerConnection) {
+      console.log('🔚 Closing peer connection');
       peerConnection.close();
       setPeerConnection(null);
     }
     
+    // Clear remote stream
     setRemoteStream(null);
     setPendingOffer(null);
+    
+    // Reset call state
     setCallState({
       isIncoming: false,
       isOutgoing: false,
@@ -717,13 +730,29 @@ const CallControls: React.FC<CallControlsProps> = ({
     setCallDuration(0);
     setActiveCallChannelId(null);
     
-    // Leave the call channel (this will handle deletion if no participants left)
+    // Leave the call channel and notify other participants
     if (currentCallChannel) {
+      console.log('🔚 Leaving call channel:', currentCallChannel);
       leaveCallChannel(currentCallChannel, user?.id || '');
+      
+      // Notify other participants that you're leaving
+      if (socket) {
+        socket.send(JSON.stringify({
+          type: 'call_channel_left',
+          to: targetUserId,
+          channelId: currentCallChannel,
+          userId: user?.id,
+          username: user?.username || user?.full_name || 'Unknown User'
+        }));
+      }
+      
       setCurrentCallChannel(null);
     }
     
+    // Call the onCallEnd callback
     onCallEnd();
+    
+    console.log('🔚 Call ended successfully');
   };
 
   const toggleMute = () => {
@@ -789,10 +818,18 @@ const CallControls: React.FC<CallControlsProps> = ({
               autoPlay
               playsInline
               muted={false}
-              volume={1.0}
               style={{ display: 'none' }}
               onLoadedMetadata={() => {
                 console.log('🔊 Voice call audio element loaded');
+                if (remoteVideoRef.current) {
+                  remoteVideoRef.current.volume = 1.0;
+                  remoteVideoRef.current.play().catch(e => {
+                    console.error('🔊 Error playing voice call audio:', e);
+                  });
+                }
+              }}
+              onCanPlay={() => {
+                console.log('🔊 Voice call audio can play');
                 if (remoteVideoRef.current) {
                   remoteVideoRef.current.play().catch(e => {
                     console.error('🔊 Error playing voice call audio:', e);
@@ -819,6 +856,7 @@ const CallControls: React.FC<CallControlsProps> = ({
                 <div className="text-8xl mb-8">📞</div>
                 <h2 className="text-3xl font-bold mb-4">{targetUsername}</h2>
                 <p className="text-xl opacity-80">Voice Call</p>
+                <p className="text-sm opacity-60 mt-2">Audio should be working now</p>
               </div>
             </div>
           )}

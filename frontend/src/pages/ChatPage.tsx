@@ -197,6 +197,13 @@ const ChatPage: React.FC = () => {
             toast.success(`${data.username} joined the call`);
           }
           
+          if (data.type === 'call_channel_left') {
+            console.log('🔚 User left call channel:', data);
+            // Update the call channel to remove the participant
+            leaveCallChannel(data.channelId, data.userId);
+            toast.info(`${data.username} left the call`);
+          }
+          
           if (data.type === 'call_incoming') {
             console.log('🎯 Global incoming call received:', data);
             setIncomingCall({

@@ -336,6 +336,8 @@ class WebSocketManager:
                     await self.handle_call_channel_created(user_id, message)
                 elif message_type == 'call_channel_joined':
                     await self.handle_call_channel_joined(user_id, message)
+                elif message_type == 'call_channel_left':
+                    await self.handle_call_channel_left(user_id, message)
                 else:
                     logger.warning(f"Unknown message type: {message_type}")
         except WebSocketDisconnect:
@@ -517,6 +519,23 @@ class WebSocketManager:
                 logger.info(f"Call channel join notification from {user_id} to {target_user_id}")
             except Exception as e:
                 logger.error(f"Error sending call channel join notification to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_call_channel_left(self, user_id: str, message: dict):
+        """Handle call channel leave notification"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "call_channel_left",
+                    "from": user_id,
+                    "channelId": message.get('channelId'),
+                    "userId": message.get('userId'),
+                    "username": message.get('username')
+                }))
+                logger.info(f"Call channel leave notification from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending call channel leave notification to user {target_user_id}: {e}")
                 self.disconnect(target_user_id)
 
 # Global WebSocket manager instance
