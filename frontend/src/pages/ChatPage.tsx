@@ -51,6 +51,13 @@ const ChatPage: React.FC = () => {
   const [userSearch, setUserSearch] = useState('');
   const [channelSearch, setChannelSearch] = useState('');
   const [isInCall, setIsInCall] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{
+    from: string;
+    fromName: string;
+    isVideo: boolean;
+    channelId: string;
+    offer: any;
+  } | null>(null);
 
   // Function to get username for a participant
   const getParticipantName = (participantId: string): string => {
@@ -161,6 +168,32 @@ const ChatPage: React.FC = () => {
     console.log('User full_name:', user?.full_name);
     console.log('User username:', user?.username);
   }, [user]);
+
+  // Global call handler for incoming calls
+  useEffect(() => {
+    if (socket) {
+      const handleCallMessage = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'call_incoming' && data.to === user?.id) {
+            console.log('Global incoming call received:', data);
+            setIncomingCall({
+              from: data.from,
+              fromName: data.from_name || 'Unknown User',
+              isVideo: data.isVideo,
+              channelId: data.channelId,
+              offer: data.offer
+            });
+          }
+        } catch (error) {
+          console.error('Error handling call message:', error);
+        }
+      };
+
+      socket.addEventListener('message', handleCallMessage);
+      return () => socket.removeEventListener('message', handleCallMessage);
+    }
+  }, [socket, user?.id]);
 
   // Function to load historical messages for a channel
   const loadChannelMessages = async (channelId: string) => {
@@ -1122,7 +1155,51 @@ const ChatPage: React.FC = () => {
         </div>
       </div>
       
-
+      {/* Global incoming call UI */}
+      {incomingCall && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-dark-800 rounded-lg p-8 max-w-md w-full mx-4 animate-pulse">
+            <div className="text-center">
+              <div className="text-4xl mb-6 animate-bounce">📞</div>
+              <h3 className="text-xl font-bold mb-3 dark:text-white">Incoming Call</h3>
+              <p className="text-gray-600 dark:text-gray-300 mb-8 text-lg">
+                <strong>{incomingCall.fromName}</strong> is calling you...
+              </p>
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => {
+                    // Accept the call by creating a CallControls component for this user
+                    setIncomingCall(null);
+                    // Switch to the call channel
+                    const callChannel = channels.find(ch => ch.id === incomingCall.channelId);
+                    if (callChannel) {
+                      setSelectedChannel(callChannel);
+                    }
+                  }}
+                  className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
+                >
+                  <span className="text-2xl">✓</span> Accept
+                </button>
+                <button
+                  onClick={() => {
+                    // Reject the call
+                    if (socket) {
+                      socket.send(JSON.stringify({
+                        type: 'call_rejected',
+                        to: incomingCall.from
+                      }));
+                    }
+                    setIncomingCall(null);
+                  }}
+                  className="bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
+                >
+                  <span className="text-2xl">✕</span> Decline
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

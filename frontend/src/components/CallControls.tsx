@@ -27,7 +27,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   socket 
 }) => {
   const { user } = useAuth();
-  const { createCallChannel, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId } = useChannels();
+  const { createCallChannel, createCallChannelForReceiver, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, channels, setSelectedChannel } = useChannels();
   const [callState, setCallState] = useState<CallState>({
     isIncoming: false,
     isOutgoing: false,
@@ -548,8 +548,15 @@ const CallControls: React.FC<CallControlsProps> = ({
       
       // Join the existing call channel when accepting the call
       if (currentCallChannel) {
+        console.log('Joining call channel:', currentCallChannel);
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel); // Set active call channel in context
+        
+        // Switch to the call channel view
+        const callChannel = channels.find(ch => ch.id === currentCallChannel);
+        if (callChannel) {
+          setSelectedChannel(callChannel);
+        }
       }
       
       // Get user media for the call
