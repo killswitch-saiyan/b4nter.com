@@ -380,6 +380,16 @@ class DatabaseManager:
             logger.error(f"Error getting user public key: {e}")
             return None
 
+    async def delete_channel(self, channel_id: str):
+        """Delete a channel and all its associated data (cascade delete)"""
+        try:
+            # Delete the channel - this should cascade delete members and messages
+            response = self.client.table('channels').delete().eq('id', channel_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error deleting channel: {e}")
+            return None
+
     async def get_all_channels(self):
         """Get all channels"""
         try:

@@ -863,7 +863,7 @@ const ChatPage: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span>{channel.name}</span>
+                      <span># {channel.name}</span>
                       {channel.is_call_channel && (
                         <span className="text-xs text-green-600 dark:text-green-400">
                           {channel.member_count} online
@@ -947,12 +947,12 @@ const ChatPage: React.FC = () => {
               </div>
               <div className="flex items-center space-x-4">
                 {selectedDMUser && !isBlocked && (
-                  <CallControls
-                    targetUserId={selectedDMUser.id}
-                    targetUsername={selectedDMUser.username}
-                    onCallEnd={() => setIsInCall(false)}
-                    socket={socket}
-                  />
+                  <button
+                    onClick={() => setIsInCall(true)}
+                    className="px-3 py-1 text-xs bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200"
+                  >
+                    Call
+                  </button>
                 )}
                 {selectedDMUser && (
                   isBlocked ? (
@@ -1121,6 +1121,17 @@ const ChatPage: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Global CallControls for handling incoming calls */}
+      {users.map((u) => (
+        <CallControls
+          key={u.id}
+          targetUserId={u.id}
+          targetUsername={u.username}
+          onCallEnd={() => setIsInCall(false)}
+          socket={socket}
+        />
+      ))}
     </div>
   );
 };

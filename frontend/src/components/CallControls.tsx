@@ -229,13 +229,15 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   const handleSocketMessage = (data: any) => {
     console.log('CallControls received message:', data);
+    console.log('Current targetUserId:', targetUserId);
+    console.log('Message from:', data.from);
+    console.log('Message type:', data.type);
     
     switch (data.type) {
       case 'call_channel_created':
         console.log('Call channel created notification:', data);
         if (data.to === user?.id) {
           // Create the call channel for the receiver with the same ID
-          const { createCallChannelForReceiver } = useChannels();
           createCallChannelForReceiver(
             data.channelId,
             data.channelName,
@@ -545,7 +547,6 @@ const CallControls: React.FC<CallControlsProps> = ({
       
       // Join the existing call channel when accepting the call
       if (currentCallChannel) {
-        const { joinCallChannel } = useChannels();
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel); // Set active call channel in context
       }
@@ -596,7 +597,6 @@ const CallControls: React.FC<CallControlsProps> = ({
     
     // Leave the call channel when rejecting
     if (currentCallChannel) {
-      const { leaveCallChannel } = useChannels();
       leaveCallChannel(currentCallChannel, user?.id || '');
       setCurrentCallChannel(null);
     }
@@ -638,7 +638,6 @@ const CallControls: React.FC<CallControlsProps> = ({
     
     // Leave the call channel (this will handle deletion if no participants left)
     if (currentCallChannel) {
-      const { leaveCallChannel } = useChannels();
       leaveCallChannel(currentCallChannel, user?.id || '');
       setCurrentCallChannel(null);
     }

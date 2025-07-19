@@ -259,22 +259,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             break;
           case 'call_channel_created':
             console.log('Call channel created notification:', data);
-            // Create the call channel for the receiver immediately
+            // Show notification about call channel creation
             if (data.to === user?.id) {
-              // Import the channels context to create the channel
-              import('./ChannelsContext').then(({ useChannels }) => {
-                const { createCallChannelForReceiver } = useChannels();
-                createCallChannelForReceiver(
-                  data.channelId,
-                  data.channelName,
-                  data.callType,
-                  data.participants
-                );
-              }).catch(error => {
-                console.error('Error creating call channel for receiver:', error);
-              });
-              
-              // Show notification about call channel creation
               if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification(`Call Channel Created`, {
                   body: `${data.callType} call channel "${data.channelName}" has been created. Join the call!`,
