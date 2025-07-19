@@ -62,8 +62,12 @@ const CallControls: React.FC<CallControlsProps> = ({
   const rtcConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' }
+    ],
+    iceCandidatePoolSize: 10
   };
 
   useEffect(() => {
@@ -203,7 +207,23 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   useEffect(() => {
     if (remoteStream && remoteVideoRef.current) {
+      console.log('Setting remote stream to video element');
+      console.log('Remote stream tracks:', remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
       remoteVideoRef.current.srcObject = remoteStream;
+      
+      // Ensure audio is enabled and playing
+      remoteVideoRef.current.onloadedmetadata = () => {
+        console.log('Remote video metadata loaded');
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.play().catch(e => {
+            console.error('Error playing remote video:', e);
+          });
+        }
+      };
+      
+      // Check if audio tracks are enabled
+      const audioTracks = remoteStream.getAudioTracks();
+      console.log('Remote audio tracks:', audioTracks.map(t => ({ enabled: t.enabled, muted: t.muted })));
     }
   }, [remoteStream]);
 
@@ -248,7 +268,8 @@ const CallControls: React.FC<CallControlsProps> = ({
         if (data.from === targetUserId) {
           console.log('Setting call connected state');
           setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
-          createPeerConnection();
+          // Don't create a new peer connection here - it should already exist
+          // The offer handling will create the connection if needed
         }
         break;
       
@@ -296,10 +317,12 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const createPeerConnection = () => {
+    console.log('Creating peer connection with config:', rtcConfig);
     const pc = new RTCPeerConnection(rtcConfig);
     
     pc.ontrack = (event) => {
       console.log('Received remote stream:', event.streams[0]);
+      console.log('Remote stream tracks:', event.streams[0]?.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
       setRemoteStream(event.streams[0]);
       
       // Set up voice activity detection for remote audio
@@ -309,8 +332,9 @@ const CallControls: React.FC<CallControlsProps> = ({
     };
 
     pc.onicecandidate = (event) => {
+      console.log('ICE candidate event:', event.candidate);
       if (event.candidate && socket) {
-        console.log('Sending ICE candidate');
+        console.log('Sending ICE candidate to:', targetUserId);
         socket.send(JSON.stringify({
           type: 'webrtc_ice_candidate',
           to: targetUserId,
@@ -319,14 +343,32 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE connection state changed:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'connected') {
+        console.log('ICE connection established!');
+      } else if (pc.iceConnectionState === 'failed') {
+        console.error('ICE connection failed!');
+      }
+    };
+
     pc.onconnectionstatechange = () => {
-      console.log('Connection state:', pc.connectionState);
+      console.log('Connection state changed:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         console.log('WebRTC connection established!');
+        setCallState(prev => ({ ...prev, isConnected: true }));
       } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        console.log('WebRTC connection failed or disconnected');
+        console.error('WebRTC connection failed or disconnected:', pc.connectionState);
         endCall();
       }
+    };
+
+    pc.onsignalingstatechange = () => {
+      console.log('Signaling state changed:', pc.signalingState);
+    };
+
+    pc.onicegatheringstatechange = () => {
+      console.log('ICE gathering state changed:', pc.iceGatheringState);
     };
 
     setPeerConnection(pc);
@@ -335,42 +377,69 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
     console.log('Handling offer:', offer);
-    if (!peerConnection) {
-      const pc = createPeerConnection();
-      if (localStream) {
-        localStream.getTracks().forEach(track => {
-          pc.addTrack(track, localStream);
-        });
+    try {
+      if (!peerConnection) {
+        console.log('Creating new peer connection for offer');
+        const pc = createPeerConnection();
+        if (localStream) {
+          localStream.getTracks().forEach(track => {
+            console.log('Adding track to peer connection:', track.kind, track.enabled);
+            pc.addTrack(track, localStream);
+          });
+        }
       }
-    }
-    
-    if (peerConnection) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
       
-      if (socket) {
-        console.log('Sending answer');
-        socket.send(JSON.stringify({
-          type: 'webrtc_answer',
-          to: targetUserId,
-          answer: answer
-        }));
+      if (peerConnection) {
+        console.log('Setting remote description (offer)');
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        console.log('Creating answer');
+        const answer = await peerConnection.createAnswer();
+        console.log('Setting local description (answer)');
+        await peerConnection.setLocalDescription(answer);
+        
+        if (socket) {
+          console.log('Sending answer to:', targetUserId);
+          socket.send(JSON.stringify({
+            type: 'webrtc_answer',
+            to: targetUserId,
+            answer: answer
+          }));
+        } else {
+          console.error('Socket not available for sending answer');
+        }
+      } else {
+        console.error('Peer connection not available for handling offer');
       }
+    } catch (error) {
+      console.error('Error handling offer:', error);
     }
   };
 
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
     console.log('Handling answer:', answer);
-    if (!peerConnection) return;
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    try {
+      if (!peerConnection) {
+        console.error('Peer connection not available for handling answer');
+        return;
+      }
+      console.log('Setting remote description (answer)');
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log('Answer processed successfully');
+    } catch (error) {
+      console.error('Error handling answer:', error);
+    }
   };
 
   const handleIceCandidate = async (candidate: RTCIceCandidateInit) => {
     console.log('Handling ICE candidate:', candidate);
-    if (!peerConnection) return;
     try {
+      if (!peerConnection) {
+        console.error('Peer connection not available for handling ICE candidate');
+        return;
+      }
+      console.log('Adding ICE candidate');
       await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log('ICE candidate added successfully');
     } catch (error) {
       console.error('Error adding ICE candidate:', error);
     }
@@ -621,13 +690,36 @@ const CallControls: React.FC<CallControlsProps> = ({
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div className="relative w-full h-full max-w-4xl max-h-[80vh]">
-          {/* Remote video */}
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="w-full h-full object-cover rounded-lg"
-          />
+          {/* Hidden audio element for voice calls */}
+          {!callState.isVideoEnabled && remoteStream && (
+            <audio
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              style={{ display: 'none' }}
+            />
+          )}
+          
+          {/* Remote video for video calls */}
+          {callState.isVideoEnabled && (
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover rounded-lg"
+            />
+          )}
+          
+          {/* Voice call background for voice-only calls */}
+          {!callState.isVideoEnabled && (
+            <div className="w-full h-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center">
+              <div className="text-center text-white">
+                <div className="text-8xl mb-8">📞</div>
+                <h2 className="text-3xl font-bold mb-4">{targetUsername}</h2>
+                <p className="text-xl opacity-80">Voice Call</p>
+              </div>
+            </div>
+          )}
           
           {/* Local video (picture-in-picture) */}
           {callState.isVideoEnabled && (
