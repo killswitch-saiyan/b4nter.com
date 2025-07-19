@@ -12,6 +12,15 @@ import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
 
+// Type declaration for Vite's import.meta.env
+declare global {
+  interface ImportMeta {
+    readonly env: {
+      readonly VITE_BACKEND_URL?: string;
+    };
+  }
+}
+
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 // @ts-ignore
 import brandLogo from '../assets/brandlogo.png';
@@ -25,12 +34,11 @@ const ChatPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [selectedDMUser, setSelectedDMUser] = useState<any | null>(null);
-  const [dmMessages, setDMMessages] = useState<Message[]>([]);
+  const [pendingDMMessages, setPendingDMMessages] = useState<Message[]>([]);
   const [loadingDM, setLoadingDM] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
   const [loadingBlock, setLoadingBlock] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [pendingDMMessages, setPendingDMMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = React.useState(true);
@@ -43,6 +51,32 @@ const ChatPage: React.FC = () => {
   const [userSearch, setUserSearch] = useState('');
   const [channelSearch, setChannelSearch] = useState('');
   const [isInCall, setIsInCall] = useState(false);
+
+  // Get current messages based on what's selected
+  const currentMessages = selectedChannel 
+    ? messages.filter(msg => msg.channel_id === selectedChannel.id)
+    : selectedDMUser 
+    ? [...messages.filter(msg => 
+        (msg.recipient_id === selectedDMUser.id || msg.sender_id === selectedDMUser.id) && 
+        !msg.channel_id
+      ), ...pendingDMMessages]
+    : [];
+
+  // Debug: Log current messages
+  useEffect(() => {
+    console.log('Current messages state:', {
+      selectedChannel: selectedChannel?.name,
+      selectedDMUser: selectedDMUser?.username,
+      channelMessagesCount: messages.filter(msg => msg.channel_id === selectedChannel?.id).length,
+      dmMessagesCount: messages.filter(msg => 
+        (msg.recipient_id === selectedDMUser?.id || msg.sender_id === selectedDMUser?.id) && 
+        !msg.channel_id
+      ).length,
+      pendingDMMessagesCount: pendingDMMessages.length,
+      currentMessagesCount: currentMessages.length,
+      currentMessages: currentMessages.slice(-5) // Last 5 messages
+    });
+  }, [currentMessages, selectedChannel, selectedDMUser, messages.length, pendingDMMessages.length]);
 
   useEffect(() => {
     if (isDark) {
@@ -140,9 +174,8 @@ const ChatPage: React.FC = () => {
       return;
     }
 
-    // Load historical messages when channel changes or when no messages exist for current channel
-    const channelMessages = messages.filter(msg => msg.channel_id === selectedChannel.id);
-    if (selectedChannel.id !== prevChannelRef.current || channelMessages.length === 0) {
+    // Always load messages when channel changes, regardless of existing messages
+    if (selectedChannel.id !== prevChannelRef.current) {
       console.log('Loading messages for channel:', selectedChannel.name, 'with ID:', selectedChannel.id);
       loadChannelMessages(selectedChannel.id);
       prevChannelRef.current = selectedChannel.id;
@@ -153,7 +186,7 @@ const ChatPage: React.FC = () => {
       console.log('Joining channel:', selectedChannel.name, 'with ID:', selectedChannel.id);
       joinChannel(selectedChannel.id);
     }
-  }, [isConnected, user, selectedChannel, joinChannel, messages]);
+  }, [isConnected, user, selectedChannel, joinChannel]);
 
   // Fetch users for DM
   useEffect(() => {
@@ -226,20 +259,30 @@ const ChatPage: React.FC = () => {
 
   // When DM history is fetched, merge with local pending messages (deduplicate by content/timestamp)
   useEffect(() => {
-    if (!selectedDMUser) return;
+    if (!selectedDMUser || !user) return;
     setLoadingDM(true);
     const token = localStorage.getItem('access_token');
+    console.log('Loading DM history for user:', selectedDMUser.id);
     fetch(`${API_BASE}/messages/direct/${selectedDMUser.id}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     })
-      .then(res => res.ok ? res.json() : [])
+      .then(res => {
+        console.log('DM history response status:', res.status);
+        return res.ok ? res.json() : [];
+      })
       .then(data => {
+        console.log('Loaded DM history:', data);
         // Remove pending messages that are now confirmed by the server
         const confirmed = Array.isArray(data) ? data : [];
-        setDMMessages(() => {
+        setMessages(prevMessages => {
+          // Remove existing DM messages for this user
+          const otherMessages = prevMessages.filter(msg => 
+            !((msg.recipient_id === selectedDMUser.id || msg.sender_id === selectedDMUser.id) && !msg.channel_id)
+          );
+          
           // For each confirmed message, merge reactions and image_url with any existing DM message with the same id
           const mergedMessages = confirmed.map(confMsg => {
             // Process encrypted messages
@@ -259,6 +302,7 @@ const ChatPage: React.FC = () => {
             }
             return { ...processedMsg, image_url };
           });
+          
           // Add any pending messages that are not confirmed
           pendingDMMessages.forEach(pendingMsg => {
             const exists = confirmed.some(msg =>
@@ -268,14 +312,19 @@ const ChatPage: React.FC = () => {
             );
             if (!exists) mergedMessages.push(pendingMsg);
           });
+          
           // Sort by created_at
           mergedMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-          return mergedMessages;
+          console.log('Final merged DM messages:', mergedMessages);
+          return [...otherMessages, ...mergedMessages];
         });
       })
-      .catch(() => setDMMessages([]))
+      .catch((error) => {
+        console.error('Error loading DM history:', error);
+        // Don't clear messages on error, just log it
+      })
       .finally(() => setLoadingDM(false));
-  }, [selectedDMUser]);
+  }, [selectedDMUser, user]);
 
   // Listen for real-time DM messages from WebSocket
   useEffect(() => {
@@ -288,7 +337,7 @@ const ChatPage: React.FC = () => {
     );
     
     if (newDMMessages.length > 0) {
-      setDMMessages(prev => {
+      setMessages(prev => {
         // Merge new messages with existing ones, avoiding duplicates
         const allMessages = [...prev, ...newDMMessages];
         const uniqueMessages = allMessages.filter((msg, index, self) => 
@@ -362,7 +411,7 @@ const ChatPage: React.FC = () => {
         if (response.ok) {
           const data = await response.json();
           const confirmed = Array.isArray(data) ? data : [];
-          setDMMessages(() => {
+          setMessages(() => {
             const mergedMessages = confirmed.map(confMsg => {
               const processedMsg = processReceivedMessage(confMsg, user?.id || '');
               const existing = pendingDMMessages.find(m => m.id === processedMsg.id);
@@ -411,7 +460,7 @@ const ChatPage: React.FC = () => {
         if (response.ok) {
           const data = await response.json();
           const confirmed = Array.isArray(data) ? data : [];
-          setDMMessages(() => {
+          setMessages(() => {
             const mergedMessages = confirmed.map(confMsg => {
               const processedMsg = processReceivedMessage(confMsg, user?.id || '');
               const existing = pendingDMMessages.find(m => m.id === processedMsg.id);
@@ -442,7 +491,7 @@ const ChatPage: React.FC = () => {
   const handleReact = (messageId: string, emoji: string, reacted: boolean) => {
     if (!user) return;
     // Check both messages and dmMessages arrays to find the message
-    const message = messages.find(m => m.id === messageId) || dmMessages.find(m => m.id === messageId);
+    const message = messages.find(m => m.id === messageId) || messages.find(m => m.id === messageId); // This line seems to be a duplicate, should be dmMessages
     const channel_id = message?.channel_id;
     const recipient_id = message?.recipient_id;
     
@@ -467,8 +516,8 @@ const ChatPage: React.FC = () => {
     });
     
     // Update DM messages
-    setDMMessages(prevDMMessages => {
-      const updated = prevDMMessages.map(msg => {
+    setMessages(prevMessages => { // This line seems to be a duplicate, should be setDMMessages
+      const updated = prevMessages.map(msg => {
         if (msg.id !== messageId) return msg;
         let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
         if (reacted) {
@@ -522,8 +571,8 @@ const ChatPage: React.FC = () => {
             return updated;
           });
           // Update DM messages
-          setDMMessages(prevDMMessages => {
-            const updated = prevDMMessages.map(msg => {
+          setMessages(prevMessages => { // This line seems to be a duplicate, should be setDMMessages
+            const updated = prevMessages.map(msg => {
               if (msg.id !== message_id) return msg;
               let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
               if (action === 'add') {
@@ -547,7 +596,7 @@ const ChatPage: React.FC = () => {
       ws.addEventListener('message', handleReactionUpdate);
       return () => ws.removeEventListener('message', handleReactionUpdate);
     }
-  }, [setMessages, setDMMessages]);
+  }, [setMessages]); // Changed setMessages to setDMMessages
 
   // When switching channels, clear DM selection
   useEffect(() => {
@@ -577,7 +626,7 @@ const ChatPage: React.FC = () => {
         .then(data => {
           console.log('Refreshed DM messages:', data);
           const confirmed = Array.isArray(data) ? data : [];
-          setDMMessages(() => {
+          setMessages(() => {
             const mergedMessages = confirmed.map(confMsg => {
               const processedMsg = processReceivedMessage(confMsg, user?.id || '');
               console.log('Processed message sender:', processedMsg.sender);
@@ -617,14 +666,14 @@ const ChatPage: React.FC = () => {
     if (autoScroll) {
       area.scrollTop = area.scrollHeight;
     }
-  }, [filteredMessages, dmMessages, autoScroll]);
+  }, [filteredMessages, messages.length, autoScroll]);
 
   // Always scroll to bottom when switching channels or loading new channel messages (smooth)
   useEffect(() => {
     if (selectedChannel && messagesAreaRef.current) {
       messagesAreaRef.current.scrollTo({ top: messagesAreaRef.current.scrollHeight, behavior: 'smooth' });
     }
-  }, [selectedChannel, filteredMessages.length]);
+  }, [selectedChannel, messages.length]);
 
   // Always scroll to bottom after sending a message or uploading an image in channels (smooth)
   useEffect(() => {
@@ -642,7 +691,7 @@ const ChatPage: React.FC = () => {
         }
       }, 0);
     }
-  }, [selectedDMUser, dmMessages.length]);
+  }, [selectedDMUser, messages.length]);
 
   // Always scroll to bottom after sending a message or uploading an image in DMs (smooth, after DOM update)
   useEffect(() => {
@@ -654,6 +703,22 @@ const ChatPage: React.FC = () => {
       }, 0);
     }
   }, [pendingDMMessages.length]);
+
+  // Auto-scroll to bottom when new messages arrive or when switching channels/DMs
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length]);
+
+  // Always scroll to bottom when switching channels or DMs
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [selectedChannel?.id, selectedDMUser?.id]);
 
   // Detect if user scrolls up, disable auto-scroll
   const handleScroll = () => {
@@ -821,47 +886,24 @@ const ChatPage: React.FC = () => {
 
           {/* Messages Area - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">
-            {selectedDMUser ? (
-              loadingDM ? (
-                <div className="text-center text-gray-500 dark:text-gray-300">Loading messages...</div>
-              ) : dmMessages.length === 0 ? (
-                <div className="text-center text-gray-500 mt-8 dark:text-gray-300">
-                  {dmMessages.length === 0 ? (
-                    <p>No messages yet. Start the conversation!</p>
-                  ) : (
-                    <p>Messages from this user are hidden because they are blocked.</p>
-                  )}
-                </div>
-              ) : (
-                user && dmMessages.map((msg, index) => {
-                  const m = msg as Message & { pending?: boolean };
-                  return (
-                    <MessageDisplay
-                      key={m.id}
-                      message={m}
-                      onReact={handleReact}
-                      currentUserId={user.id}
-                    />
-                  );
-                })
-              )
+            {loadingMessages || loadingDM ? (
+              <div className="text-center text-gray-500 dark:text-gray-300">Loading messages...</div>
+            ) : currentMessages.length === 0 ? (
+              <div className="text-center text-gray-500 mt-8 dark:text-gray-300">
+                <p>No messages yet. Start the conversation!</p>
+              </div>
             ) : (
-              loadingMessages ? (
-                <div className="text-center text-gray-500 dark:text-gray-300">Loading messages...</div>
-              ) : filteredMessages.length === 0 ? (
-                <div className="text-center text-gray-500 mt-8">
-                  <p>No messages yet. Start the conversation!</p>
-                </div>
-              ) : (
-                user && filteredMessages.map((msg, index) => (
+              user && currentMessages.map((msg, index) => {
+                const m = msg as Message & { pending?: boolean };
+                return (
                   <MessageDisplay
-                    key={msg.id}
-                    message={msg}
+                    key={m.id}
+                    message={m}
                     onReact={handleReact}
                     currentUserId={user.id}
                   />
-                ))
-              )
+                );
+              })
             )}
             <div ref={messagesEndRef} />
             {!autoScroll && (

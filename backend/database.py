@@ -171,35 +171,35 @@ class DatabaseManager:
     
     @with_timeout(8)
     async def get_channel_messages(self, channel_id: str, limit: int = 50):
-        """Get messages for a channel with timeout"""
+        """Get messages for a channel"""
         try:
             response = await run_sync_in_thread(
-                self.client.table('messages').select(
+                lambda: self.client.table('messages').select(
                     '*, users:users!messages_sender_id_fkey(username, full_name, avatar_url)'
-                ).eq('channel_id', channel_id).order('created_at', desc=False).limit(limit).execute
+                ).eq('channel_id', channel_id).order('created_at', desc=False).limit(limit).execute()
             )
-            return response.data
+            return response.data if response.data else []
         except Exception as e:
             logger.error(f"Error getting channel messages: {e}")
             return []
     
     @with_timeout(10)
     async def get_direct_messages(self, user1_id: str, user2_id: str, limit: int = 50):
-        """Get direct messages between two users - optimized single query"""
+        """Get direct messages between two users"""
         try:
-            # Use a simpler approach with two separate queries but run them concurrently
+            # Create queries for both directions
             query1 = self.client.table('messages').select(
                 '*, users:users!messages_sender_id_fkey(username, full_name, avatar_url)'
-            ).eq('sender_id', user1_id).eq('recipient_id', user2_id).order('created_at', desc=False).limit(limit).execute
+            ).eq('sender_id', user1_id).eq('recipient_id', user2_id).order('created_at', desc=False).limit(limit)
             
             query2 = self.client.table('messages').select(
                 '*, users:users!messages_sender_id_fkey(username, full_name, avatar_url)'
-            ).eq('sender_id', user2_id).eq('recipient_id', user1_id).order('created_at', desc=False).limit(limit).execute
+            ).eq('sender_id', user2_id).eq('recipient_id', user1_id).order('created_at', desc=False).limit(limit)
             
             # Run both queries concurrently
             resp1, resp2 = await asyncio.gather(
-                run_sync_in_thread(lambda: query1),
-                run_sync_in_thread(lambda: query2)
+                run_sync_in_thread(lambda: query1.execute()),
+                run_sync_in_thread(lambda: query2.execute())
             )
             
             # Combine and sort messages
@@ -379,7 +379,7 @@ class DatabaseManager:
         """Get all channels"""
         try:
             response = await run_sync_in_thread(
-                self.client.table('channels').select('*').execute
+                lambda: self.client.table('channels').select('*').execute()
             )
             return response.data
         except Exception as e:

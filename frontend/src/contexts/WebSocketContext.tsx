@@ -133,13 +133,13 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             break;
           case 'new_channel_message':
             console.log('New channel message:', data.message);
-            // Add sender information to the message
+            // Use the sender information from the message, not the current user
             const channelMessage = {
               ...data.message,
-              sender: {
-                username: user?.username || 'Unknown',
-                full_name: user?.full_name || user?.username || 'Unknown',
-                avatar_url: user?.avatar_url
+              sender: data.message.sender || {
+                username: data.message.sender_name || 'Unknown',
+                full_name: data.message.sender_name || 'Unknown',
+                avatar_url: data.message.sender_avatar_url
               }
             };
             setMessages((prev) => [...prev, channelMessage]);
@@ -148,13 +148,13 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             console.log('New direct message:', data.message);
             // Process the message for E2EE decryption
             const processedMessage = processReceivedMessage(data.message, user?.id || '');
-            // Add sender information to the message
+            // Use the sender information from the message, not the current user
             const directMessage = {
               ...processedMessage,
-              sender: {
-                username: user?.username || 'Unknown',
-                full_name: user?.full_name || user?.username || 'Unknown',
-                avatar_url: user?.avatar_url
+              sender: data.message.sender || {
+                username: data.message.sender_name || 'Unknown',
+                full_name: data.message.sender_name || 'Unknown',
+                avatar_url: data.message.sender_avatar_url
               }
             };
             setMessages((prev) => [...prev, directMessage]);
