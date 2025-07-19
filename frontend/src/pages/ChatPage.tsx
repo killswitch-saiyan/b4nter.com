@@ -784,9 +784,29 @@ const ChatPage: React.FC = () => {
                   <button
                     key={channel.id}
                     onClick={() => setSelectedChannel(channel)}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${selectedChannel?.id === channel.id ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'}`}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      selectedChannel?.id === channel.id 
+                        ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' 
+                        : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'
+                    } ${
+                      channel.is_call_channel 
+                        ? 'border-l-4 border-green-500 bg-green-50 dark:bg-green-900/20' 
+                        : ''
+                    }`}
                   >
-                    # {channel.name}
+                    <div className="flex items-center justify-between">
+                      <span>{channel.name}</span>
+                      {channel.is_call_channel && (
+                        <span className="text-xs text-green-600 dark:text-green-400">
+                          {channel.member_count} online
+                        </span>
+                      )}
+                    </div>
+                    {channel.is_call_channel && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {channel.call_type === 'voice' ? '🔊 Voice Call' : '📹 Video Call'}
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>
@@ -836,12 +856,24 @@ const ChatPage: React.FC = () => {
                     </h2>
                     <EncryptionStatus isEncrypted={true} className="mt-1" />
                   </div>
+                ) : selectedChannel?.is_call_channel ? (
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                      {selectedChannel.name}
+                      <span className="text-sm text-green-600 dark:text-green-400">
+                        {selectedChannel.member_count} participants
+                      </span>
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-300">
+                      {selectedChannel.call_type === 'voice' ? 'Voice Call' : 'Video Call'} • Started {new Date(selectedChannel.call_started_at || '').toLocaleTimeString()}
+                    </p>
+                  </div>
                 ) : (
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                     {selectedChannel ? `# ${selectedChannel.name}` : 'Select a channel or user'}
                   </h2>
                 )}
-                {selectedChannel && !selectedDMUser && (
+                {selectedChannel && !selectedDMUser && !selectedChannel.is_call_channel && (
                   <p className="text-sm text-gray-500 dark:text-gray-300">{selectedChannel.description}</p>
                 )}
               </div>
@@ -886,24 +918,69 @@ const ChatPage: React.FC = () => {
 
           {/* Messages Area - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">
-            {loadingMessages || loadingDM ? (
-              <div className="text-center text-gray-500 dark:text-gray-300">Loading messages...</div>
-            ) : currentMessages.length === 0 ? (
-              <div className="text-center text-gray-500 mt-8 dark:text-gray-300">
-                <p>No messages yet. Start the conversation!</p>
+            {selectedChannel?.is_call_channel ? (
+              // Call channel UI
+              <div className="text-center py-12">
+                <div className="text-6xl mb-6">
+                  {selectedChannel.call_type === 'voice' ? '🔊' : '📹'}
+                </div>
+                <h3 className="text-2xl font-bold mb-4 dark:text-white">
+                  {selectedChannel.call_type === 'voice' ? 'Voice Call' : 'Video Call'}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-300 mb-8">
+                  {selectedChannel.member_count} participants in this call
+                </p>
+                <div className="bg-gray-100 dark:bg-dark-600 rounded-lg p-4 max-w-md mx-auto">
+                  <h4 className="font-semibold mb-2 dark:text-white">Participants</h4>
+                  <div className="space-y-2">
+                    {selectedChannel.call_participants?.map((participantId, index) => (
+                      <div key={participantId} className="flex items-center gap-2 text-sm">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        <span className="text-gray-700 dark:text-gray-300">
+                          {participantId === user?.id ? 'You' : `User ${index + 1}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
+            ) : selectedDMUser ? (
+              loadingDM ? (
+                <div className="text-center text-gray-500 dark:text-gray-300">Loading messages...</div>
+              ) : currentMessages.length === 0 ? (
+                <div className="text-center text-gray-500 mt-8 dark:text-gray-300">
+                  <p>No messages yet. Start the conversation!</p>
+                </div>
+              ) : (
+                user && currentMessages.map((msg, index) => {
+                  const m = msg as Message & { pending?: boolean };
+                  return (
+                    <MessageDisplay
+                      key={m.id}
+                      message={m}
+                      onReact={handleReact}
+                      currentUserId={user.id}
+                    />
+                  );
+                })
+              )
             ) : (
-              user && currentMessages.map((msg, index) => {
-                const m = msg as Message & { pending?: boolean };
-                return (
+              loadingMessages ? (
+                <div className="text-center text-gray-500 dark:text-gray-300">Loading messages...</div>
+              ) : currentMessages.length === 0 ? (
+                <div className="text-center text-gray-500 mt-8">
+                  <p>No messages yet. Start the conversation!</p>
+                </div>
+              ) : (
+                user && currentMessages.map((msg, index) => (
                   <MessageDisplay
-                    key={m.id}
-                    message={m}
+                    key={msg.id}
+                    message={msg}
                     onReact={handleReact}
                     currentUserId={user.id}
                   />
-                );
-              })
+                ))
+              )
             )}
             <div ref={messagesEndRef} />
             {!autoScroll && (
@@ -919,12 +996,17 @@ const ChatPage: React.FC = () => {
 
           {/* Message Input - Fixed */}
           <div className="flex-shrink-0 p-4 bg-white border-t dark:bg-dark-800 dark:border-dark-700">
-            {user && (
+            {user && !selectedChannel?.is_call_channel && (
               <MessageInput
                 onSendMessage={handleSendMessage}
                 placeholder={selectedDMUser ? `Message @${selectedDMUser.username}...` : selectedChannel ? `Message # ${selectedChannel.name}...` : 'Select a channel or user to send a message...'}
                 disabled={(!selectedChannel && !selectedDMUser) || (selectedDMUser && isBlocked)}
               />
+            )}
+            {selectedChannel?.is_call_channel && (
+              <div className="text-center text-gray-500 dark:text-gray-300 py-4">
+                <p>This is a {selectedChannel.call_type} call channel. Use the call controls to manage the call.</p>
+              </div>
             )}
             {selectedDMUser && isBlocked && (
               <div className="text-center text-xs text-red-500 mt-2">You have blocked this user. Unblock to send messages.</div>

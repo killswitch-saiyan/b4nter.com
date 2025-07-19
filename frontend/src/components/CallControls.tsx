@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useChannels } from '../contexts/ChannelsContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CallControlsProps {
   targetUserId: string;
@@ -22,6 +24,8 @@ const CallControls: React.FC<CallControlsProps> = ({
   onCallEnd, 
   socket 
 }) => {
+  const { user } = useAuth();
+  const { createCallChannel, removeCallChannel, joinCallChannel, leaveCallChannel } = useChannels();
   const [callState, setCallState] = useState<CallState>({
     isIncoming: false,
     isOutgoing: false,
@@ -35,6 +39,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
+  const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -239,6 +244,12 @@ const CallControls: React.FC<CallControlsProps> = ({
         await Notification.requestPermission();
       }
       
+      // Create call channel
+      const callType = isVideo ? 'video' : 'voice';
+      const participants = [user?.id || '', targetUserId];
+      const callChannel = createCallChannel(callType, participants);
+      setCurrentCallChannel(callChannel.id);
+      
       // Request media permissions
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -296,6 +307,11 @@ const CallControls: React.FC<CallControlsProps> = ({
       console.log('Accepting call');
       setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
       
+      // Join the call channel if it exists
+      if (currentCallChannel) {
+        joinCallChannel(currentCallChannel, user?.id || '');
+      }
+      
       // Get user media for the call
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -337,6 +353,12 @@ const CallControls: React.FC<CallControlsProps> = ({
     setCallState(prev => ({ ...prev, isIncoming: false }));
     setPendingOffer(null);
     
+    // Remove call channel if it exists
+    if (currentCallChannel) {
+      removeCallChannel(currentCallChannel);
+      setCurrentCallChannel(null);
+    }
+    
     if (socket) {
       socket.send(JSON.stringify({
         type: 'call_rejected',
@@ -367,6 +389,12 @@ const CallControls: React.FC<CallControlsProps> = ({
       isAudioEnabled: false,
       isMuted: false
     });
+    
+    // Remove call channel
+    if (currentCallChannel) {
+      removeCallChannel(currentCallChannel);
+      setCurrentCallChannel(null);
+    }
     
     onCallEnd();
   };

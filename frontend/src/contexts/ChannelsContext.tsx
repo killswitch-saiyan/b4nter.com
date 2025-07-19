@@ -9,6 +9,10 @@ interface ChannelsContextType {
   selectedChannel: Channel | null;
   setSelectedChannel: (channel: Channel | null) => void;
   refreshChannels: () => Promise<void>;
+  createCallChannel: (callType: 'voice' | 'video', participants: string[]) => Channel;
+  removeCallChannel: (channelId: string) => void;
+  joinCallChannel: (channelId: string, userId: string) => void;
+  leaveCallChannel: (channelId: string, userId: string) => void;
 }
 
 const ChannelsContext = createContext<ChannelsContextType | undefined>(undefined);
@@ -56,11 +60,17 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
 
       const channelsData = await response.json();
       console.log('Fetched channels:', channelsData);
-      setChannels(channelsData);
+      
+      // Filter out call channels that have ended
+      const activeChannels = channelsData.filter((channel: Channel) => 
+        !channel.is_call_channel || !channel.call_ended_at
+      );
+      
+      setChannels(activeChannels);
 
       // Set the first channel as selected if none is selected
-      if (channelsData.length > 0 && !selectedChannel) {
-        setSelectedChannel(channelsData[0]);
+      if (activeChannels.length > 0 && !selectedChannel) {
+        setSelectedChannel(activeChannels[0]);
       }
     } catch (error) {
       console.error('Error fetching channels:', error);
@@ -72,6 +82,89 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
 
   const refreshChannels = async () => {
     await fetchChannels();
+  };
+
+  const createCallChannel = (callType: 'voice' | 'video', participants: string[]): Channel => {
+    const callChannel: Channel = {
+      id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: `${callType === 'voice' ? '🔊' : '📹'} ${callType.charAt(0).toUpperCase() + callType.slice(1)} Call`,
+      description: `${callType} call with ${participants.length} participants`,
+      is_private: true,
+      created_by: user?.id || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      member_count: participants.length,
+      is_call_channel: true,
+      call_type: callType,
+      call_participants: participants,
+      call_started_at: new Date().toISOString(),
+    };
+
+    setChannels(prev => [...prev, callChannel]);
+    setSelectedChannel(callChannel);
+    
+    console.log(`Created ${callType} call channel:`, callChannel);
+    return callChannel;
+  };
+
+  const removeCallChannel = (channelId: string) => {
+    setChannels(prev => {
+      const updatedChannels = prev.filter(channel => channel.id !== channelId);
+      
+      // If the removed channel was selected, select the first available channel
+      if (selectedChannel?.id === channelId) {
+        setSelectedChannel(updatedChannels.length > 0 ? updatedChannels[0] : null);
+      }
+      
+      return updatedChannels;
+    });
+    
+    console.log(`Removed call channel: ${channelId}`);
+  };
+
+  const joinCallChannel = (channelId: string, userId: string) => {
+    setChannels(prev => prev.map(channel => {
+      if (channel.id === channelId && channel.is_call_channel) {
+        const participants = channel.call_participants || [];
+        if (!participants.includes(userId)) {
+          return {
+            ...channel,
+            call_participants: [...participants, userId],
+            member_count: participants.length + 1,
+            updated_at: new Date().toISOString()
+          };
+        }
+      }
+      return channel;
+    }));
+  };
+
+  const leaveCallChannel = (channelId: string, userId: string) => {
+    setChannels(prev => prev.map(channel => {
+      if (channel.id === channelId && channel.is_call_channel) {
+        const participants = channel.call_participants || [];
+        const updatedParticipants = participants.filter(id => id !== userId);
+        
+        // If no participants left, mark channel as ended
+        if (updatedParticipants.length === 0) {
+          return {
+            ...channel,
+            call_participants: [],
+            member_count: 0,
+            call_ended_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        }
+        
+        return {
+          ...channel,
+          call_participants: updatedParticipants,
+          member_count: updatedParticipants.length,
+          updated_at: new Date().toISOString()
+        };
+      }
+      return channel;
+    }));
   };
 
   useEffect(() => {
@@ -89,6 +182,10 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     selectedChannel,
     setSelectedChannel,
     refreshChannels,
+    createCallChannel,
+    removeCallChannel,
+    joinCallChannel,
+    leaveCallChannel,
   };
 
   return (

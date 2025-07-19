@@ -18,6 +18,12 @@ export interface Channel {
   created_at: string;
   updated_at: string;
   member_count: number;
+  // Call channel properties
+  is_call_channel?: boolean;
+  call_type?: 'voice' | 'video';
+  call_participants?: string[];
+  call_started_at?: string;
+  call_ended_at?: string;
 }
 
 export interface MessageReaction {
