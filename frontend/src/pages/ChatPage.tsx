@@ -1218,12 +1218,12 @@ const ChatPage: React.FC = () => {
                 <button
                   onClick={async () => {
                     try {
-                      console.log('Accepting incoming call from:', incomingCall.from);
+                      console.log('🎯 Accepting incoming call from:', incomingCall.from);
                       
                       // First, ensure the call channel exists
                       let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
                       if (!callChannel) {
-                        console.log('Call channel not found, creating it...');
+                        console.log('🎯 Call channel not found, creating it...');
                         // Create the call channel if it doesn't exist
                         callChannel = createCallChannelForReceiver(
                           incomingCall.channelId,
@@ -1234,10 +1234,12 @@ const ChatPage: React.FC = () => {
                       }
                       
                       // Join the call channel
+                      console.log('🎯 Joining call channel:', incomingCall.channelId);
                       joinCallChannel(incomingCall.channelId, user?.id || '');
                       setActiveCallChannelId(incomingCall.channelId);
                       
-                      // Switch to the call channel
+                      // Switch to the call channel view
+                      console.log('🎯 Switching to call channel:', callChannel);
                       setSelectedChannel(callChannel);
                       
                       // Send call accepted message
@@ -1247,9 +1249,9 @@ const ChatPage: React.FC = () => {
                           to: incomingCall.from
                         }));
                         
-                        // Handle the WebRTC offer if present
+                        // Handle the WebRTC offer if present to establish connection
                         if (incomingCall.offer) {
-                          console.log('Handling WebRTC offer from incoming call');
+                          console.log('🎯 Handling WebRTC offer from incoming call');
                           socket.send(JSON.stringify({
                             type: 'webrtc_offer',
                             to: incomingCall.from,
@@ -1261,9 +1263,12 @@ const ChatPage: React.FC = () => {
                       // Clear the incoming call UI
                       setIncomingCall(null);
                       
-                      console.log('Call accepted successfully');
+                      // Show success message
+                      toast.success(`Joined ${incomingCall.isVideo ? 'video' : 'voice'} call with ${incomingCall.fromName}`);
+                      
+                      console.log('🎯 Call accepted successfully - both users should now be in the same call channel');
                     } catch (error) {
-                      console.error('Error accepting call:', error);
+                      console.error('🎯 Error accepting call:', error);
                       toast.error('Failed to accept call');
                     }
                   }}
@@ -1321,6 +1326,8 @@ const ChatPage: React.FC = () => {
             if (regularChannels.length > 0) {
               setSelectedChannel(regularChannels[0]);
             }
+            setActiveCallChannelId(null);
+            toast.success('Call ended');
           }}
           socket={socket}
           isGlobal={false}

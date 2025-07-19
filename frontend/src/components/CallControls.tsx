@@ -279,10 +279,25 @@ const CallControls: React.FC<CallControlsProps> = ({
       case 'call_accepted':
         console.log('Call accepted from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
-          console.log('Setting call connected state');
+          console.log('🎯 Setting call connected state');
           setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
-          // Don't create a new peer connection here - it should already exist
-          // The offer handling will create the connection if needed
+          
+          // Ensure both users are in the same call channel
+          if (currentCallChannel) {
+            console.log('🎯 Caller joining call channel:', currentCallChannel);
+            joinCallChannel(currentCallChannel, user?.id || '');
+            setActiveCallChannelId(currentCallChannel);
+            
+            // Switch to the call channel view
+            const callChannel = channels.find(ch => ch.id === currentCallChannel);
+            if (callChannel) {
+              console.log('🎯 Caller switching to call channel:', callChannel);
+              setSelectedChannel(callChannel);
+            }
+          }
+          
+          // Show success message
+          toast.success(`Call accepted! You're now in a voice call with ${targetUsername}`);
         }
         break;
       
@@ -329,21 +344,21 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   };
 
-  // Global incoming call handler
+  // Global incoming call handler for WebRTC offers
   useEffect(() => {
-    if (socket && isGlobal) {
+    if (socket) {
       const handleGlobalCallMessage = (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('Global CallControls received message:', data);
+          console.log('🌐 Global CallControls received message:', data);
           
           if (data.type === 'call_incoming' && data.to === user?.id) {
-            console.log('Global incoming call in CallControls:', data);
+            console.log('🌐 Global incoming call in CallControls:', data);
             setCallState(prev => ({ ...prev, isIncoming: true }));
             setPendingOffer(data.offer);
             setCurrentCallChannel(data.channelId);
-            // setTargetUserId(data.from); // This state is not managed by CallControls
-            // setTargetUsername(data.from_name || 'Unknown User'); // This state is not managed by CallControls
+            setTargetUserId(data.from);
+            setTargetUsername(data.from_name || 'Unknown User');
             
             // Add browser notification
             if ('Notification' in window && Notification.permission === 'granted') {
@@ -353,6 +368,12 @@ const CallControls: React.FC<CallControlsProps> = ({
               });
             }
           }
+          
+          // Handle WebRTC offer when in a call channel
+          if (data.type === 'webrtc_offer' && data.from === targetUserId) {
+            console.log('🌐 Handling WebRTC offer in global handler:', data);
+            handleOffer(data.offer);
+          }
         } catch (error) {
           console.error('Error handling global call message:', error);
         }
@@ -361,7 +382,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       socket.addEventListener('message', handleGlobalCallMessage);
       return () => socket.removeEventListener('message', handleGlobalCallMessage);
     }
-  }, [socket, user?.id, isGlobal]);
+  }, [socket, user?.id, targetUserId]);
 
   const createPeerConnection = () => {
     console.log('Creating peer connection with config:', rtcConfig);
