@@ -63,6 +63,13 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   }, [socket]);
 
+  // Request notification permission on component mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
   useEffect(() => {
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
@@ -80,46 +87,67 @@ const CallControls: React.FC<CallControlsProps> = ({
     
     switch (data.type) {
       case 'call_incoming':
+        console.log('Incoming call from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
+          console.log('Setting incoming call state');
           setCallState(prev => ({ ...prev, isIncoming: true }));
           setPendingOffer(data.offer);
+          // Add browser notification
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(`Incoming call from ${targetUsername}`, {
+              body: data.isVideo ? 'Video call' : 'Voice call',
+              icon: '/favicon.ico'
+            });
+          }
         }
         break;
       
       case 'call_accepted':
+        console.log('Call accepted from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
+          console.log('Setting call connected state');
           setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
           createPeerConnection();
         }
         break;
       
       case 'call_rejected':
+        console.log('Call rejected from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
+          console.log('Setting call rejected state');
           setCallState(prev => ({ ...prev, isIncoming: false }));
           endCall();
         }
         break;
       
       case 'call_ended':
+        console.log('Call ended from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
+          console.log('Ending call');
           endCall();
         }
         break;
       
       case 'webrtc_offer':
+        console.log('WebRTC offer from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
+          console.log('Handling WebRTC offer');
           handleOffer(data.offer);
         }
         break;
       
       case 'webrtc_answer':
+        console.log('WebRTC answer from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
+          console.log('Handling WebRTC answer');
           handleAnswer(data.answer);
         }
         break;
       
       case 'webrtc_ice_candidate':
+        console.log('WebRTC ICE candidate from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
+          console.log('Handling WebRTC ICE candidate');
           handleIceCandidate(data.candidate);
         }
         break;
@@ -205,10 +233,19 @@ const CallControls: React.FC<CallControlsProps> = ({
   const startCall = async (isVideo: boolean) => {
     try {
       console.log('Starting call with video:', isVideo);
+      
+      // Request notification permission if not granted
+      if ('Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+      
+      // Request media permissions
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: isVideo
       });
+      
+      console.log('Media stream obtained:', stream.getTracks().map(t => t.kind));
       
       setLocalStream(stream);
       setCallState(prev => ({ 
@@ -222,6 +259,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       
       if (pc) {
         stream.getTracks().forEach(track => {
+          console.log('Adding track to peer connection:', track.kind);
           pc.addTrack(track, stream);
         });
 
@@ -229,18 +267,27 @@ const CallControls: React.FC<CallControlsProps> = ({
         await pc.setLocalDescription(offer);
 
         if (socket) {
-          console.log('Sending call offer');
+          console.log('Sending call offer to:', targetUserId);
           socket.send(JSON.stringify({
             type: 'call_incoming',
             to: targetUserId,
             offer: offer,
             isVideo: isVideo
           }));
+        } else {
+          console.error('WebSocket not connected');
+          alert('Not connected to server. Please check your connection.');
         }
       }
     } catch (error) {
       console.error('Error starting call:', error);
-      alert('Could not access camera/microphone. Please check permissions.');
+      if (error.name === 'NotAllowedError') {
+        alert('Camera/microphone access denied. Please allow permissions and try again.');
+      } else if (error.name === 'NotFoundError') {
+        alert('Camera or microphone not found. Please check your devices.');
+      } else {
+        alert(`Could not start call: ${error.message}`);
+      }
     }
   };
 
@@ -347,26 +394,26 @@ const CallControls: React.FC<CallControlsProps> = ({
   // Incoming call UI
   if (callState.isIncoming) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-dark-800 rounded-lg p-6 max-w-sm w-full mx-4">
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-dark-800 rounded-lg p-8 max-w-md w-full mx-4 animate-pulse">
           <div className="text-center">
-            <div className="text-2xl mb-4">📞</div>
-            <h3 className="text-lg font-semibold mb-2 dark:text-white">Incoming Call</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6">
-              {targetUsername} is calling you...
+            <div className="text-4xl mb-6 animate-bounce">📞</div>
+            <h3 className="text-xl font-bold mb-3 dark:text-white">Incoming Call</h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-8 text-lg">
+              <strong>{targetUsername}</strong> is calling you...
             </p>
-            <div className="flex gap-3 justify-center">
+            <div className="flex gap-4 justify-center">
               <button
                 onClick={acceptCall}
-                className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full flex items-center gap-2"
+                className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
               >
-                <span>✓</span> Accept
+                <span className="text-2xl">✓</span> Accept
               </button>
               <button
                 onClick={rejectCall}
-                className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-full flex items-center gap-2"
+                className="bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
               >
-                <span>✕</span> Decline
+                <span className="text-2xl">✕</span> Decline
               </button>
             </div>
           </div>
