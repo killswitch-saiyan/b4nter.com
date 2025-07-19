@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { processReceivedMessage } from '../services/e2eeService';
+import { toast } from 'react-hot-toast';
 
 interface NotificationType {
   id: string;
@@ -84,6 +85,13 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     ws.onopen = () => {
       console.log('WebSocket connected successfully');
       setIsConnected(true);
+      
+      // Request notification permission for call notifications
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          console.log('Notification permission:', permission);
+        });
+      }
     };
 
     ws.onclose = (event) => {
@@ -204,6 +212,41 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             break;
           // Call-related messages are handled by CallControls component
           case 'call_incoming':
+            console.log('Incoming call notification:', data);
+            // Show browser notification for incoming call
+            if ('Notification' in window && Notification.permission === 'granted') {
+              const callerName = data.from_name || data.from || 'Unknown User';
+              new Notification(`Incoming Call from ${callerName}`, {
+                body: data.isVideo ? 'Video call' : 'Voice call',
+                icon: '/favicon.ico',
+                requireInteraction: true,
+                tag: 'incoming-call'
+              });
+            } else {
+              // Fallback to toast notification
+              const callerName = data.from_name || data.from || 'Unknown User';
+              toast(`📞 Incoming ${data.isVideo ? 'video' : 'voice'} call from ${callerName}`, {
+                duration: 10000,
+                icon: '📞',
+                style: {
+                  background: '#10B981',
+                  color: 'white',
+                  fontSize: '16px',
+                  padding: '16px'
+                }
+              });
+            }
+            // Add to notifications list
+            setNotifications((prev) => [
+              ...prev,
+              { 
+                id: `call-${Date.now()}`, 
+                type: 'call_incoming',
+                message: `Incoming ${data.isVideo ? 'video' : 'voice'} call from ${data.from_name || data.from}`,
+                data: data
+              }
+            ]);
+            break;
           case 'call_accepted':
           case 'call_rejected':
           case 'call_ended':

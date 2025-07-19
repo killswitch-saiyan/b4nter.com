@@ -376,13 +376,20 @@ class WebSocketManager:
         target_user_id = message.get('to')
         if target_user_id and target_user_id in self.user_connections:
             try:
+                # Get caller information
+                from database import db
+                caller = await db.get_user_by_id(user_id)
+                caller_name = caller.get('username') if caller else user_id
+                
                 await self.user_connections[target_user_id].send_text(json.dumps({
                     "type": "call_incoming",
                     "from": user_id,
+                    "from_name": caller_name,
                     "offer": message.get('offer'),
-                    "isVideo": message.get('isVideo', False)
+                    "isVideo": message.get('isVideo', False),
+                    "channelId": message.get('channelId')
                 }))
-                logger.info(f"Call incoming from {user_id} to {target_user_id}")
+                logger.info(f"Call incoming from {user_id} ({caller_name}) to {target_user_id}")
             except Exception as e:
                 logger.error(f"Error sending call incoming to user {target_user_id}: {e}")
                 # If we can't send to the user, they might be disconnected

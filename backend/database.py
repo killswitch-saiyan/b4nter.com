@@ -173,6 +173,11 @@ class DatabaseManager:
     async def get_channel_messages(self, channel_id: str, limit: int = 50):
         """Get messages for a channel"""
         try:
+            # Special handling for call channels - they don't exist in the database
+            if channel_id.startswith('call-'):
+                logger.info(f"Call channel detected: {channel_id}, returning empty messages")
+                return []
+            
             response = await run_sync_in_thread(
                 lambda: self.client.table('messages').select(
                     '*, users:users!messages_sender_id_fkey(username, full_name, avatar_url)'

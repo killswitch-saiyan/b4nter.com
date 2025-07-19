@@ -26,7 +26,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   socket 
 }) => {
   const { user } = useAuth();
-  const { createCallChannel, removeCallChannel, joinCallChannel, leaveCallChannel, setCallDuration, setActiveCallChannelId } = useChannels();
+  const { createCallChannel, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId } = useChannels();
   const [callState, setCallState] = useState<CallState>({
     isIncoming: false,
     isOutgoing: false,

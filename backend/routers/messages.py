@@ -35,15 +35,21 @@ async def create_message(
         
         # Check permissions
         if message_data.channel_id:
-            # Check if user is member of channel
-            user_channels = await db.get_user_channels(current_user.id)
-            user_channel_ids = [c.get("channel_id") for c in user_channels]
-            
-            if message_data.channel_id not in user_channel_ids:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not a member of this channel"
-                )
+            # Special handling for call channels - allow access without database membership
+            if message_data.channel_id.startswith('call-'):
+                # For call channels, we allow access since they're created dynamically
+                # and don't exist in the channel_members table
+                pass
+            else:
+                # Check if user is member of channel for regular channels
+                user_channels = await db.get_user_channels(current_user.id)
+                user_channel_ids = [c.get("channel_id") for c in user_channels]
+                
+                if message_data.channel_id not in user_channel_ids:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Not a member of this channel"
+                    )
         
         if message_data.recipient_id:
             # Check if recipient exists
@@ -128,15 +134,21 @@ async def get_channel_messages(
 ):
     """Get messages for a channel"""
     try:
-        # Check if user is member of channel
-        user_channels = await db.get_user_channels(current_user.id)
-        user_channel_ids = [c.get("channel_id") for c in user_channels]
-        
-        if channel_id not in user_channel_ids:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not a member of this channel"
-            )
+        # Special handling for call channels - allow access without database membership
+        if channel_id.startswith('call-'):
+            # For call channels, we allow access since they're created dynamically
+            # and don't exist in the channel_members table
+            pass
+        else:
+            # Check if user is member of channel for regular channels
+            user_channels = await db.get_user_channels(current_user.id)
+            user_channel_ids = [c.get("channel_id") for c in user_channels]
+            
+            if channel_id not in user_channel_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not a member of this channel"
+                )
         
         # Get messages
         messages = await db.get_channel_messages(channel_id, limit)
