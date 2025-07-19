@@ -115,6 +115,13 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   };
 
   const createCallChannelForReceiver = (channelId: string, channelName: string, callType: 'voice' | 'video', participants: string[]): Channel => {
+    // Check if the channel already exists
+    const existingChannel = channels.find(ch => ch.id === channelId);
+    if (existingChannel) {
+      console.log(`Call channel ${channelId} already exists, not creating duplicate`);
+      return existingChannel;
+    }
+    
     const callChannel: Channel = {
       id: channelId,
       name: channelName,
@@ -174,16 +181,25 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   };
 
   const joinCallChannel = (channelId: string, userId: string) => {
+    console.log(`🔄 Joining call channel ${channelId} for user ${userId}`);
+    console.log(`🔄 Current channels:`, channels.map(ch => ({ id: ch.id, name: ch.name, participants: ch.call_participants })));
+    
     setChannels(prev => prev.map(channel => {
       if (channel.id === channelId && channel.is_call_channel) {
         const participants = channel.call_participants || [];
+        console.log(`🔄 Channel ${channelId} current participants:`, participants);
+        
         if (!participants.includes(userId)) {
-          return {
+          const updatedChannel = {
             ...channel,
             call_participants: [...participants, userId],
             member_count: participants.length + 1,
             updated_at: new Date().toISOString()
           };
+          console.log(`🔄 Updated channel ${channelId} with new participant ${userId}:`, updatedChannel);
+          return updatedChannel;
+        } else {
+          console.log(`🔄 User ${userId} already in channel ${channelId}`);
         }
       }
       return channel;

@@ -334,6 +334,8 @@ class WebSocketManager:
                     await self.handle_webrtc_ice_candidate(user_id, message)
                 elif message_type == 'call_channel_created':
                     await self.handle_call_channel_created(user_id, message)
+                elif message_type == 'call_channel_joined':
+                    await self.handle_call_channel_joined(user_id, message)
                 else:
                     logger.warning(f"Unknown message type: {message_type}")
         except WebSocketDisconnect:
@@ -498,6 +500,23 @@ class WebSocketManager:
                 logger.info(f"Call channel creation notification from {user_id} to {target_user_id}")
             except Exception as e:
                 logger.error(f"Error sending call channel creation notification to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_call_channel_joined(self, user_id: str, message: dict):
+        """Handle call channel join notification"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "call_channel_joined",
+                    "from": user_id,
+                    "channelId": message.get('channelId'),
+                    "userId": message.get('userId'),
+                    "username": message.get('username')
+                }))
+                logger.info(f"Call channel join notification from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending call channel join notification to user {target_user_id}: {e}")
                 self.disconnect(target_user_id)
 
 # Global WebSocket manager instance

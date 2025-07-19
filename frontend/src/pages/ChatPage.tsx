@@ -190,6 +190,13 @@ const ChatPage: React.FC = () => {
             );
           }
           
+          if (data.type === 'call_channel_joined') {
+            console.log('🎯 User joined call channel:', data);
+            // Update the call channel to include the new participant
+            joinCallChannel(data.channelId, data.userId);
+            toast.success(`${data.username} joined the call`);
+          }
+          
           if (data.type === 'call_incoming') {
             console.log('🎯 Global incoming call received:', data);
             setIncomingCall({
@@ -1219,21 +1226,24 @@ const ChatPage: React.FC = () => {
                   onClick={async () => {
                     try {
                       console.log('🎯 Accepting incoming call from:', incomingCall.from);
+                      console.log('🎯 Call channel ID:', incomingCall.channelId);
                       
-                      // First, ensure the call channel exists
+                      // Find the existing call channel (don't create a new one)
                       let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
                       if (!callChannel) {
-                        console.log('🎯 Call channel not found, creating it...');
-                        // Create the call channel if it doesn't exist
+                        console.log('🎯 Call channel not found in local channels, creating it...');
+                        // Only create if it doesn't exist locally
                         callChannel = createCallChannelForReceiver(
                           incomingCall.channelId,
                           `${incomingCall.isVideo ? '📹' : '🔊'} ${incomingCall.isVideo ? 'Video' : 'Voice'} Call`,
                           incomingCall.isVideo ? 'video' : 'voice',
                           [incomingCall.from, user?.id || '']
                         );
+                      } else {
+                        console.log('🎯 Found existing call channel:', callChannel);
                       }
                       
-                      // Join the call channel
+                      // Join the call channel (this should update the existing channel)
                       console.log('🎯 Joining call channel:', incomingCall.channelId);
                       joinCallChannel(incomingCall.channelId, user?.id || '');
                       setActiveCallChannelId(incomingCall.channelId);
@@ -1247,6 +1257,15 @@ const ChatPage: React.FC = () => {
                         socket.send(JSON.stringify({
                           type: 'call_accepted',
                           to: incomingCall.from
+                        }));
+                        
+                        // Notify caller that receiver has joined the channel
+                        socket.send(JSON.stringify({
+                          type: 'call_channel_joined',
+                          to: incomingCall.from,
+                          channelId: incomingCall.channelId,
+                          userId: user?.id,
+                          username: user?.username || user?.full_name || 'Unknown User'
                         }));
                         
                         // Handle the WebRTC offer if present to establish connection
