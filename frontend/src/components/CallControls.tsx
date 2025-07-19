@@ -41,6 +41,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
+  const [pendingIceCandidates, setPendingIceCandidates] = useState<RTCIceCandidateInit[]>([]);
   const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
   const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
   
@@ -188,6 +189,25 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     };
   }, []);
+
+  // Handle pending ICE candidates when peer connection becomes available
+  useEffect(() => {
+    if (peerConnection && peerConnection.remoteDescription && pendingIceCandidates.length > 0) {
+      console.log('🔊 Processing pending ICE candidates:', pendingIceCandidates.length);
+      const processCandidates = async () => {
+        for (const candidate of pendingIceCandidates) {
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log('🔊 Pending ICE candidate added successfully');
+          } catch (error) {
+            console.error('🔊 Error adding pending ICE candidate:', error);
+          }
+        }
+        setPendingIceCandidates([]);
+      };
+      processCandidates();
+    }
+  }, [peerConnection, pendingIceCandidates]);
 
   // Format call duration
   const formatCallDuration = (seconds: number): string => {
@@ -386,66 +406,52 @@ const CallControls: React.FC<CallControlsProps> = ({
   }, [socket, user?.id, targetUserId]);
 
   const createPeerConnection = () => {
-    console.log('🔊 Creating peer connection with config:', rtcConfig);
-    const pc = new RTCPeerConnection(rtcConfig);
-    
-    pc.ontrack = (event) => {
-      console.log('🔊 Received remote stream:', event.streams[0]);
-      console.log('🔊 Remote stream tracks:', event.streams[0]?.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
-      setRemoteStream(event.streams[0]);
-      
-      // Set up voice activity detection for remote audio
-      if (event.streams[0]) {
-        setupVoiceActivityDetection(event.streams[0], false);
-      }
-    };
+    console.log('🔊 Creating new peer connection');
+    try {
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      });
 
-    pc.onicecandidate = (event) => {
-      console.log('🔊 ICE candidate event:', event.candidate);
-      if (event.candidate && socket) {
-        console.log('🔊 Sending ICE candidate to:', targetUserId);
-        socket.send(JSON.stringify({
-          type: 'webrtc_ice_candidate',
-          to: targetUserId,
-          candidate: event.candidate
-        }));
-      }
-    };
+      pc.onicecandidate = (event) => {
+        console.log('🔊 ICE candidate generated:', event.candidate);
+        if (event.candidate && socket) {
+          socket.send(JSON.stringify({
+            type: 'webrtc_ice_candidate',
+            to: targetUserId,
+            candidate: event.candidate
+          }));
+        }
+      };
 
-    pc.oniceconnectionstatechange = () => {
-      console.log('🔊 ICE connection state changed:', pc.iceConnectionState);
-      if (pc.iceConnectionState === 'connected') {
-        console.log('🔊 ICE connection established! Audio should work now!');
-        toast.success('Voice connection established!');
-      } else if (pc.iceConnectionState === 'failed') {
-        console.error('🔊 ICE connection failed!');
-        toast.error('Voice connection failed!');
-      }
-    };
+      pc.oniceconnectionstatechange = () => {
+        console.log('🔊 ICE connection state:', pc.iceConnectionState);
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          console.log('🔊 ICE connection established!');
+          toast.success('Voice connection established!');
+        } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          console.log('🔊 ICE connection failed or disconnected');
+          toast.error('Voice connection lost');
+        }
+      };
 
-    pc.onconnectionstatechange = () => {
-      console.log('🔊 Connection state changed:', pc.connectionState);
-      if (pc.connectionState === 'connected') {
-        console.log('🔊 WebRTC connection established! Audio should work now!');
-        setCallState(prev => ({ ...prev, isConnected: true }));
-        toast.success('Voice call connected!');
-      } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        console.error('🔊 WebRTC connection failed or disconnected:', pc.connectionState);
-        toast.error('Voice call disconnected!');
-        endCall();
-      }
-    };
+      pc.ontrack = (event) => {
+        console.log('🔊 Remote track received:', event.track.kind);
+        if (event.streams && event.streams[0]) {
+          setRemoteStream(event.streams[0]);
+          console.log('🔊 Remote stream set:', event.streams[0].getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
+        }
+      };
 
-    pc.onsignalingstatechange = () => {
-      console.log('🔊 Signaling state changed:', pc.signalingState);
-    };
-
-    pc.onicegatheringstatechange = () => {
-      console.log('🔊 ICE gathering state changed:', pc.iceGatheringState);
-    };
-
-    setPeerConnection(pc);
-    return pc;
+      setPeerConnection(pc);
+      console.log('🔊 Peer connection created and set');
+      return pc;
+    } catch (error) {
+      console.error('🔊 Error creating peer connection:', error);
+      return null;
+    }
   };
 
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
@@ -454,7 +460,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       if (!peerConnection) {
         console.log('🔊 Creating new peer connection for offer');
         const pc = createPeerConnection();
-        if (localStream) {
+        if (pc && localStream) {
           localStream.getTracks().forEach(track => {
             console.log('🔊 Adding track to peer connection:', track.kind, track.enabled);
             pc.addTrack(track, localStream);
@@ -492,32 +498,44 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-    console.log('Handling answer:', answer);
+    console.log('🔊 Handling answer:', answer);
     try {
-      if (!peerConnection) {
-        console.error('Peer connection not available for handling answer');
-        return;
+      if (peerConnection) {
+        console.log('🔊 Setting remote description (answer)');
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('🔊 Answer processed successfully');
+        
+        // Add any pending ICE candidates
+        if (pendingIceCandidates.length > 0) {
+          console.log('🔊 Adding pending ICE candidates:', pendingIceCandidates.length);
+          for (const candidate of pendingIceCandidates) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+          setPendingIceCandidates([]);
+        }
+      } else {
+        console.error('🔊 Peer connection not available for handling answer');
       }
-      console.log('Setting remote description (answer)');
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log('Answer processed successfully');
     } catch (error) {
-      console.error('Error handling answer:', error);
+      console.error('🔊 Error handling answer:', error);
     }
   };
 
-  const handleIceCandidate = async (candidate: RTCIceCandidateInit) => {
-    console.log('Handling ICE candidate:', candidate);
-    try {
-      if (!peerConnection) {
-        console.error('Peer connection not available for handling ICE candidate');
-        return;
-      }
-      console.log('Adding ICE candidate');
-      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log('ICE candidate added successfully');
-    } catch (error) {
-      console.error('Error adding ICE candidate:', error);
+  const handleIceCandidate = (candidate: RTCIceCandidateInit) => {
+    console.log('🔊 Handling ICE candidate:', candidate);
+    if (peerConnection && peerConnection.remoteDescription) {
+      console.log('🔊 Adding ICE candidate to peer connection');
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+        .then(() => {
+          console.log('🔊 ICE candidate added successfully');
+        })
+        .catch((error) => {
+          console.error('🔊 Error adding ICE candidate:', error);
+        });
+    } else {
+      console.warn('🔊 Peer connection not available for handling ICE candidate - storing for later');
+      // Store the candidate to add later when peer connection is ready
+      setPendingIceCandidates(prev => [...prev, candidate]);
     }
   };
 
