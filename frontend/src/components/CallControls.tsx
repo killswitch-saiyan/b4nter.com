@@ -234,6 +234,15 @@ const CallControls: React.FC<CallControlsProps> = ({
       case 'call_channel_created':
         console.log('Call channel created notification:', data);
         if (data.to === user?.id) {
+          // Create the call channel for the receiver with the same ID
+          const { createCallChannelForReceiver } = useChannels();
+          createCallChannelForReceiver(
+            data.channelId,
+            data.channelName,
+            data.callType,
+            data.participants
+          );
+          
           // Show notification about call channel creation
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(`Call Channel Created`, {
@@ -534,8 +543,9 @@ const CallControls: React.FC<CallControlsProps> = ({
       console.log('Accepting call');
       setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
       
-      // Join the call channel if it exists
+      // Join the existing call channel when accepting the call
       if (currentCallChannel) {
+        const { joinCallChannel } = useChannels();
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel); // Set active call channel in context
       }
@@ -584,9 +594,10 @@ const CallControls: React.FC<CallControlsProps> = ({
     setCallState(prev => ({ ...prev, isIncoming: false }));
     setPendingOffer(null);
     
-    // Remove call channel if it exists
+    // Leave the call channel when rejecting
     if (currentCallChannel) {
-      removeCallChannel(currentCallChannel);
+      const { leaveCallChannel } = useChannels();
+      leaveCallChannel(currentCallChannel, user?.id || '');
       setCurrentCallChannel(null);
     }
     
@@ -625,9 +636,10 @@ const CallControls: React.FC<CallControlsProps> = ({
     setCallDuration(0);
     setActiveCallChannelId(null);
     
-    // Remove call channel
+    // Leave the call channel (this will handle deletion if no participants left)
     if (currentCallChannel) {
-      removeCallChannel(currentCallChannel);
+      const { leaveCallChannel } = useChannels();
+      leaveCallChannel(currentCallChannel, user?.id || '');
       setCurrentCallChannel(null);
     }
     

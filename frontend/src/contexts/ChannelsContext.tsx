@@ -10,6 +10,7 @@ interface ChannelsContextType {
   setSelectedChannel: (channel: Channel | null) => void;
   refreshChannels: () => Promise<void>;
   createCallChannel: (callType: 'voice' | 'video', participants: string[]) => Channel;
+  createCallChannelForReceiver: (channelId: string, channelName: string, callType: 'voice' | 'video', participants: string[]) => Channel;
   removeCallChannel: (channelId: string) => void;
   joinCallChannel: (channelId: string, userId: string) => void;
   leaveCallChannel: (channelId: string, userId: string) => void;
@@ -94,15 +95,15 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     const callChannel: Channel = {
       id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: `${callType === 'voice' ? '🔊' : '📹'} ${callType.charAt(0).toUpperCase() + callType.slice(1)} Call`,
-      description: `${callType} call with ${participants.length} participants`,
+      description: `${callType} call - waiting for others to join`,
       is_private: true,
       created_by: user?.id || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      member_count: participants.length,
+      member_count: 1, // Only the caller initially
       is_call_channel: true,
       call_type: callType,
-      call_participants: participants,
+      call_participants: [user?.id || ''], // Only the caller initially
       call_started_at: new Date().toISOString(),
     };
 
@@ -110,6 +111,28 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     setSelectedChannel(callChannel);
     
     console.log(`Created ${callType} call channel:`, callChannel);
+    return callChannel;
+  };
+
+  const createCallChannelForReceiver = (channelId: string, channelName: string, callType: 'voice' | 'video', participants: string[]): Channel => {
+    const callChannel: Channel = {
+      id: channelId,
+      name: channelName,
+      description: `${callType} call - click to join`,
+      is_private: true,
+      created_by: participants.find(p => p !== user?.id) || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      member_count: 1, // Only the caller initially
+      is_call_channel: true,
+      call_type: callType,
+      call_participants: [participants.find(p => p !== user?.id) || ''], // Only the caller initially
+      call_started_at: new Date().toISOString(),
+    };
+
+    setChannels(prev => [...prev, callChannel]);
+    
+    console.log(`Created ${callType} call channel for receiver:`, callChannel);
     return callChannel;
   };
 
@@ -168,31 +191,39 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   };
 
   const leaveCallChannel = (channelId: string, userId: string) => {
-    setChannels(prev => prev.map(channel => {
-      if (channel.id === channelId && channel.is_call_channel) {
-        const participants = channel.call_participants || [];
-        const updatedParticipants = participants.filter(id => id !== userId);
+    setChannels(prev => {
+      const channel = prev.find(ch => ch.id === channelId && ch.is_call_channel);
+      if (!channel) return prev;
+      
+      const participants = channel.call_participants || [];
+      const updatedParticipants = participants.filter(id => id !== userId);
+      
+      // If no participants left, remove the channel entirely
+      if (updatedParticipants.length === 0) {
+        console.log(`Removing call channel ${channelId} - no participants left`);
         
-        // If no participants left, mark channel as ended
-        if (updatedParticipants.length === 0) {
+        // If the removed channel was selected, select the first available channel
+        if (selectedChannel?.id === channelId) {
+          const remainingChannels = prev.filter(ch => ch.id !== channelId);
+          setSelectedChannel(remainingChannels.length > 0 ? remainingChannels[0] : null);
+        }
+        
+        return prev.filter(ch => ch.id !== channelId);
+      }
+      
+      // Otherwise, update the participants list
+      return prev.map(ch => {
+        if (ch.id === channelId && ch.is_call_channel) {
           return {
-            ...channel,
-            call_participants: [],
-            member_count: 0,
-            call_ended_at: new Date().toISOString(),
+            ...ch,
+            call_participants: updatedParticipants,
+            member_count: updatedParticipants.length,
             updated_at: new Date().toISOString()
           };
         }
-        
-        return {
-          ...channel,
-          call_participants: updatedParticipants,
-          member_count: updatedParticipants.length,
-          updated_at: new Date().toISOString()
-        };
-      }
-      return channel;
-    }));
+        return ch;
+      });
+    });
   };
 
   useEffect(() => {
@@ -211,6 +242,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     setSelectedChannel,
     refreshChannels,
     createCallChannel,
+    createCallChannelForReceiver,
     removeCallChannel,
     joinCallChannel,
     leaveCallChannel,

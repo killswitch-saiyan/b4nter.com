@@ -257,6 +257,34 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             // We don't need to do anything here as CallControls listens to the socket directly
             console.log('Call-related message received:', data.type);
             break;
+          case 'call_channel_created':
+            console.log('Call channel created notification:', data);
+            // Create the call channel for the receiver immediately
+            if (data.to === user?.id) {
+              // Import the channels context to create the channel
+              import('./ChannelsContext').then(({ useChannels }) => {
+                const { createCallChannelForReceiver } = useChannels();
+                createCallChannelForReceiver(
+                  data.channelId,
+                  data.channelName,
+                  data.callType,
+                  data.participants
+                );
+              }).catch(error => {
+                console.error('Error creating call channel for receiver:', error);
+              });
+              
+              // Show notification about call channel creation
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(`Call Channel Created`, {
+                  body: `${data.callType} call channel "${data.channelName}" has been created. Join the call!`,
+                  icon: '/favicon.ico'
+                });
+              }
+              // You can also show a toast notification here
+              toast.success(`${data.callType} call channel created! Check the sidebar.`);
+            }
+            break;
           default:
             console.log('Unknown message type:', data.type);
         }
