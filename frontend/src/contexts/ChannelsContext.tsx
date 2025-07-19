@@ -184,26 +184,40 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     console.log(`🔄 Joining call channel ${channelId} for user ${userId}`);
     console.log(`🔄 Current channels:`, channels.map(ch => ({ id: ch.id, name: ch.name, participants: ch.call_participants })));
     
-    setChannels(prev => prev.map(channel => {
-      if (channel.id === channelId && channel.is_call_channel) {
-        const participants = channel.call_participants || [];
-        console.log(`🔄 Channel ${channelId} current participants:`, participants);
-        
-        if (!participants.includes(userId)) {
-          const updatedChannel = {
-            ...channel,
-            call_participants: [...participants, userId],
-            member_count: participants.length + 1,
-            updated_at: new Date().toISOString()
-          };
-          console.log(`🔄 Updated channel ${channelId} with new participant ${userId}:`, updatedChannel);
-          return updatedChannel;
-        } else {
-          console.log(`🔄 User ${userId} already in channel ${channelId}`);
+    setChannels(prev => {
+      const updatedChannels = prev.map(channel => {
+        if (channel.id === channelId && channel.is_call_channel) {
+          const participants = channel.call_participants || [];
+          console.log(`🔄 Channel ${channelId} current participants:`, participants);
+          
+          if (!participants.includes(userId)) {
+            const updatedChannel = {
+              ...channel,
+              call_participants: [...participants, userId],
+              member_count: participants.length + 1,
+              updated_at: new Date().toISOString()
+            };
+            console.log(`🔄 Updated channel ${channelId} with new participant ${userId}:`, updatedChannel);
+            
+            // Force immediate re-render by updating selected channel if it's the current one
+            if (selectedChannel?.id === channelId) {
+              setTimeout(() => {
+                setSelectedChannel(updatedChannel);
+                console.log(`🔄 Forced update of selected channel with new participant`);
+              }, 0);
+            }
+            
+            return updatedChannel;
+          } else {
+            console.log(`🔄 User ${userId} already in channel ${channelId}`);
+          }
         }
-      }
-      return channel;
-    }));
+        return channel;
+      });
+      
+      console.log(`🔄 Updated channels state:`, updatedChannels.map(ch => ({ id: ch.id, name: ch.name, participants: ch.call_participants })));
+      return updatedChannels;
+    });
   };
 
   const leaveCallChannel = (channelId: string, userId: string) => {
