@@ -24,7 +24,8 @@ const CallControls: React.FC<CallControlsProps> = ({
   targetUserId, 
   targetUsername, 
   onCallEnd, 
-  socket 
+  socket, 
+  isGlobal 
 }) => {
   const { user } = useAuth();
   const { createCallChannel, createCallChannelForReceiver, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, channels, setSelectedChannel } = useChannels();
@@ -328,6 +329,40 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   };
 
+  // Global incoming call handler
+  useEffect(() => {
+    if (socket && isGlobal) {
+      const handleGlobalCallMessage = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Global CallControls received message:', data);
+          
+          if (data.type === 'call_incoming' && data.to === user?.id) {
+            console.log('Global incoming call in CallControls:', data);
+            setCallState(prev => ({ ...prev, isIncoming: true }));
+            setPendingOffer(data.offer);
+            setCurrentCallChannel(data.channelId);
+            // setTargetUserId(data.from); // This state is not managed by CallControls
+            // setTargetUsername(data.from_name || 'Unknown User'); // This state is not managed by CallControls
+            
+            // Add browser notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(`Incoming call from ${data.from_name || 'Unknown User'}`, {
+                body: data.isVideo ? 'Video call' : 'Voice call',
+                icon: '/favicon.ico'
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error handling global call message:', error);
+        }
+      };
+
+      socket.addEventListener('message', handleGlobalCallMessage);
+      return () => socket.removeEventListener('message', handleGlobalCallMessage);
+    }
+  }, [socket, user?.id, isGlobal]);
+
   const createPeerConnection = () => {
     console.log('Creating peer connection with config:', rtcConfig);
     const pc = new RTCPeerConnection(rtcConfig);
@@ -550,7 +585,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       if (currentCallChannel) {
         console.log('Joining call channel:', currentCallChannel);
         joinCallChannel(currentCallChannel, user?.id || '');
-        setActiveCallChannelId(currentCallChannel); // Set active call channel in context
+        setActiveCallChannelId(currentCallChannel);
         
         // Switch to the call channel view
         const callChannel = channels.find(ch => ch.id === currentCallChannel);
@@ -562,7 +597,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       // Get user media for the call
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: pendingOffer ? true : false // Assume video if we have an offer
+        video: pendingOffer ? true : false
       });
       
       // Set up voice activity detection for local audio
@@ -578,10 +613,14 @@ const CallControls: React.FC<CallControlsProps> = ({
       const pc = createPeerConnection();
       
       if (pc && pendingOffer) {
+        // Add local tracks to peer connection
         stream.getTracks().forEach(track => {
+          console.log('Adding track to peer connection:', track.kind, track.enabled);
           pc.addTrack(track, stream);
         });
 
+        // Handle the incoming offer
+        console.log('Handling incoming offer:', pendingOffer);
         await handleOffer(pendingOffer);
         setPendingOffer(null);
       }

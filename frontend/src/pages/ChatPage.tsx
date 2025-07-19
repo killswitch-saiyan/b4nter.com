@@ -28,7 +28,7 @@ import brandLogo from '../assets/brandlogo.png';
 const ChatPage: React.FC = () => {
   const { user, logout, updateUser } = useAuth();
   const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent, socket } = useWebSocket();
-  const { channels, loading, selectedChannel, setSelectedChannel, removeCallChannel, callDuration, setCallDuration } = useChannels();
+  const { channels, loading, selectedChannel, setSelectedChannel, refreshChannels, createCallChannel, createCallChannelForReceiver, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, activeCallChannelId, setActiveCallChannelId } = useChannels();
   const [message, setMessage] = useState('');
   const prevChannelRef = useRef<string | null>(null);
   const [users, setUsers] = useState<any[]>([]);
@@ -175,6 +175,19 @@ const ChatPage: React.FC = () => {
       const handleCallMessage = (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('Global call message received:', data);
+          
+          if (data.type === 'call_channel_created' && data.to === user?.id) {
+            console.log('Creating call channel for receiver:', data);
+            // Create the call channel for the receiver
+            createCallChannelForReceiver(
+              data.channelId,
+              data.channelName,
+              data.callType,
+              data.participants
+            );
+          }
+          
           if (data.type === 'call_incoming' && data.to === user?.id) {
             console.log('Global incoming call received:', data);
             setIncomingCall({
@@ -193,7 +206,7 @@ const ChatPage: React.FC = () => {
       socket.addEventListener('message', handleCallMessage);
       return () => socket.removeEventListener('message', handleCallMessage);
     }
-  }, [socket, user?.id]);
+  }, [socket, user?.id, createCallChannelForReceiver]);
 
   // Function to load historical messages for a channel
   const loadChannelMessages = async (channelId: string) => {
@@ -1167,13 +1180,55 @@ const ChatPage: React.FC = () => {
               </p>
               <div className="flex gap-4 justify-center">
                 <button
-                  onClick={() => {
-                    // Accept the call by creating a CallControls component for this user
-                    setIncomingCall(null);
-                    // Switch to the call channel
-                    const callChannel = channels.find(ch => ch.id === incomingCall.channelId);
-                    if (callChannel) {
+                  onClick={async () => {
+                    try {
+                      console.log('Accepting incoming call from:', incomingCall.from);
+                      
+                      // First, ensure the call channel exists
+                      let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
+                      if (!callChannel) {
+                        console.log('Call channel not found, creating it...');
+                        // Create the call channel if it doesn't exist
+                        callChannel = createCallChannelForReceiver(
+                          incomingCall.channelId,
+                          `${incomingCall.isVideo ? '📹' : '🔊'} ${incomingCall.isVideo ? 'Video' : 'Voice'} Call`,
+                          incomingCall.isVideo ? 'video' : 'voice',
+                          [incomingCall.from, user?.id || '']
+                        );
+                      }
+                      
+                      // Join the call channel
+                      joinCallChannel(incomingCall.channelId, user?.id || '');
+                      setActiveCallChannelId(incomingCall.channelId);
+                      
+                      // Switch to the call channel
                       setSelectedChannel(callChannel);
+                      
+                      // Send call accepted message
+                      if (socket) {
+                        socket.send(JSON.stringify({
+                          type: 'call_accepted',
+                          to: incomingCall.from
+                        }));
+                        
+                        // Handle the WebRTC offer if present
+                        if (incomingCall.offer) {
+                          console.log('Handling WebRTC offer from incoming call');
+                          socket.send(JSON.stringify({
+                            type: 'webrtc_offer',
+                            to: incomingCall.from,
+                            offer: incomingCall.offer
+                          }));
+                        }
+                      }
+                      
+                      // Clear the incoming call UI
+                      setIncomingCall(null);
+                      
+                      console.log('Call accepted successfully');
+                    } catch (error) {
+                      console.error('Error accepting call:', error);
+                      toast.error('Failed to accept call');
                     }
                   }}
                   className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
@@ -1199,6 +1254,41 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Global CallControls for WebRTC connections */}
+      {incomingCall && (
+        <CallControls
+          targetUserId={incomingCall.from}
+          targetUsername={incomingCall.fromName}
+          onCallEnd={() => {
+            setIncomingCall(null);
+            // Switch back to a regular channel
+            const regularChannels = channels.filter(ch => !ch.is_call_channel);
+            if (regularChannels.length > 0) {
+              setSelectedChannel(regularChannels[0]);
+            }
+          }}
+          socket={socket}
+          isGlobal={true}
+        />
+      )}
+      
+      {/* Global CallControls for active calls */}
+      {selectedChannel?.is_call_channel && activeCallChannelId && (
+        <CallControls
+          targetUserId={selectedChannel.call_participants?.find(p => p !== user?.id) || ''}
+          targetUsername={getParticipantName(selectedChannel.call_participants?.find(p => p !== user?.id) || '')}
+          onCallEnd={() => {
+            // Switch back to a regular channel
+            const regularChannels = channels.filter(ch => !ch.is_call_channel);
+            if (regularChannels.length > 0) {
+              setSelectedChannel(regularChannels[0]);
+            }
+          }}
+          socket={socket}
+          isGlobal={false}
+        />
       )}
     </div>
   );
