@@ -175,7 +175,9 @@ const ChatPage: React.FC = () => {
       const handleCallMessage = (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('Global call message received:', data);
+          console.log('🔍 Global WebSocket message received:', data);
+          console.log('🔍 Current user ID:', user?.id);
+          console.log('🔍 Message type:', data.type);
           
           if (data.type === 'call_channel_created' && data.to === user?.id) {
             console.log('Creating call channel for receiver:', data);
@@ -188,8 +190,8 @@ const ChatPage: React.FC = () => {
             );
           }
           
-          if (data.type === 'call_incoming' && data.to === user?.id) {
-            console.log('Global incoming call received:', data);
+          if (data.type === 'call_incoming') {
+            console.log('🎯 Global incoming call received:', data);
             setIncomingCall({
               from: data.from,
               fromName: data.from_name || 'Unknown User',
@@ -197,6 +199,17 @@ const ChatPage: React.FC = () => {
               channelId: data.channelId,
               offer: data.offer
             });
+            
+            // Show browser notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(`Incoming call from ${data.from_name || 'Unknown User'}`, {
+                body: data.isVideo ? 'Video call' : 'Voice call',
+                icon: '/favicon.ico'
+              });
+            }
+            
+            // Show toast notification
+            toast.success(`Incoming ${data.isVideo ? 'video' : 'voice'} call from ${data.from_name || 'Unknown User'}`);
           }
         } catch (error) {
           console.error('Error handling call message:', error);
@@ -1163,6 +1176,29 @@ const ChatPage: React.FC = () => {
             )}
             {selectedDMUser && isBlocked && (
               <div className="text-center text-xs text-red-500 mt-2">You have blocked this user. Unblock to send messages.</div>
+            )}
+            
+            {/* Debug: Test WebSocket connection */}
+            {user && (
+              <div className="mt-2 text-center">
+                <button
+                  onClick={() => {
+                    if (socket) {
+                      console.log('🧪 Testing WebSocket connection...');
+                      socket.send(JSON.stringify({
+                        type: 'test_message',
+                        message: 'WebSocket test from ' + user.username
+                      }));
+                      toast.success('Test message sent! Check console.');
+                    } else {
+                      toast.error('WebSocket not connected!');
+                    }
+                  }}
+                  className="text-xs bg-gray-500 text-white px-2 py-1 rounded"
+                >
+                  Test WebSocket
+                </button>
+              </div>
             )}
           </div>
         </div>

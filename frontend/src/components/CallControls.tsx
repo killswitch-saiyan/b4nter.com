@@ -494,7 +494,10 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   const startCall = async (isVideo: boolean) => {
     try {
-      console.log('Starting call with video:', isVideo);
+      console.log('🚀 Starting call with video:', isVideo);
+      console.log('🚀 Target user ID:', targetUserId);
+      console.log('🚀 Current user ID:', user?.id);
+      console.log('🚀 Socket connected:', !!socket);
       
       // Request notification permission if not granted
       if ('Notification' in window && Notification.permission === 'default') {
@@ -508,16 +511,20 @@ const CallControls: React.FC<CallControlsProps> = ({
       setCurrentCallChannel(callChannel.id);
       setActiveCallChannelId(callChannel.id); // Set active call channel in context
       
+      console.log('🚀 Created call channel:', callChannel);
+      
       // Notify target user about call channel creation
       if (socket) {
-        socket.send(JSON.stringify({
+        const channelMessage = {
           type: 'call_channel_created',
           to: targetUserId,
           channelId: callChannel.id,
           channelName: callChannel.name,
           callType: callType,
           participants: participants
-        }));
+        };
+        console.log('🚀 Sending call channel created message:', channelMessage);
+        socket.send(JSON.stringify(channelMessage));
       }
       
       // Request media permissions
@@ -526,7 +533,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         video: isVideo
       });
       
-      console.log('Media stream obtained:', stream.getTracks().map(t => t.kind));
+      console.log('🚀 Media stream obtained:', stream.getTracks().map(t => t.kind));
       
       // Set up voice activity detection for local audio
       setupVoiceActivityDetection(stream, true);
@@ -543,7 +550,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       
       if (pc) {
         stream.getTracks().forEach(track => {
-          console.log('Adding track to peer connection:', track.kind);
+          console.log('🚀 Adding track to peer connection:', track.kind);
           pc.addTrack(track, stream);
         });
 
@@ -551,21 +558,22 @@ const CallControls: React.FC<CallControlsProps> = ({
         await pc.setLocalDescription(offer);
 
         if (socket) {
-          console.log('Sending call offer to:', targetUserId);
-          socket.send(JSON.stringify({
+          const callMessage = {
             type: 'call_incoming',
             to: targetUserId,
             offer: offer,
             isVideo: isVideo,
             channelId: callChannel.id
-          }));
+          };
+          console.log('🚀 Sending call incoming message:', callMessage);
+          socket.send(JSON.stringify(callMessage));
         } else {
-          console.error('WebSocket not connected');
+          console.error('🚀 WebSocket not connected');
           alert('Not connected to server. Please check your connection.');
         }
       }
     } catch (error) {
-      console.error('Error starting call:', error);
+      console.error('🚀 Error starting call:', error);
       if (error.name === 'NotAllowedError') {
         alert('Camera/microphone access denied. Please allow permissions and try again.');
       } else if (error.name === 'NotFoundError') {
