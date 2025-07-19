@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useChannels } from '../contexts/ChannelsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'react-hot-toast';
 
 interface CallControlsProps {
   targetUserId: string;
@@ -91,12 +92,28 @@ const CallControls: React.FC<CallControlsProps> = ({
     console.log('CallControls received message:', data);
     
     switch (data.type) {
+      case 'call_channel_created':
+        console.log('Call channel created notification:', data);
+        if (data.to === user?.id) {
+          // Show notification about call channel creation
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(`Call Channel Created`, {
+              body: `${data.callType} call channel "${data.channelName}" has been created. Join the call!`,
+              icon: '/favicon.ico'
+            });
+          }
+          // You can also show a toast notification here
+          toast.success(`${data.callType} call channel created! Check the sidebar.`);
+        }
+        break;
+        
       case 'call_incoming':
         console.log('Incoming call from:', data.from, 'to target:', targetUserId);
         if (data.from === targetUserId) {
           console.log('Setting incoming call state');
           setCallState(prev => ({ ...prev, isIncoming: true }));
           setPendingOffer(data.offer);
+          setCurrentCallChannel(data.channelId);
           // Add browser notification
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(`Incoming call from ${targetUsername}`, {
@@ -250,6 +267,18 @@ const CallControls: React.FC<CallControlsProps> = ({
       const callChannel = createCallChannel(callType, participants);
       setCurrentCallChannel(callChannel.id);
       
+      // Notify target user about call channel creation
+      if (socket) {
+        socket.send(JSON.stringify({
+          type: 'call_channel_created',
+          to: targetUserId,
+          channelId: callChannel.id,
+          channelName: callChannel.name,
+          callType: callType,
+          participants: participants
+        }));
+      }
+      
       // Request media permissions
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -283,7 +312,8 @@ const CallControls: React.FC<CallControlsProps> = ({
             type: 'call_incoming',
             to: targetUserId,
             offer: offer,
-            isVideo: isVideo
+            isVideo: isVideo,
+            channelId: callChannel.id
           }));
         } else {
           console.error('WebSocket not connected');

@@ -332,6 +332,8 @@ class WebSocketManager:
                     await self.handle_webrtc_answer(user_id, message)
                 elif message_type == 'webrtc_ice_candidate':
                     await self.handle_webrtc_ice_candidate(user_id, message)
+                elif message_type == 'call_channel_created':
+                    await self.handle_call_channel_created(user_id, message)
                 else:
                     logger.warning(f"Unknown message type: {message_type}")
         except WebSocketDisconnect:
@@ -471,6 +473,24 @@ class WebSocketManager:
                 logger.info(f"WebRTC ICE candidate from {user_id} to {target_user_id}")
             except Exception as e:
                 logger.error(f"Error sending WebRTC ICE candidate to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_call_channel_created(self, user_id: str, message: dict):
+        """Handle call channel creation notification"""
+        target_user_id = message.get('to')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "call_channel_created",
+                    "from": user_id,
+                    "channelId": message.get('channelId'),
+                    "channelName": message.get('channelName'),
+                    "callType": message.get('callType'),
+                    "participants": message.get('participants')
+                }))
+                logger.info(f"Call channel creation notification from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending call channel creation notification to user {target_user_id}: {e}")
                 self.disconnect(target_user_id)
 
 # Global WebSocket manager instance

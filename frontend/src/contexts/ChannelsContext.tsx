@@ -107,6 +107,28 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     return callChannel;
   };
 
+  // Function to get username for a user ID
+  const getUsername = async (userId: string): Promise<string> => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/users/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        return userData.username || userData.full_name || 'Unknown User';
+      }
+    } catch (error) {
+      console.error('Error fetching username:', error);
+    }
+    return 'Unknown User';
+  };
+
   const removeCallChannel = (channelId: string) => {
     setChannels(prev => {
       const updatedChannels = prev.filter(channel => channel.id !== channelId);

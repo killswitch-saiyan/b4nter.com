@@ -28,7 +28,7 @@ import brandLogo from '../assets/brandlogo.png';
 const ChatPage: React.FC = () => {
   const { user, logout, updateUser } = useAuth();
   const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent, socket } = useWebSocket();
-  const { channels, loading, selectedChannel, setSelectedChannel } = useChannels();
+  const { channels, loading, selectedChannel, setSelectedChannel, removeCallChannel } = useChannels();
   const [message, setMessage] = useState('');
   const prevChannelRef = useRef<string | null>(null);
   const [users, setUsers] = useState<any[]>([]);
@@ -51,6 +51,37 @@ const ChatPage: React.FC = () => {
   const [userSearch, setUserSearch] = useState('');
   const [channelSearch, setChannelSearch] = useState('');
   const [isInCall, setIsInCall] = useState(false);
+
+  // Function to get username for a participant
+  const getParticipantName = (participantId: string): string => {
+    if (participantId === user?.id) {
+      return 'You';
+    }
+    
+    // Check if we have the user in our users list
+    const participant = users.find(u => u.id === participantId);
+    if (participant) {
+      return participant.username || participant.full_name || 'Unknown User';
+    }
+    
+    return 'Unknown User';
+  };
+
+  // Function to end call and remove call channel
+  const handleEndCall = () => {
+    if (selectedChannel?.is_call_channel && user) {
+      // Remove the call channel
+      removeCallChannel(selectedChannel.id);
+      
+      // Switch to first available channel
+      const regularChannels = channels.filter(ch => !ch.is_call_channel);
+      if (regularChannels.length > 0) {
+        setSelectedChannel(regularChannels[0]);
+      }
+      
+      toast.success('Call ended');
+    }
+  };
 
   // Get current messages based on what's selected
   const currentMessages = selectedChannel 
@@ -920,24 +951,36 @@ const ChatPage: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">
             {selectedChannel?.is_call_channel ? (
               // Call channel UI
-              <div className="text-center py-12">
+              <div className="text-center py-8">
                 <div className="text-6xl mb-6">
                   {selectedChannel.call_type === 'voice' ? '🔊' : '📹'}
                 </div>
                 <h3 className="text-2xl font-bold mb-4 dark:text-white">
                   {selectedChannel.call_type === 'voice' ? 'Voice Call' : 'Video Call'}
                 </h3>
-                <p className="text-gray-600 dark:text-gray-300 mb-8">
+                <p className="text-gray-600 dark:text-gray-300 mb-6">
                   {selectedChannel.member_count} participants in this call
                 </p>
+                
+                {/* Call Controls */}
+                <div className="flex justify-center gap-4 mb-8">
+                  <button
+                    onClick={handleEndCall}
+                    className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-full flex items-center gap-2 transition-colors"
+                  >
+                    <span className="text-xl">📞</span>
+                    End Call
+                  </button>
+                </div>
+                
                 <div className="bg-gray-100 dark:bg-dark-600 rounded-lg p-4 max-w-md mx-auto">
-                  <h4 className="font-semibold mb-2 dark:text-white">Participants</h4>
+                  <h4 className="font-semibold mb-3 dark:text-white">Participants</h4>
                   <div className="space-y-2">
                     {selectedChannel.call_participants?.map((participantId, index) => (
                       <div key={participantId} className="flex items-center gap-2 text-sm">
                         <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                         <span className="text-gray-700 dark:text-gray-300">
-                          {participantId === user?.id ? 'You' : `User ${index + 1}`}
+                          {getParticipantName(participantId)}
                         </span>
                       </div>
                     ))}
