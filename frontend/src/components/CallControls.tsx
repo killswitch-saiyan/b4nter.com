@@ -20,14 +20,6 @@ interface CallState {
   isMuted: boolean;
 }
 
-// --- Ensure handleSocketMessage is defined before usage ---
-const handleSocketMessage = (data: any) => {
-  // ... your existing message handling logic ...
-  // (Move the full function implementation here from wherever it is currently defined)
-};
-// --- End patch ---
-// Now, the handleMessage function can safely call handleSocketMessage
-
 const CallControls: React.FC<CallControlsProps> = ({ 
   targetUserId, 
   targetUsername, 
@@ -126,6 +118,28 @@ const CallControls: React.FC<CallControlsProps> = ({
 
     fetchWebRTCConfig();
   }, []);
+
+  // --- Ensure handleSocketMessage is defined before usage ---
+  const handleSocketMessage = (data: any) => {
+    if (data.type === 'call_channel_created' && data.to === user?.id) {
+      // Check if the channel already exists
+      let callChannel = channels.find(ch => ch.id === data.channelId);
+      if (!callChannel) {
+        // Create the call channel locally using the exact channelId and channelName from the caller
+        callChannel = createCallChannelForReceiver(
+          data.channelId,
+          data.channelName,
+          data.callType,
+          data.participants
+        );
+      }
+      setCurrentCallChannel(data.channelId); // Set to the caller's channelId
+      setSelectedChannel(callChannel); // Switch to the call channel
+      return;
+    }
+  };
+  // --- End patch ---
+  // Now, the handleMessage function can safely call handleSocketMessage
 
   useEffect(() => {
     if (socket) {
