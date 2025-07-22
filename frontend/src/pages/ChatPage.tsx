@@ -77,7 +77,7 @@ const ChatPage: React.FC = () => {
 
   // Timer effect for call channels
   useEffect(() => {
-    let timerInterval: NodeJS.Timeout | null = null;
+    let timerInterval: ReturnType<typeof setInterval> | null = null;
     
     if (selectedChannel?.is_call_channel) {
       console.log('Starting timer for call channel:', selectedChannel.name);
@@ -809,7 +809,7 @@ const ChatPage: React.FC = () => {
   };
 
   // Get display name - prefer full_name, fallback to username
-  const displayName = user.full_name || user.username || 'Unknown User';
+  const displayName = user ? (user.full_name || user.username || 'Unknown User') : 'Unknown User';
 
   // Filter messages for the selected channel
   const filteredMessages = messages.filter(
@@ -1262,33 +1262,33 @@ const ChatPage: React.FC = () => {
                       console.log('🎯 Accepting incoming call from:', incomingCall.from);
                       console.log('🎯 Call channel ID:', incomingCall.channelId);
                       console.log('🎯 Current channels:', channels.map(ch => ({ id: ch.id, name: ch.name, isCall: ch.is_call_channel })));
-                      
-                      // Find the existing call channel (don't create a new one)
+                      // Find or create the call channel
                       let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
                       if (!callChannel) {
                         console.log('🎯 Call channel not found in local channels, creating it...');
-                        // Only create if it doesn't exist locally
                         callChannel = createCallChannelForReceiver(
                           incomingCall.channelId,
-                          incomingCall.channelName || `${incomingCall.isVideo ? '📹' : '🔊'} ${incomingCall.isVideo ? 'Video' : 'Voice'} Call`, // fallback if not present
+                          incomingCall.channelName || `${incomingCall.isVideo ? 'Video' : 'Voice'} Call`,
                           incomingCall.isVideo ? 'video' : 'voice',
                           [incomingCall.from, user?.id || '']
                         );
                       } else {
                         console.log('🎯 Found existing call channel:', callChannel);
                       }
-                      
-                      // Join the call channel (this should update the existing channel)
+                      // Join the call channel
                       console.log('🎯 Joining call channel:', incomingCall.channelId);
                       joinCallChannel(incomingCall.channelId, user?.id || '');
                       setActiveCallChannelId(incomingCall.channelId);
-                      
-                      // Force a refresh of channels to get the updated state
-                      setTimeout(() => {
-                        console.log('🎯 Refreshing channels after join...');
-                        refreshChannels();
-                      }, 100);
-                      
+                      // Wait for the channel to appear and have the correct participants
+                      for (let i = 0; i < 30; i++) { // Try for up to 3 seconds
+                        await new Promise(res => setTimeout(res, 100));
+                        callChannel = channels.find(ch => ch.id === incomingCall.channelId);
+                        if (callChannel && callChannel.call_participants?.includes(user?.id || '')) break;
+                      }
+                      if (!callChannel || !callChannel.call_participants?.includes(user?.id || '')) {
+                        toast.error("Call channel not ready yet. Please wait a moment and try again.");
+                        return;
+                      }
                       // Switch to the call channel view
                       console.log('🎯 Switching to call channel:', callChannel);
                       setSelectedChannel(callChannel);
