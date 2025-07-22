@@ -179,6 +179,14 @@ const ChatPage: React.FC = () => {
               data.callType,
               data.participants
             );
+            setIncomingCall({
+              from: data.from || '',
+              fromName: data.from_name || 'Unknown User',
+              isVideo: data.callType === 'video',
+              channelId: data.channelId,
+              channelName: data.channelName, // Always use the exact name from the sender
+              offer: null
+            });
           }
           
           if (data.type === 'call_channel_joined') {
@@ -220,7 +228,7 @@ const ChatPage: React.FC = () => {
               fromName: data.from_name || 'Unknown User',
               isVideo: data.isVideo,
               channelId: data.channelId,
-              channelName: data.channelName || `${data.isVideo ? '📹' : '🔊'} ${data.isVideo ? 'Video' : 'Voice'} Call`, // fallback if not present
+              channelName: data.channelName, // Always use the exact name from the sender
               offer: data.offer
             });
             
