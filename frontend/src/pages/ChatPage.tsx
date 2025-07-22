@@ -56,6 +56,7 @@ const ChatPage: React.FC = () => {
     fromName: string;
     isVideo: boolean;
     channelId: string;
+    channelName?: string; // Added channelName
     offer: any;
   } | null>(null);
 
@@ -219,6 +220,7 @@ const ChatPage: React.FC = () => {
               fromName: data.from_name || 'Unknown User',
               isVideo: data.isVideo,
               channelId: data.channelId,
+              channelName: data.channelName || `${data.isVideo ? '📹' : '🔊'} ${data.isVideo ? 'Video' : 'Voice'} Call`, // fallback if not present
               offer: data.offer
             });
             
@@ -1260,7 +1262,7 @@ const ChatPage: React.FC = () => {
                         // Only create if it doesn't exist locally
                         callChannel = createCallChannelForReceiver(
                           incomingCall.channelId,
-                          `${incomingCall.isVideo ? '📹' : '🔊'} ${incomingCall.isVideo ? 'Video' : 'Voice'} Call`,
+                          incomingCall.channelName || `${incomingCall.isVideo ? '📹' : '🔊'} ${incomingCall.isVideo ? 'Video' : 'Voice'} Call`, // fallback if not present
                           incomingCall.isVideo ? 'video' : 'voice',
                           [incomingCall.from, user?.id || '']
                         );
