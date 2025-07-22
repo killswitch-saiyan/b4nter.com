@@ -323,6 +323,39 @@ const CallControls: React.FC<CallControlsProps> = ({
     return peerConnection;
   };
 
+  const createPeerConnection = () => {
+    console.log('🔊 Creating new peer connection with enhanced STUN/TURN config');
+    try {
+      const pc = new RTCPeerConnection(rtcConfig);
+      pc.onicecandidate = (event) => {
+        if (event.candidate && socket) {
+          socket.send(JSON.stringify({
+            type: 'webrtc_ice_candidate',
+            to: targetUserId,
+            candidate: event.candidate
+          }));
+        }
+      };
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          toast.success('Voice connection established!');
+        } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          toast.error('Voice connection lost');
+        }
+      };
+      pc.ontrack = (event) => {
+        if (event.streams && event.streams[0]) {
+          setRemoteStream(event.streams[0]);
+        }
+      };
+      setPeerConnection(pc);
+      return pc;
+    } catch (error) {
+      console.error('🔊 Error creating peer connection:', error);
+      return null;
+    }
+  };
+
   // 2. In handleOffer, always ensure peer connection and add tracks
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
     console.log('🔊 Handling offer:', offer);
