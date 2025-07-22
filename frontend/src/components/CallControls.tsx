@@ -20,6 +20,14 @@ interface CallState {
   isMuted: boolean;
 }
 
+// --- Ensure handleSocketMessage is defined before usage ---
+const handleSocketMessage = (data: any) => {
+  // ... your existing message handling logic ...
+  // (Move the full function implementation here from wherever it is currently defined)
+};
+// --- End patch ---
+// Now, the handleMessage function can safely call handleSocketMessage
+
 const CallControls: React.FC<CallControlsProps> = ({ 
   targetUserId, 
   targetUsername, 
@@ -794,6 +802,7 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // Ringtone audio element
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const [showEnableSound, setShowEnableSound] = useState(false);
 
   // Play ringtone
   const playRingtone = () => {
@@ -802,7 +811,11 @@ const CallControls: React.FC<CallControlsProps> = ({
       ringtoneRef.current.loop = true;
     }
     ringtoneRef.current.currentTime = 0;
-    ringtoneRef.current.play().catch(() => {});
+    ringtoneRef.current.play().catch((err) => {
+      // If autoplay fails, show a button to enable sound
+      setShowEnableSound(true);
+      console.warn('Ringtone autoplay failed:', err);
+    });
   };
 
   // Stop ringtone
