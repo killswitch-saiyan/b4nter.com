@@ -137,21 +137,11 @@ const ChatPage: React.FC = () => {
 
   // Debug: Log current messages
   useEffect(() => {
-    console.log('Current messages state:', {
-      selectedChannel: selectedChannel?.name,
-      selectedDMUser: selectedDMUser?.username,
-      channelMessagesCount: messages.filter(msg => msg.channel_id === selectedChannel?.id).length,
-      dmMessagesCount: messages.filter(msg => 
-        (msg.recipient_id === selectedDMUser?.id || msg.sender_id === selectedDMUser?.id) && 
-        !msg.channel_id
-      ).length,
-      pendingDMMessagesCount: pendingDMMessages.length,
-      currentMessagesCount: currentMessages.length,
-      currentMessages: currentMessages.slice(-5), // Last 5 messages
-      callDuration: callDuration, // Add call duration to debug
-      isCallChannel: selectedChannel?.is_call_channel
-    });
-  }, [currentMessages, selectedChannel, selectedDMUser, messages.length, pendingDMMessages.length, callDuration]);
+    // Only log timer ticks
+    if (selectedChannel?.is_call_channel) {
+      console.log('Timer tick - Duration:', callDuration, 'seconds');
+    }
+  }, [callDuration, selectedChannel?.is_call_channel]);
 
   useEffect(() => {
     if (isDark) {

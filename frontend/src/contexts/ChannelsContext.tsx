@@ -142,32 +142,34 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   };
   // --- End Patch ---
 
-  const createCallChannelForReceiver = (channelId: string, channelName: string, callType: 'voice' | 'video', participants: string[]): Channel => {
+  const createCallChannelForReceiver = (
+    channelId: string,
+    channelName: string,
+    callType: 'voice' | 'video',
+    participants: string[]
+  ): Channel => {
     // Check if the channel already exists
     const existingChannel = channels.find(ch => ch.id === channelId);
     if (existingChannel) {
-      console.log(`Call channel ${channelId} already exists, not creating duplicate`);
       return existingChannel;
     }
-    
+
     const callChannel: Channel = {
       id: channelId,
-      name: channelName,
+      name: channelName, // <-- Use the exact name from the caller!
       description: `${callType} call - click to join`,
       is_private: true,
       created_by: participants.find(p => p !== user?.id) || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      member_count: 1, // Only the caller initially
+      member_count: 1,
       is_call_channel: true,
       call_type: callType,
-      call_participants: [participants.find(p => p !== user?.id) || ''], // Only the caller initially
+      call_participants: [participants.find(p => p !== user?.id) || ''],
       call_started_at: new Date().toISOString(),
     };
 
     setChannels(prev => [...prev, callChannel]);
-    
-    console.log(`Created ${callType} call channel for receiver:`, callChannel);
     return callChannel;
   };
 
