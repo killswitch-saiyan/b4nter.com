@@ -70,14 +70,12 @@ const CallControls: React.FC<CallControlsProps> = ({
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:stun4.l.google.com:19302' },
-      
       // Additional STUN servers for better connectivity
       { urls: 'stun:stun.stunprotocol.org:3478' },
       { urls: 'stun:stun.voiparound.com:3478' },
       { urls: 'stun:stun.voipbuster.com:3478' },
       { urls: 'stun:stun.voipstunt.com:3478' },
       { urls: 'stun:stun.voxgratia.org:3478' },
-      
       // Free TURN servers (for NAT traversal when STUN fails)
       {
         urls: 'turn:openrelay.metered.ca:80',
@@ -96,7 +94,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     ],
     iceCandidatePoolSize: 10
-  };
+  });
 
   // Fetch WebRTC configuration from backend
   useEffect(() => {
@@ -401,7 +399,7 @@ const CallControls: React.FC<CallControlsProps> = ({
             data.callType,
             data.participants
           );
-          
+          setCurrentCallChannel(data.channelId); // <-- Ensure this is set!
           // Show notification about call channel creation
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(`Call Channel Created`, {
@@ -409,7 +407,6 @@ const CallControls: React.FC<CallControlsProps> = ({
               icon: '/favicon.ico'
             });
           }
-          // You can also show a toast notification here
           toast.success(`${data.callType} call channel created! Check the sidebar.`);
         }
         break;
@@ -784,15 +781,15 @@ const CallControls: React.FC<CallControlsProps> = ({
       
       // Join the existing call channel when accepting the call
       if (currentCallChannel) {
+        const callChannel = channels.find(ch => ch.id === currentCallChannel);
+        if (!callChannel) {
+          toast.error("Call channel not ready yet. Please wait a moment and try again.");
+          return;
+        }
         console.log('🎯 Joining call channel:', currentCallChannel);
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel);
-        
-        // Switch to the call channel view
-        const callChannel = channels.find(ch => ch.id === currentCallChannel);
-        if (callChannel) {
-          setSelectedChannel(callChannel);
-        }
+        setSelectedChannel(callChannel);
       }
       
       // Get user media for the call
