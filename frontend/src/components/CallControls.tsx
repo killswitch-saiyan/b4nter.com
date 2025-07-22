@@ -61,14 +61,39 @@ const CallControls: React.FC<CallControlsProps> = ({
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // WebRTC configuration
-  const rtcConfig = {
+  // Enhanced WebRTC configuration with multiple STUN servers and TURN servers
+  const rtcConfig: RTCConfiguration = {
     iceServers: [
+      // Google STUN servers
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' }
+      { urls: 'stun:stun4.l.google.com:19302' },
+      
+      // Additional STUN servers for better connectivity
+      { urls: 'stun:stun.stunprotocol.org:3478' },
+      { urls: 'stun:stun.voiparound.com:3478' },
+      { urls: 'stun:stun.voipbuster.com:3478' },
+      { urls: 'stun:stun.voipstunt.com:3478' },
+      { urls: 'stun:stun.voxgratia.org:3478' },
+      
+      // Free TURN servers (for NAT traversal when STUN fails)
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
     ],
     iceCandidatePoolSize: 10
   };
@@ -194,20 +219,53 @@ const CallControls: React.FC<CallControlsProps> = ({
   useEffect(() => {
     if (peerConnection && peerConnection.remoteDescription && pendingIceCandidates.length > 0) {
       console.log('🔊 Processing pending ICE candidates:', pendingIceCandidates.length);
+      console.log('🔊 Peer connection state:', {
+        signalingState: peerConnection.signalingState,
+        iceConnectionState: peerConnection.iceConnectionState,
+        connectionState: peerConnection.connectionState
+      });
+      
       const processCandidates = async () => {
-        for (const candidate of pendingIceCandidates) {
+        const candidatesToProcess = [...pendingIceCandidates];
+        setPendingIceCandidates([]); // Clear immediately to prevent duplicates
+        
+        for (const candidate of candidatesToProcess) {
           try {
+            console.log('🔊 Adding pending ICE candidate:', candidate);
             await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
             console.log('🔊 Pending ICE candidate added successfully');
           } catch (error) {
             console.error('🔊 Error adding pending ICE candidate:', error);
+            // Re-add failed candidates to try again later
+            setPendingIceCandidates(prev => [...prev, candidate]);
           }
         }
-        setPendingIceCandidates([]);
       };
       processCandidates();
     }
   }, [peerConnection, pendingIceCandidates]);
+
+  // Additional effect to process candidates when remote description is set
+  useEffect(() => {
+    if (peerConnection && peerConnection.remoteDescription && pendingIceCandidates.length > 0) {
+      console.log('🔊 Remote description set, processing pending candidates:', pendingIceCandidates.length);
+      const processCandidates = async () => {
+        const candidatesToProcess = [...pendingIceCandidates];
+        setPendingIceCandidates([]);
+        
+        for (const candidate of candidatesToProcess) {
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log('🔊 Pending ICE candidate processed after remote description');
+          } catch (error) {
+            console.error('🔊 Error processing pending ICE candidate:', error);
+            setPendingIceCandidates(prev => [...prev, candidate]);
+          }
+        }
+      };
+      processCandidates();
+    }
+  }, [peerConnection?.remoteDescription, pendingIceCandidates]);
 
   // Format call duration
   const formatCallDuration = (seconds: number): string => {
@@ -231,23 +289,74 @@ const CallControls: React.FC<CallControlsProps> = ({
     if (remoteStream && remoteVideoRef.current) {
       console.log('🔊 Setting remote stream to audio/video element');
       console.log('🔊 Remote stream tracks:', remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
-      remoteVideoRef.current.srcObject = remoteStream;
       
-      // Ensure audio is enabled and playing
-      remoteVideoRef.current.onloadedmetadata = () => {
-        console.log('🔊 Remote audio/video metadata loaded');
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.play().catch(e => {
-            console.error('🔊 Error playing remote audio/video:', e);
-          });
-        }
-      };
-      
-      // For audio-only calls, ensure the audio element is properly configured
+      // For voice calls, ensure we're using an audio element
       if (!callState.isVideoEnabled) {
-        remoteVideoRef.current.muted = false;
-        remoteVideoRef.current.volume = 1.0;
-        console.log('🔊 Audio element configured for voice call');
+        const audioElement = remoteVideoRef.current as HTMLAudioElement;
+        audioElement.srcObject = remoteStream;
+        audioElement.muted = false;
+        audioElement.volume = 1.0;
+        audioElement.autoplay = true;
+        
+        console.log('🔊 Audio element configured:', {
+          muted: audioElement.muted,
+          volume: audioElement.volume,
+          autoplay: audioElement.autoplay,
+          srcObject: !!audioElement.srcObject
+        });
+        
+        // Force play the audio
+        const playAudio = async () => {
+          try {
+            console.log('🔊 Attempting to play remote audio...');
+            await audioElement.play();
+            console.log('🔊 Remote audio playing successfully');
+          } catch (error) {
+            console.error('🔊 Error playing remote audio:', error);
+            // Try again after a short delay
+            setTimeout(async () => {
+              try {
+                await audioElement.play();
+                console.log('🔊 Remote audio playing on retry');
+              } catch (retryError) {
+                console.error('🔊 Failed to play audio on retry:', retryError);
+              }
+            }, 1000);
+          }
+        };
+        
+        playAudio();
+        
+        // Add event listeners for audio
+        audioElement.onloadedmetadata = () => {
+          console.log('🔊 Remote audio metadata loaded');
+          playAudio();
+        };
+        
+        audioElement.oncanplay = () => {
+          console.log('🔊 Remote audio can play');
+          playAudio();
+        };
+        
+        audioElement.onplay = () => {
+          console.log('🔊 Remote audio started playing');
+        };
+        
+        audioElement.onerror = (e) => {
+          console.error('🔊 Remote audio error:', e);
+        };
+        
+      } else {
+        // For video calls, use video element
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.onloadedmetadata = () => {
+          console.log('🔊 Remote video metadata loaded');
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.play().catch(e => {
+              console.error('🔊 Error playing remote video:', e);
+            });
+          }
+        };
       }
     }
   }, [remoteStream, callState.isVideoEnabled]);
@@ -406,14 +515,9 @@ const CallControls: React.FC<CallControlsProps> = ({
   }, [socket, user?.id, targetUserId]);
 
   const createPeerConnection = () => {
-    console.log('🔊 Creating new peer connection');
+    console.log('🔊 Creating new peer connection with enhanced STUN/TURN config');
     try {
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-      });
+      const pc = new RTCPeerConnection(rtcConfig);
 
       pc.onicecandidate = (event) => {
         console.log('🔊 ICE candidate generated:', event.candidate);
@@ -434,6 +538,15 @@ const CallControls: React.FC<CallControlsProps> = ({
         } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
           console.log('🔊 ICE connection failed or disconnected');
           toast.error('Voice connection lost');
+        } else if (pc.iceConnectionState === 'checking') {
+          console.log('🔊 ICE connection checking - trying STUN/TURN servers');
+        }
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log('🔊 ICE gathering state:', pc.iceGatheringState);
+        if (pc.iceGatheringState === 'complete') {
+          console.log('🔊 ICE gathering complete - all candidates collected');
         }
       };
 
@@ -446,7 +559,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       };
 
       setPeerConnection(pc);
-      console.log('🔊 Peer connection created and set');
+      console.log('🔊 Peer connection created with enhanced STUN/TURN config');
       return pc;
     } catch (error) {
       console.error('🔊 Error creating peer connection:', error);
@@ -505,13 +618,23 @@ const CallControls: React.FC<CallControlsProps> = ({
         await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
         console.log('🔊 Answer processed successfully');
         
-        // Add any pending ICE candidates
+        // Add any pending ICE candidates after remote description is set
         if (pendingIceCandidates.length > 0) {
-          console.log('🔊 Adding pending ICE candidates:', pendingIceCandidates.length);
-          for (const candidate of pendingIceCandidates) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          console.log('🔊 Adding pending ICE candidates after answer:', pendingIceCandidates.length);
+          const candidatesToProcess = [...pendingIceCandidates];
+          setPendingIceCandidates([]); // Clear immediately
+          
+          for (const candidate of candidatesToProcess) {
+            try {
+              console.log('🔊 Adding pending ICE candidate after answer:', candidate);
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+              console.log('🔊 Pending ICE candidate added successfully after answer');
+            } catch (error) {
+              console.error('🔊 Error adding pending ICE candidate after answer:', error);
+              // Re-add failed candidates
+              setPendingIceCandidates(prev => [...prev, candidate]);
+            }
           }
-          setPendingIceCandidates([]);
         }
       } else {
         console.error('🔊 Peer connection not available for handling answer');
@@ -801,6 +924,117 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   };
 
+  // Debug function to log peer connection state
+  const logPeerConnectionState = () => {
+    if (peerConnection) {
+      console.log('🔊 Peer Connection State:', {
+        signalingState: peerConnection.signalingState,
+        iceConnectionState: peerConnection.iceConnectionState,
+        connectionState: peerConnection.connectionState,
+        iceGatheringState: peerConnection.iceGatheringState,
+        hasRemoteDescription: !!peerConnection.remoteDescription,
+        hasLocalDescription: !!peerConnection.localDescription,
+        pendingCandidates: pendingIceCandidates.length
+      });
+    } else {
+      console.log('🔊 No peer connection available');
+    }
+  };
+
+  // Log peer connection state changes
+  useEffect(() => {
+    if (peerConnection) {
+      const logState = () => {
+        console.log('🔊 Peer connection state changed:', {
+          signalingState: peerConnection.signalingState,
+          iceConnectionState: peerConnection.iceConnectionState,
+          connectionState: peerConnection.connectionState
+        });
+      };
+      
+      peerConnection.onsignalingstatechange = logState;
+      peerConnection.oniceconnectionstatechange = logState;
+      peerConnection.onconnectionstatechange = logState;
+      
+      return () => {
+        peerConnection.onsignalingstatechange = null;
+        peerConnection.oniceconnectionstatechange = null;
+        peerConnection.onconnectionstatechange = null;
+      };
+    }
+  }, [peerConnection]);
+
+  // Test audio function to help debug
+  const testAudio = () => {
+    console.log('🔊 Testing audio setup...');
+    console.log('🔊 Remote stream:', remoteStream);
+    console.log('🔊 Remote stream tracks:', remoteStream?.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
+    console.log('🔊 Audio element:', remoteVideoRef.current);
+    
+    if (remoteVideoRef.current && !callState.isVideoEnabled) {
+      const audioElement = remoteVideoRef.current as HTMLAudioElement;
+      console.log('🔊 Audio element properties:', {
+        muted: audioElement.muted,
+        volume: audioElement.volume,
+        autoplay: audioElement.autoplay,
+        srcObject: !!audioElement.srcObject,
+        readyState: audioElement.readyState,
+        paused: audioElement.paused
+      });
+      
+      // Try to play audio
+      audioElement.play().then(() => {
+        console.log('🔊 Audio test successful - audio is playing');
+      }).catch(error => {
+        console.error('🔊 Audio test failed:', error);
+      });
+    }
+  };
+
+  // Test STUN/TURN connectivity
+  const testStunTurnConnectivity = () => {
+    console.log('🔊 Testing STUN/TURN connectivity...');
+    
+    if (peerConnection) {
+      console.log('🔊 Current ICE connection state:', peerConnection.iceConnectionState);
+      console.log('🔊 Current ICE gathering state:', peerConnection.iceGatheringState);
+      console.log('🔊 Current connection state:', peerConnection.connectionState);
+      
+      // Get local and remote descriptions
+      console.log('🔊 Local description:', peerConnection.localDescription);
+      console.log('🔊 Remote description:', peerConnection.remoteDescription);
+      
+      // Log ICE candidates info
+      console.log('🔊 ICE gathering state:', peerConnection.iceGatheringState);
+      console.log('🔊 ICE connection state:', peerConnection.iceConnectionState);
+    } else {
+      console.log('🔊 No peer connection available for testing');
+    }
+  };
+
+  // Add test button to UI for debugging
+  const renderTestButton = () => {
+    if (callState.isConnected && !callState.isVideoEnabled) {
+      return (
+        <div className="absolute top-4 right-4 flex gap-2">
+          <button
+            onClick={testAudio}
+            className="bg-blue-500 text-white px-3 py-1 rounded text-sm z-10"
+          >
+            Test Audio
+          </button>
+          <button
+            onClick={testStunTurnConnectivity}
+            className="bg-green-500 text-white px-3 py-1 rounded text-sm z-10"
+          >
+            Test STUN/TURN
+          </button>
+        </div>
+      );
+    }
+    return null;
+  };
+
   // Incoming call UI
   if (callState.isIncoming) {
     return (
@@ -837,19 +1071,21 @@ const CallControls: React.FC<CallControlsProps> = ({
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div className="relative w-full h-full max-w-4xl max-h-[80vh]">
+          {renderTestButton()}
+          
           {/* Hidden audio element for voice calls */}
           {!callState.isVideoEnabled && remoteStream && (
             <audio
               ref={remoteVideoRef}
               autoPlay
-              playsInline
               muted={false}
               style={{ display: 'none' }}
               onLoadedMetadata={() => {
                 console.log('🔊 Voice call audio element loaded');
                 if (remoteVideoRef.current) {
-                  remoteVideoRef.current.volume = 1.0;
-                  remoteVideoRef.current.play().catch(e => {
+                  const audioElement = remoteVideoRef.current as HTMLAudioElement;
+                  audioElement.volume = 1.0;
+                  audioElement.play().catch(e => {
                     console.error('🔊 Error playing voice call audio:', e);
                   });
                 }
@@ -857,7 +1093,8 @@ const CallControls: React.FC<CallControlsProps> = ({
               onCanPlay={() => {
                 console.log('🔊 Voice call audio can play');
                 if (remoteVideoRef.current) {
-                  remoteVideoRef.current.play().catch(e => {
+                  const audioElement = remoteVideoRef.current as HTMLAudioElement;
+                  audioElement.play().catch(e => {
                     console.error('🔊 Error playing voice call audio:', e);
                   });
                 }
