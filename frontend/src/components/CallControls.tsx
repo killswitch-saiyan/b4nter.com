@@ -96,7 +96,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     ],
     iceCandidatePoolSize: 10
-  });
+  };
 
   // Fetch WebRTC configuration from backend
   useEffect(() => {
