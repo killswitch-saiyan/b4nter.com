@@ -806,13 +806,14 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // Play ringtone
   const playRingtone = () => {
+    console.log("Playing ringtone"); // Add this
     if (!ringtoneRef.current) {
       ringtoneRef.current = new Audio('/ringtone.mp3');
       ringtoneRef.current.loop = true;
     }
+    ringtoneRef.current.volume = 1.0;
     ringtoneRef.current.currentTime = 0;
     ringtoneRef.current.play().catch((err) => {
-      // If autoplay fails, show a button to enable sound
       setShowEnableSound(true);
       console.warn('Ringtone autoplay failed:', err);
     });
