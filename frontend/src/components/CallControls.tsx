@@ -538,7 +538,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         // Wait for the call channel to appear in the channels list
         let callChannel = channels.find(ch => ch.id === currentCallChannel);
         if (!callChannel) {
-          for (let i = 0; i < 10; i++) {
+          for (let i = 0; i < 20; i++) { // Try for up to 2 seconds
             await new Promise(res => setTimeout(res, 100));
             callChannel = channels.find(ch => ch.id === currentCallChannel);
             if (callChannel) break;
