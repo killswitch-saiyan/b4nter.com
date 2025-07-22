@@ -61,13 +61,8 @@ const CallControls: React.FC<CallControlsProps> = ({
   const timerIntervalRef = useRef<number | null>(null);
   const audioLevelIntervalRef = useRef<number | null>(null);
 
-<<<<<<< HEAD
-  // Enhanced WebRTC configuration with multiple STUN servers and TURN servers
-  const rtcConfig: RTCConfiguration = {
-=======
   // WebRTC configuration - will be fetched from backend
-  const [rtcConfig, setRtcConfig] = useState<RTCConfiguration>({
->>>>>>> b319df9c7f22164a2385883c7782bc6422c9ff84
+  const rtcConfig  : RTCConfiguration = {
     iceServers: [
       // Google STUN servers
       { urls: 'stun:stun.l.google.com:19302' },
@@ -545,14 +540,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   const createPeerConnection = () => {
     console.log('🔊 Creating new peer connection with enhanced STUN/TURN config');
     try {
-<<<<<<< HEAD
       const pc = new RTCPeerConnection(rtcConfig);
-=======
-      const pc = new RTCPeerConnection({
-        iceServers: rtcConfig.iceServers
-      });
->>>>>>> b319df9c7f22164a2385883c7782bc6422c9ff84
-
       pc.onicecandidate = (event) => {
         console.log('🔊 ICE candidate generated:', event.candidate);
         if (event.candidate && socket) {
