@@ -929,7 +929,8 @@ const ChatPage: React.FC = () => {
               <div className="text-sm text-gray-500">Loading channels...</div>
             ) : (
               <div className="space-y-2">
-                {channels.filter(channel => channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
+                {/* Regular Channels */}
+                {channels.filter(channel => !channel.is_call_channel && channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
                   <button
                     key={channel.id}
                     onClick={() => setSelectedChannel(channel)}
@@ -937,25 +938,33 @@ const ChatPage: React.FC = () => {
                       selectedChannel?.id === channel.id 
                         ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' 
                         : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'
-                    } ${
-                      channel.is_call_channel 
-                        ? 'border-l-4 border-green-500 bg-green-50 dark:bg-green-900/20' 
-                        : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span># {channel.name}</span>
-                      {channel.is_call_channel && (
-                        <span className="text-xs text-green-600 dark:text-green-400">
-                          {channel.member_count} online
-                        </span>
-                      )}
                     </div>
-                    {channel.is_call_channel && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {channel.call_type === 'voice' ? '🔊 Voice Call' : '📹 Video Call'}
-                      </div>
-                    )}
+                  </button>
+                ))}
+                {/* Call Channels */}
+                {channels.filter(channel => channel.is_call_channel && channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
+                  <button
+                    key={channel.id}
+                    onClick={() => setSelectedChannel(channel)}
+                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors border-l-4 border-green-500 bg-green-50 dark:bg-green-900/20 ${
+                      selectedChannel?.id === channel.id 
+                        ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' 
+                        : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span># {channel.name}</span>
+                      <span className="text-xs text-green-600 dark:text-green-400">
+                        {channel.member_count} online
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {channel.call_type === 'voice' ? '🔊 Voice Call' : '📹 Video Call'}
+                    </div>
                   </button>
                 ))}
               </div>

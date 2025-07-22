@@ -122,10 +122,9 @@ const CallControls: React.FC<CallControlsProps> = ({
   // --- Ensure handleSocketMessage is defined before usage ---
   const handleSocketMessage = (data: any) => {
     if (data.type === 'call_channel_created' && data.to === user?.id) {
-      // Check if the channel already exists
       let callChannel = channels.find(ch => ch.id === data.channelId);
       if (!callChannel) {
-        // Create the call channel locally using the exact channelId and channelName from the caller
+        // Use the exact name from the caller!
         callChannel = createCallChannelForReceiver(
           data.channelId,
           data.channelName,
@@ -133,8 +132,9 @@ const CallControls: React.FC<CallControlsProps> = ({
           data.participants
         );
       }
-      setCurrentCallChannel(data.channelId); // Set to the caller's channelId
-      setSelectedChannel(callChannel); // Switch to the call channel
+      setCurrentCallChannel(data.channelId);
+      setSelectedChannel(callChannel);
+      joinCallChannel(data.channelId, user?.id || ''); // Ensure receiver is added as participant
       return;
     }
   };
