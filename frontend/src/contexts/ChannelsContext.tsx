@@ -91,10 +91,39 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     await fetchChannels();
   };
 
+  // --- Sequential Video Channel Naming with Daily Reset ---
+  function getTodayString() {
+    const today = new Date();
+    return today.toISOString().slice(0, 10); // YYYY-MM-DD
+  }
+
+  function getNextVideoChannelName() {
+    const today = getTodayString();
+    const key = 'videoChannelIndex';
+    const dateKey = 'videoChannelDate';
+    let index = 1;
+    let lastDate = localStorage.getItem(dateKey);
+    if (lastDate !== today) {
+      localStorage.setItem(dateKey, today);
+      localStorage.setItem(key, '1');
+      return 'video-channel-1';
+    }
+    let lastIndex = parseInt(localStorage.getItem(key) || '1', 10);
+    index = lastIndex + 1;
+    localStorage.setItem(key, index.toString());
+    return `video-channel-${index}`;
+  }
+
   const createCallChannel = (callType: 'voice' | 'video', participants: string[]): Channel => {
+    let channelName = '';
+    if (callType === 'video') {
+      channelName = getNextVideoChannelName();
+    } else {
+      channelName = `${callType === 'voice' ? 'voice-channel' : 'call'}-${Date.now()}`;
+    }
     const callChannel: Channel = {
       id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: `${callType === 'voice' ? '🔊' : '📹'} ${callType.charAt(0).toUpperCase() + callType.slice(1)} Call`,
+      name: `# ${channelName}`,
       description: `${callType} call - waiting for others to join`,
       is_private: true,
       created_by: user?.id || '',
@@ -106,13 +135,12 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       call_participants: [user?.id || ''], // Only the caller initially
       call_started_at: new Date().toISOString(),
     };
-
     setChannels(prev => [...prev, callChannel]);
     setSelectedChannel(callChannel);
-    
     console.log(`Created ${callType} call channel:`, callChannel);
     return callChannel;
   };
+  // --- End Patch ---
 
   const createCallChannelForReceiver = (channelId: string, channelName: string, callType: 'voice' | 'video', participants: string[]): Channel => {
     // Check if the channel already exists

@@ -300,11 +300,27 @@ const CallControls: React.FC<CallControlsProps> = ({
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // --- Robust Video Call UI Patch ---
+  // 1. When a call is active, ensure the call channel is always present in the sidebar (handled by ChannelsContext)
+  // 2. Always attach local video stream to localVideoRef
   useEffect(() => {
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
     }
   }, [localStream]);
+  // 3. Always attach remote video stream to remoteVideoRef
+  useEffect(() => {
+    if (remoteStream && remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      if (callState.isVideoEnabled) {
+        remoteVideoRef.current.onloadedmetadata = () => {
+          remoteVideoRef.current?.play().catch(() => {});
+        };
+      }
+    }
+  }, [remoteStream, callState.isVideoEnabled]);
+  // 4. Ensure the call UI is visible for both users when callState.isConnected is true (already handled in render)
+  // --- End Patch ---
 
   // --- Robust Video Call Logic Patch ---
 
