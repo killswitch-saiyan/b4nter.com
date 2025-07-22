@@ -58,11 +58,16 @@ const CallControls: React.FC<CallControlsProps> = ({
   const remoteAudioContextRef = useRef<AudioContext | null>(null);
   const localAnalyserRef = useRef<AnalyserNode | null>(null);
   const remoteAnalyserRef = useRef<AnalyserNode | null>(null);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
+  const audioLevelIntervalRef = useRef<number | null>(null);
 
+<<<<<<< HEAD
   // Enhanced WebRTC configuration with multiple STUN servers and TURN servers
   const rtcConfig: RTCConfiguration = {
+=======
+  // WebRTC configuration - will be fetched from backend
+  const [rtcConfig, setRtcConfig] = useState<RTCConfiguration>({
+>>>>>>> b319df9c7f22164a2385883c7782bc6422c9ff84
     iceServers: [
       // Google STUN servers
       { urls: 'stun:stun.l.google.com:19302' },
@@ -96,7 +101,30 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     ],
     iceCandidatePoolSize: 10
-  };
+  });
+
+  // Fetch WebRTC configuration from backend
+  useEffect(() => {
+    const fetchWebRTCConfig = async () => {
+      try {
+        // Get the backend URL from the current environment
+        const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/webrtc-config`);
+        if (response.ok) {
+          const config = await response.json();
+          console.log('🔊 Fetched WebRTC config from backend:', config);
+          setRtcConfig(config);
+        } else {
+          console.warn('🔊 Failed to fetch WebRTC config, using fallback');
+        }
+      } catch (error) {
+        console.error('🔊 Error fetching WebRTC config:', error);
+        console.log('🔊 Using fallback WebRTC configuration');
+      }
+    };
+
+    fetchWebRTCConfig();
+  }, []);
 
   useEffect(() => {
     if (socket) {
@@ -517,7 +545,13 @@ const CallControls: React.FC<CallControlsProps> = ({
   const createPeerConnection = () => {
     console.log('🔊 Creating new peer connection with enhanced STUN/TURN config');
     try {
+<<<<<<< HEAD
       const pc = new RTCPeerConnection(rtcConfig);
+=======
+      const pc = new RTCPeerConnection({
+        iceServers: rtcConfig.iceServers
+      });
+>>>>>>> b319df9c7f22164a2385883c7782bc6422c9ff84
 
       pc.onicecandidate = (event) => {
         console.log('🔊 ICE candidate generated:', event.candidate);

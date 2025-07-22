@@ -37,17 +37,30 @@ async def root():
 
 @app.get("/health")
 async def health_check():
+    """Health check endpoint"""
     try:
-        from database import db
-        users = await db.get_all_users()
-        return {
-            "status": "healthy", 
-            "database": "connected",
-            "users_count": len(users) if users else 0
-        }
+        # Add any health checks here
+        return {"status": "healthy"}
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
         return {"status": "unhealthy", "error": str(e)}
+
+
+@app.get("/webrtc-config")
+async def get_webrtc_config():
+    """Get WebRTC configuration with STUN/TURN servers"""
+    return {
+        "iceServers": [
+            {
+                "urls": [
+                    "stun:stun.l.google.com:19302",
+                    "stun:stun1.l.google.com:19302",
+                    "stun:stun2.l.google.com:19302",
+                    "stun:stun3.l.google.com:19302",
+                    "stun:stun4.l.google.com:19302"
+                ]
+            }
+        ]
+    }
 
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
