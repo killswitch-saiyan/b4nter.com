@@ -254,6 +254,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     }, 200);
   };
 
+  // --- Fix call channel removal and selection logic ---
   const leaveCallChannel = (channelId: string, userId: string) => {
     setChannels(prev => {
       const channel = prev.find(ch => ch.id === channelId && ch.is_call_channel);
@@ -262,12 +263,13 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       const updatedParticipants = participants.filter(id => id !== userId);
       // Only remove the channel if there are truly no participants left
       if (updatedParticipants.length === 0) {
-        console.log(`Removing call channel ${channelId} - no participants left`);
         // If the removed channel was selected, select the first available channel
-        if (selectedChannel?.id === channelId) {
-          const remainingChannels = prev.filter(ch => ch.id !== channelId);
-          setSelectedChannel(remainingChannels.length > 0 ? remainingChannels[0] : null);
-        }
+        setTimeout(() => {
+          setSelectedChannel(prevChannels => {
+            const remainingChannels = prev.filter(ch => ch.id !== channelId);
+            return remainingChannels.length > 0 ? remainingChannels[0] : null;
+          });
+        }, 0);
         return prev.filter(ch => ch.id !== channelId);
       }
       // Otherwise, update the participants list
@@ -284,6 +286,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       });
     });
   };
+  // --- End patch ---
 
   useEffect(() => {
     if (user) {

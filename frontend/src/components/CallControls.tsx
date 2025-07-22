@@ -515,24 +515,28 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   };
 
-  // 5. In acceptCall, always attach local video stream
+  // --- Fix call accept and ringtone logic ---
   const acceptCall = async () => {
     try {
       stopRingtone();
-      console.log('🎯 Accepting call');
       setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
-      
-      // Join the existing call channel when accepting the call
       if (currentCallChannel) {
-        const callChannel = channels.find(ch => ch.id === currentCallChannel);
+        // Wait for the call channel to appear in the channels list
+        let callChannel = channels.find(ch => ch.id === currentCallChannel);
+        if (!callChannel) {
+          for (let i = 0; i < 10; i++) {
+            await new Promise(res => setTimeout(res, 100));
+            callChannel = channels.find(ch => ch.id === currentCallChannel);
+            if (callChannel) break;
+          }
+        }
         if (!callChannel) {
           toast.error("Call channel not ready yet. Please wait a moment and try again.");
           return;
         }
-        console.log('🎯 Joining call channel:', currentCallChannel);
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel);
-        setSelectedChannel(callChannel);
+        setSelectedChannel(callChannel); // Always set selected channel after accepting
       }
       
       // Get user media for the call
@@ -585,6 +589,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       alert('Could not access camera/microphone. Please check permissions.');
     }
   };
+  // --- End patch ---
 
   const rejectCall = () => {
     stopRingtone();
