@@ -54,6 +54,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   const [pendingIceCandidates, setPendingIceCandidates] = useState<RTCIceCandidateInit[]>([]);
   const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
   const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
+  const [isAcceptingCall, setIsAcceptingCall] = useState(false);
   
   // Call timer and voice activity detection
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
@@ -131,6 +132,7 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // --- Ensure handleSocketMessage is defined before usage ---
   const handleSocketMessage = (data: any) => {
+    console.log('[CallControls] 🎯 Processing message:', data.type, data);
     if (data.type === 'call_channel_created' && data.to === user?.id) {
       let callChannel = channels.find(ch => ch.id === data.channelId);
       if (!callChannel) {
@@ -158,10 +160,14 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
     // --- Handle WebRTC signaling messages ---
     if (data.type === 'webrtc_offer' && data.offer) {
-      console.log('📡 Received WebRTC offer:', data);
+      console.log('📡 Received WebRTC offer directly:', data);
       setPendingOffer(data.offer); // Store for acceptCall
-      // Optionally auto-accept if desired
-      // handleOffer(data.offer);
+      return;
+    }
+    // Handle call_incoming which contains the offer
+    if (data.type === 'call_incoming' && data.offer) {
+      console.log('📡 Received call_incoming with offer:', data);
+      setPendingOffer(data.offer); // Store for acceptCall
       return;
     }
     if (data.type === 'webrtc_answer' && data.answer) {
@@ -170,18 +176,26 @@ const CallControls: React.FC<CallControlsProps> = ({
       return;
     }
     if (data.type === 'webrtc_ice_candidate' && data.candidate) {
-      console.log('📡 Received ICE candidate:', data);
+      console.log('📡 Received ICE candidate:', data.candidate);
+      console.log('📡 Peer connection exists:', !!peerConnection);
       console.log('📡 Peer connection state:', peerConnection?.signalingState);
       console.log('📡 Has remote description:', !!peerConnection?.remoteDescription);
+      console.log('📡 Pending candidates count:', pendingIceCandidates.length);
       
       if (peerConnection && peerConnection.remoteDescription) {
-        console.log('📡 Adding ICE candidate immediately');
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => {
-          console.error('📡 Error adding ICE candidate:', e);
+        console.log('📡 ✅ Adding ICE candidate immediately');
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).then(() => {
+          console.log('📡 ✅ ICE candidate added successfully');
+        }).catch(e => {
+          console.error('📡 ❌ Error adding ICE candidate:', e);
         });
       } else {
-        console.log('📡 Storing ICE candidate for later');
-        setPendingIceCandidates(prev => [...prev, data.candidate]);
+        console.log('📡 ⏳ Storing ICE candidate for later (no peer connection or no remote description)');
+        setPendingIceCandidates(prev => {
+          const newCandidates = [...prev, data.candidate];
+          console.log('📡 ⏳ Total pending candidates:', newCandidates.length);
+          return newCandidates;
+        });
       }
       return;
     }
@@ -192,10 +206,14 @@ const CallControls: React.FC<CallControlsProps> = ({
   // Register WebRTC message handler with WebSocket context
   useEffect(() => {
     if (onWebRTCMessage) {
+      console.log('[CallControls] 🔧 Registering WebRTC message handler for target:', targetUserId);
       onWebRTCMessage(handleSocketMessage);
-      return () => onWebRTCMessage(null);
+      return () => {
+        console.log('[CallControls] 🔧 Unregistering WebRTC message handler for target:', targetUserId);
+        onWebRTCMessage(null);
+      };
     }
-  }, [onWebRTCMessage]);
+  }, [onWebRTCMessage, targetUserId]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {
@@ -448,9 +466,11 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const createPeerConnection = () => {
-    console.log('[WebRTC] Creating new peer connection with config:', rtcConfig);
+    console.log('[WebRTC] 🔧 Creating new peer connection with config:', rtcConfig);
+    console.log('[WebRTC] 🔧 Current peer connection state before creation:', peerConnection?.signalingState || 'none');
     try {
       const pc = new RTCPeerConnection(rtcConfig);
+      console.log('[WebRTC] 🔧 New peer connection created successfully');
       pc.onicecandidate = (event) => {
         if (event.candidate && socket) {
           console.log('[WebRTC] Sending ICE candidate:', event.candidate);
@@ -466,6 +486,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           console.log('[WebRTC] ✅ Connection established successfully!');
           setCallState(prev => ({ ...prev, isConnected: true, isOutgoing: false, isIncoming: false }));
+          setIsAcceptingCall(false); // Reset accepting flag
           toast.success('Connection established!');
           
           // Ensure both users appear in the call channel UI
@@ -475,6 +496,7 @@ const CallControls: React.FC<CallControlsProps> = ({
           }
         } else if (pc.iceConnectionState === 'failed') {
           console.error('[WebRTC] ❌ Connection failed');
+          setIsAcceptingCall(false); // Reset accepting flag on failure
           toast.error('Connection failed - please try again');
         } else if (pc.iceConnectionState === 'disconnected') {
           console.warn('[WebRTC] ⚠️ Connection lost');
@@ -683,6 +705,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   // --- Fix call accept and ringtone logic ---
   const acceptCall = async () => {
     try {
+      console.log('[CallControls] 🎯 Starting call acceptance process');
       stopRingtone();
       setCallState(prev => ({ ...prev, isIncoming: false })); // Don't set connected yet
       if (currentCallChannel) {
@@ -726,6 +749,11 @@ const CallControls: React.FC<CallControlsProps> = ({
       // Create peer connection and handle the offer
       if (pendingOffer) {
         console.log('[CallControls] 🎯 Creating peer connection for incoming call');
+        console.log('[CallControls] 🎯 Pending offer details:', {
+          type: pendingOffer.type,
+          sdpLength: pendingOffer.sdp?.length || 0
+        });
+        
         const pc = createPeerConnection();
         
         if (pc) {
@@ -734,12 +762,19 @@ const CallControls: React.FC<CallControlsProps> = ({
             console.log('[CallControls] 🎯 Adding track to peer connection:', track.kind, track.enabled);
             pc.addTrack(track, stream);
           });
+          
+          console.log('[CallControls] 🎯 Peer connection senders after adding tracks:', 
+            pc.getSenders().map(sender => ({
+              track: sender.track ? {kind: sender.track.kind, enabled: sender.track.enabled} : null
+            }))
+          );
 
           // Handle the incoming offer
-          console.log('[CallControls] 🎯 Handling incoming offer:', pendingOffer);
+          console.log('[CallControls] 🎯 Handling incoming offer now...');
           console.log('[CallControls] 🎯 Local tracks being sent:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
           await handleOffer(pendingOffer);
           setPendingOffer(null);
+          console.log('[CallControls] 🎯 Offer handling completed');
         }
       }
       
@@ -754,6 +789,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     } catch (error) {
       console.error('[CallControls] 🎯 Error accepting call:', error);
+      setIsAcceptingCall(false);
       alert('Could not access camera/microphone. Please check permissions.');
     }
   };
@@ -765,14 +801,22 @@ const CallControls: React.FC<CallControlsProps> = ({
       acceptedCall &&
       acceptedCall.offer &&
       !callState.isConnected &&
+      !callState.isIncoming &&
+      !callState.isOutgoing &&
+      !isAcceptingCall &&
       (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
     ) {
-      console.log('[CallControls] Auto-accepting call with offer:', acceptedCall.offer);
+      console.log('[CallControls] 🎯 Auto-accepting call with offer:', acceptedCall.offer);
+      console.log('[CallControls] 🎯 Current call state:', callState);
+      console.log('[CallControls] 🎯 Current call channel:', currentCallChannel);
+      console.log('[CallControls] 🎯 Accepted call channel:', acceptedCall.channelId);
+      
+      setIsAcceptingCall(true);
       setPendingOffer(acceptedCall.offer);
       acceptCall();
     }
     // eslint-disable-next-line
-  }, [acceptedCall, callState.isConnected, currentCallChannel]);
+  }, [acceptedCall, callState, currentCallChannel, isAcceptingCall]);
 
   const rejectCall = () => {
     stopRingtone();
