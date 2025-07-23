@@ -831,7 +831,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   // --- Fix call accept and ringtone logic ---
-  const acceptCall = async () => {
+  const acceptCall = async (offer?: RTCSessionDescriptionInit) => {
     try {
       console.log('[CallControls] Starting call acceptance process');
       stopRingtone();
@@ -886,24 +886,31 @@ const CallControls: React.FC<CallControlsProps> = ({
       }));
 
       // Create peer connection and handle the offer
-      if (pendingOffer) {
-        console.log('[CallControls] Creating peer connection for incoming call');
+      const offerToProcess = offer || pendingOffer;
+      if (offerToProcess) {
+        console.log('🔧 [DEBUG] [ACCEPT] Creating peer connection for incoming call');
+        console.log('🔧 [DEBUG] [ACCEPT] Offer source:', offer ? 'parameter' : 'pending state');
         
         const pc = createPeerConnection();
         
         if (pc) {
+          console.log('🔧 [DEBUG] [ACCEPT] Adding local tracks to peer connection');
           // Add local tracks to peer connection
           stream.getTracks().forEach(track => {
-            console.log('[CallControls] Adding track to peer connection:', track.kind, track.enabled);
+            console.log('🔧 [DEBUG] [ACCEPT] Adding track:', track.kind, track.enabled);
             pc.addTrack(track, stream);
           });
 
           // Handle the incoming offer
-          console.log('[CallControls] Handling incoming offer now...');
-          await handleOffer(pendingOffer);
+          console.log('🔧 [DEBUG] [ACCEPT] Handling incoming offer now...');
+          await handleOffer(offerToProcess);
           setPendingOffer(null);
-          console.log('[CallControls] Offer handling completed');
+          console.log('🔧 [DEBUG] [ACCEPT] ✅ Offer handling completed');
+        } else {
+          console.error('🔧 [DEBUG] [ACCEPT] ❌ Failed to create peer connection');
         }
+      } else {
+        console.error('🔧 [DEBUG] [ACCEPT] ❌ No offer to process');
       }
       
       // Send call accepted message with channel info
@@ -935,13 +942,18 @@ const CallControls: React.FC<CallControlsProps> = ({
       !hasAutoAccepted &&
       (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
     ) {
-      console.log('[CallControls] Auto-accepting call with offer');
+      console.log('🔧 [DEBUG] Auto-accepting call with offer');
+      console.log('🔧 [DEBUG] Offer details:', {
+        type: acceptedCall.offer?.type,
+        hasOffer: !!acceptedCall.offer,
+        channelId: acceptedCall.channelId
+      });
       
       setIsAcceptingCall(true);
       setHasAutoAccepted(true);
       setPendingOffer(acceptedCall.offer);
       setCurrentCallChannel(acceptedCall.channelId);
-      acceptCall();
+      acceptCall(acceptedCall.offer); // Pass offer directly to avoid race condition
     }
   }, [acceptedCall, callState.isConnected, callState.isIncoming, callState.isOutgoing, isAcceptingCall, hasAutoAccepted, currentCallChannel]);
 
