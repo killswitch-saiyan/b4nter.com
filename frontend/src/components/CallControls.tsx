@@ -55,6 +55,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
   const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
   const [isAcceptingCall, setIsAcceptingCall] = useState(false);
+  const [hasAutoAccepted, setHasAutoAccepted] = useState(false);
   
   // Call timer and voice activity detection
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
@@ -463,6 +464,7 @@ const CallControls: React.FC<CallControlsProps> = ({
           }
         } else if (pc.iceConnectionState === 'failed') {
           setIsAcceptingCall(false);
+          setHasAutoAccepted(false);
           toast.error('Connection failed - please try again');
         } else if (pc.iceConnectionState === 'disconnected') {
           toast.error('Connection lost');
@@ -646,7 +648,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   // --- Fix call accept and ringtone logic ---
   const acceptCall = async () => {
     try {
-      console.log('[CallControls] 🎯 Starting call acceptance process');
+      console.log('[CallControls] Starting call acceptance process');
       stopRingtone();
       setCallState(prev => ({ ...prev, isIncoming: false })); // Don't set connected yet
       if (currentCallChannel) {
@@ -664,18 +666,18 @@ const CallControls: React.FC<CallControlsProps> = ({
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel);
         setSelectedChannel(callChannel); // Always set selected channel after accepting
-        console.log('[CallControls] ✅ Joined call channel and participant list updated:', callChannel.call_participants);
+        console.log('[CallControls] Joined call channel and participant list updated:', callChannel.call_participants);
       }
       
       // Get user media for the call - check if the call is actually a video call
-      console.log('[CallControls] 🎯 Requesting user media...');
+      console.log('[CallControls] Requesting user media...');
       const isVideoCall = acceptedCall?.isVideo || false;
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: isVideoCall
       });
       
-      console.log('[CallControls] 🎯 Got user media stream:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
+      console.log('[CallControls] Got user media stream:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
       
       // Set up voice activity detection for local audio
       setupVoiceActivityDetection(stream, true);
@@ -718,7 +720,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         }));
       }
     } catch (error) {
-      console.error('[CallControls] 🎯 Error accepting call:', error);
+      console.error('[CallControls] Error accepting call:', error);
       setIsAcceptingCall(false);
       alert('Could not access camera/microphone. Please check permissions.');
     }
@@ -734,19 +736,18 @@ const CallControls: React.FC<CallControlsProps> = ({
       !callState.isIncoming &&
       !callState.isOutgoing &&
       !isAcceptingCall &&
+      !hasAutoAccepted &&
       (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
     ) {
-      console.log('[CallControls] 🎯 Auto-accepting call with offer:', acceptedCall.offer);
-      console.log('[CallControls] 🎯 Current call state:', callState);
-      console.log('[CallControls] 🎯 Current call channel:', currentCallChannel);
-      console.log('[CallControls] 🎯 Accepted call channel:', acceptedCall.channelId);
+      console.log('[CallControls] Auto-accepting call with offer');
       
       setIsAcceptingCall(true);
+      setHasAutoAccepted(true);
       setPendingOffer(acceptedCall.offer);
+      setCurrentCallChannel(acceptedCall.channelId);
       acceptCall();
     }
-    // eslint-disable-next-line
-  }, [acceptedCall, callState, currentCallChannel, isAcceptingCall]);
+  }, [acceptedCall, callState.isConnected, callState.isIncoming, callState.isOutgoing, isAcceptingCall, hasAutoAccepted, currentCallChannel]);
 
   const rejectCall = () => {
     stopRingtone();
@@ -801,6 +802,10 @@ const CallControls: React.FC<CallControlsProps> = ({
       isAudioEnabled: false,
       isMuted: false
     });
+    
+    // Reset flags
+    setIsAcceptingCall(false);
+    setHasAutoAccepted(false);
     
     // Clear call timer and active channel
     setCallDuration(0);
