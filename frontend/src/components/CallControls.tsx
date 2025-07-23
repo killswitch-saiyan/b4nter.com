@@ -384,6 +384,9 @@ const CallControls: React.FC<CallControlsProps> = ({
       pc.ontrack = (event) => {
         if (event.streams && event.streams[0]) {
           setRemoteStream(event.streams[0]);
+          console.log('✅ Remote stream received and set:', event.streams[0]);
+        } else {
+          console.warn('⚠️ ontrack called but no streams found');
         }
       };
       setPeerConnection(pc);
@@ -535,22 +538,21 @@ const CallControls: React.FC<CallControlsProps> = ({
       stopRingtone();
       setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
       if (currentCallChannel) {
-        // Wait for the call channel to appear in the channels list
+        // Wait for the call channel to appear in the channels list and for the user to be a participant
         let callChannel = channels.find(ch => ch.id === currentCallChannel);
-        if (!callChannel) {
-          for (let i = 0; i < 20; i++) { // Try for up to 2 seconds
-            await new Promise(res => setTimeout(res, 100));
-            callChannel = channels.find(ch => ch.id === currentCallChannel);
-            if (callChannel) break;
-          }
+        for (let i = 0; i < 30; i++) { // Try for up to 3 seconds
+          await new Promise(res => setTimeout(res, 100));
+          callChannel = channels.find(ch => ch.id === currentCallChannel);
+          if (callChannel && callChannel.call_participants?.includes(user?.id || '')) break;
         }
-        if (!callChannel) {
+        if (!callChannel || !callChannel.call_participants?.includes(user?.id || '')) {
           toast.error("Call channel not ready yet. Please wait a moment and try again.");
           return;
         }
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel);
         setSelectedChannel(callChannel); // Always set selected channel after accepting
+        console.log('✅ Joined call channel and participant list updated:', callChannel.call_participants);
       }
       
       // Get user media for the call
