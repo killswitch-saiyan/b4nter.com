@@ -368,15 +368,24 @@ const CallControls: React.FC<CallControlsProps> = ({
     if (remoteStream && remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = remoteStream;
       console.log('[WebRTC] Remote stream attached to remoteVideoRef:', remoteStream);
-      if (callState.isVideoEnabled) {
-        remoteVideoRef.current.onloadedmetadata = () => {
-          remoteVideoRef.current?.play().catch(e => {
-            console.error('[WebRTC] Error playing remote video:', e);
+      
+      // Force play for both video and audio
+      remoteVideoRef.current.onloadedmetadata = () => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.play().catch(e => {
+            console.error('[WebRTC] Error playing remote stream:', e);
           });
-        };
+        }
+      };
+      
+      // Also try to play immediately if metadata is already loaded
+      if (remoteVideoRef.current.readyState >= 1) {
+        remoteVideoRef.current.play().catch(e => {
+          console.error('[WebRTC] Error playing remote stream immediately:', e);
+        });
       }
     }
-  }, [remoteStream, callState.isVideoEnabled]);
+  }, [remoteStream]);
   // 4. Ensure the call UI is visible for both users when callState.isConnected is true (already handled in render)
   // --- End Patch ---
 
@@ -421,11 +430,21 @@ const CallControls: React.FC<CallControlsProps> = ({
       };
       pc.ontrack = (event) => {
         console.log('[WebRTC] ontrack event:', event);
+        console.log('[WebRTC] Track kind:', event.track.kind);
+        console.log('[WebRTC] Track enabled:', event.track.enabled);
+        console.log('[WebRTC] Streams:', event.streams);
+        
         if (event.streams && event.streams[0]) {
-          setRemoteStream(event.streams[0]);
-          console.log('[WebRTC] Remote stream received and set:', event.streams[0]);
+          const stream = event.streams[0];
+          console.log('[WebRTC] Remote stream tracks:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
+          setRemoteStream(stream);
+          console.log('[WebRTC] Remote stream received and set:', stream);
         } else {
           console.warn('[WebRTC] ontrack called but no streams found');
+          // Create a new stream with just this track
+          const newStream = new MediaStream([event.track]);
+          setRemoteStream(newStream);
+          console.log('[WebRTC] Created new stream with track:', event.track.kind);
         }
       };
       setPeerConnection(pc);
@@ -554,6 +573,8 @@ const CallControls: React.FC<CallControlsProps> = ({
             channelId: callChannel.id
           };
           console.log('🚀 Sending call incoming message:', callMessage);
+          console.log('🚀 Call type being sent:', isVideo ? 'VIDEO' : 'VOICE');
+          console.log('🚀 Local stream tracks:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
           socket.send(JSON.stringify(callMessage));
         } else {
           console.error('🚀 WebSocket not connected');
@@ -595,11 +616,12 @@ const CallControls: React.FC<CallControlsProps> = ({
         console.log('[CallControls] ✅ Joined call channel and participant list updated:', callChannel.call_participants);
       }
       
-      // Get user media for the call
+      // Get user media for the call - check if the call is actually a video call
       console.log('[CallControls] 🎯 Requesting user media...');
+      const isVideoCall = acceptedCall?.isVideo || false;
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: pendingOffer ? true : false
+        video: isVideoCall
       });
       
       console.log('[CallControls] 🎯 Got user media stream:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
@@ -610,7 +632,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       setLocalStream(stream);
       setCallState(prev => ({ 
         ...prev, 
-        isVideoEnabled: pendingOffer ? true : false,
+        isVideoEnabled: isVideoCall,
         isAudioEnabled: true 
       }));
 
@@ -628,6 +650,7 @@ const CallControls: React.FC<CallControlsProps> = ({
 
           // Handle the incoming offer
           console.log('[CallControls] 🎯 Handling incoming offer:', pendingOffer);
+          console.log('[CallControls] 🎯 Local tracks being sent:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
           await handleOffer(pendingOffer);
           setPendingOffer(null);
         }
@@ -1083,9 +1106,9 @@ const CallControls: React.FC<CallControlsProps> = ({
                 <button
                   onClick={toggleVideo}
                   className={`p-3 rounded-full ${
-                    !callState.isVideoEnabled 
-                      ? 'bg-red-500 hover:bg-red-600' 
-                      : 'bg-gray-600 hover:bg-gray-700'
+                    callState.isVideoEnabled 
+                      ? 'bg-gray-600 hover:bg-gray-700' 
+                      : 'bg-red-500 hover:bg-red-600'
                   } text-white`}
                   title={callState.isVideoEnabled ? 'Turn off video' : 'Turn on video'}
                 >

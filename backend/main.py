@@ -50,6 +50,7 @@ async def get_webrtc_config():
     """Get WebRTC configuration with STUN/TURN servers"""
     return {
         "iceServers": [
+            # Google STUN servers
             {
                 "urls": [
                     "stun:stun.l.google.com:19302",
@@ -58,8 +59,33 @@ async def get_webrtc_config():
                     "stun:stun3.l.google.com:19302",
                     "stun:stun4.l.google.com:19302"
                 ]
+            },
+            # Additional STUN servers for better connectivity
+            {
+                "urls": [
+                    "stun:stun.stunprotocol.org:3478",
+                    "stun:stun.voiparound.com:3478",
+                    "stun:stun.voipbuster.com:3478"
+                ]
+            },
+            # Free TURN servers for NAT traversal
+            {
+                "urls": "turn:openrelay.metered.ca:80",
+                "username": "openrelayproject",
+                "credential": "openrelayproject"
+            },
+            {
+                "urls": "turn:openrelay.metered.ca:443",
+                "username": "openrelayproject", 
+                "credential": "openrelayproject"
+            },
+            {
+                "urls": "turn:openrelay.metered.ca:443?transport=tcp",
+                "username": "openrelayproject",
+                "credential": "openrelayproject"
             }
-        ]
+        ],
+        "iceCandidatePoolSize": 10
     }
 
 @app.websocket("/ws/{user_id}")
