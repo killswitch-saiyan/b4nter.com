@@ -67,18 +67,23 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
 
       const channelsData = await response.json();
       console.log('Fetched channels:', channelsData);
-      
       // Filter out call channels that have ended
       const activeChannels = channelsData.filter((channel: Channel) => 
         !channel.is_call_channel || !channel.call_ended_at
       );
-      
-      setChannels(activeChannels);
-
-      // Set the first channel as selected if none is selected
-      if (activeChannels.length > 0 && !selectedChannel) {
-        setSelectedChannel(activeChannels[0]);
-      }
+      // --- Merge local call channels not present in backend response ---
+      setChannels(prev => {
+        // Find local call channels not in backend response
+        const localCallChannels = prev.filter(
+          ch => ch.is_call_channel && !activeChannels.some(bch => bch.id === ch.id)
+        );
+        const merged = [...activeChannels, ...localCallChannels];
+        // If none selected, select the first
+        if (merged.length > 0 && !selectedChannel) {
+          setSelectedChannel(merged[0]);
+        }
+        return merged;
+      });
     } catch (error) {
       console.error('Error fetching channels:', error);
       toast.error('Failed to load channels');

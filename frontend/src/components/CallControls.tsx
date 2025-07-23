@@ -137,6 +137,30 @@ const CallControls: React.FC<CallControlsProps> = ({
       joinCallChannel(data.channelId, user?.id || ''); // Ensure receiver is added as participant
       return;
     }
+    // --- Handle WebRTC signaling messages ---
+    if (data.type === 'webrtc_offer' && data.offer) {
+      console.log('📡 Received WebRTC offer:', data);
+      setPendingOffer(data.offer); // Store for acceptCall
+      // Optionally auto-accept if desired
+      // handleOffer(data.offer);
+      return;
+    }
+    if (data.type === 'webrtc_answer' && data.answer) {
+      console.log('📡 Received WebRTC answer:', data);
+      handleAnswer(data.answer);
+      return;
+    }
+    if (data.type === 'webrtc_ice_candidate' && data.candidate) {
+      console.log('📡 Received ICE candidate:', data);
+      if (peerConnection && peerConnection.remoteDescription) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => {
+          console.error('Error adding ICE candidate:', e);
+        });
+      } else {
+        setPendingIceCandidates(prev => [...prev, data.candidate]);
+      }
+      return;
+    }
   };
   // --- End patch ---
   // Now, the handleMessage function can safely call handleSocketMessage
