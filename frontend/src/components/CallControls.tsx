@@ -132,7 +132,6 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // --- Ensure handleSocketMessage is defined before usage ---
   const handleSocketMessage = (data: any) => {
-    console.log('[CallControls] 🎯 Processing message:', data.type, data);
     if (data.type === 'call_channel_created' && data.to === user?.id) {
       let callChannel = channels.find(ch => ch.id === data.channelId);
       if (!callChannel) {
@@ -150,52 +149,32 @@ const CallControls: React.FC<CallControlsProps> = ({
       return;
     }
     if (data.type === 'call_accepted' && data.accepterId) {
-      console.log('📞 Call was accepted by:', data.accepterId);
-      // Ensure both users are in the call channel
       if (data.channelId) {
         joinCallChannel(data.channelId, data.accepterId);
-        console.log('📞 Receiver joined call channel, waiting for WebRTC connection');
       }
       return;
     }
     // --- Handle WebRTC signaling messages ---
     if (data.type === 'webrtc_offer' && data.offer) {
-      console.log('📡 Received WebRTC offer directly:', data);
-      setPendingOffer(data.offer); // Store for acceptCall
+      setPendingOffer(data.offer);
       return;
     }
     // Handle call_incoming which contains the offer
     if (data.type === 'call_incoming' && data.offer) {
-      console.log('📡 Received call_incoming with offer:', data);
-      setPendingOffer(data.offer); // Store for acceptCall
+      setPendingOffer(data.offer);
       return;
     }
     if (data.type === 'webrtc_answer' && data.answer) {
-      console.log('📡 Received WebRTC answer:', data);
       handleAnswer(data.answer);
       return;
     }
     if (data.type === 'webrtc_ice_candidate' && data.candidate) {
-      console.log('📡 Received ICE candidate:', data.candidate);
-      console.log('📡 Peer connection exists:', !!peerConnection);
-      console.log('📡 Peer connection state:', peerConnection?.signalingState);
-      console.log('📡 Has remote description:', !!peerConnection?.remoteDescription);
-      console.log('📡 Pending candidates count:', pendingIceCandidates.length);
-      
       if (peerConnection && peerConnection.remoteDescription) {
-        console.log('📡 ✅ Adding ICE candidate immediately');
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).then(() => {
-          console.log('📡 ✅ ICE candidate added successfully');
-        }).catch(e => {
-          console.error('📡 ❌ Error adding ICE candidate:', e);
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => {
+          console.error('Error adding ICE candidate:', e);
         });
       } else {
-        console.log('📡 ⏳ Storing ICE candidate for later (no peer connection or no remote description)');
-        setPendingIceCandidates(prev => {
-          const newCandidates = [...prev, data.candidate];
-          console.log('📡 ⏳ Total pending candidates:', newCandidates.length);
-          return newCandidates;
-        });
+        setPendingIceCandidates(prev => [...prev, data.candidate]);
       }
       return;
     }
@@ -206,10 +185,8 @@ const CallControls: React.FC<CallControlsProps> = ({
   // Register WebRTC message handler with WebSocket context
   useEffect(() => {
     if (onWebRTCMessage) {
-      console.log('[CallControls] 🔧 Registering WebRTC message handler for target:', targetUserId);
       onWebRTCMessage(handleSocketMessage);
       return () => {
-        console.log('[CallControls] 🔧 Unregistering WebRTC message handler for target:', targetUserId);
         onWebRTCMessage(null);
       };
     }
@@ -434,21 +411,17 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // --- Robust Video Call Logic Patch ---
 
-  // 1. Always create peer connection before setting remote description or adding tracks
   const ensurePeerConnection = (stream: MediaStream | null) => {
     if (!peerConnection) {
       const pc = createPeerConnection();
       if (pc && stream) {
-        console.log('[WebRTC] 🔧 Adding tracks to new peer connection:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
         stream.getTracks().forEach(track => {
           pc.addTrack(track, stream);
-          console.log('[WebRTC] 🔧 Added track:', track.kind, track.enabled);
         });
       }
       setPeerConnection(pc);
       return pc;
     } else if (peerConnection && stream) {
-      // Ensure existing peer connection has the stream tracks
       const existingTracks = peerConnection.getSenders().map(sender => sender.track);
       const streamTracks = stream.getTracks();
       
@@ -457,7 +430,6 @@ const CallControls: React.FC<CallControlsProps> = ({
           existingTrack && existingTrack.kind === track.kind
         );
         if (!trackExists) {
-          console.log('[WebRTC] 🔧 Adding missing track to existing peer connection:', track.kind);
           peerConnection.addTrack(track, stream);
         }
       }
@@ -466,11 +438,9 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const createPeerConnection = () => {
-    console.log('[WebRTC] 🔧 Creating new peer connection with config:', rtcConfig);
-    console.log('[WebRTC] 🔧 Current peer connection state before creation:', peerConnection?.signalingState || 'none');
+    console.log('[WebRTC] Creating new peer connection');
     try {
       const pc = new RTCPeerConnection(rtcConfig);
-      console.log('[WebRTC] 🔧 New peer connection created successfully');
       pc.onicecandidate = (event) => {
         if (event.candidate && socket) {
           console.log('[WebRTC] Sending ICE candidate:', event.candidate);
@@ -482,24 +452,19 @@ const CallControls: React.FC<CallControlsProps> = ({
         }
       };
       pc.oniceconnectionstatechange = () => {
-        console.log('[WebRTC] ICE connection state changed:', pc.iceConnectionState);
+        console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-          console.log('[WebRTC] ✅ Connection established successfully!');
           setCallState(prev => ({ ...prev, isConnected: true, isOutgoing: false, isIncoming: false }));
-          setIsAcceptingCall(false); // Reset accepting flag
+          setIsAcceptingCall(false);
           toast.success('Connection established!');
           
-          // Ensure both users appear in the call channel UI
           if (currentCallChannel) {
             joinCallChannel(currentCallChannel, user?.id || '');
-            console.log('[WebRTC] ✅ User joined call channel after connection established');
           }
         } else if (pc.iceConnectionState === 'failed') {
-          console.error('[WebRTC] ❌ Connection failed');
-          setIsAcceptingCall(false); // Reset accepting flag on failure
+          setIsAcceptingCall(false);
           toast.error('Connection failed - please try again');
         } else if (pc.iceConnectionState === 'disconnected') {
-          console.warn('[WebRTC] ⚠️ Connection lost');
           toast.error('Connection lost');
         }
       };
@@ -508,22 +473,16 @@ const CallControls: React.FC<CallControlsProps> = ({
         console.log('[WebRTC] Connection state changed:', pc.connectionState);
       };
       pc.ontrack = (event) => {
-        console.log('[WebRTC] ontrack event:', event);
-        console.log('[WebRTC] Track kind:', event.track.kind);
-        console.log('[WebRTC] Track enabled:', event.track.enabled);
-        console.log('[WebRTC] Streams:', event.streams);
+        console.log('[WebRTC] Received remote track:', event.track.kind);
         
         if (event.streams && event.streams[0]) {
           const stream = event.streams[0];
-          console.log('[WebRTC] Remote stream tracks:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
           setRemoteStream(stream);
-          console.log('[WebRTC] Remote stream received and set:', stream);
+          console.log('[WebRTC] Remote stream set');
         } else {
-          console.warn('[WebRTC] ontrack called but no streams found');
-          // Create a new stream with just this track
           const newStream = new MediaStream([event.track]);
           setRemoteStream(newStream);
-          console.log('[WebRTC] Created new stream with track:', event.track.kind);
+          console.log('[WebRTC] Created new stream with track');
         }
       };
       setPeerConnection(pc);
@@ -534,32 +493,21 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   };
 
-  // 2. In handleOffer, always ensure peer connection and add tracks
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
-    console.log('[WebRTC] 🎯 Handling offer:', offer);
-    console.log('[WebRTC] 🎯 Offer SDP type:', offer.type);
-    console.log('[WebRTC] 🎯 Current peer connection state:', peerConnection?.signalingState);
+    console.log('[WebRTC] Handling offer');
     
     try {
       let pc = peerConnection;
       if (!pc) {
-        console.log('[WebRTC] 🎯 Creating new peer connection for offer');
         pc = ensurePeerConnection(localStream);
       }
       
       if (pc) {
-        console.log('[WebRTC] 🎯 Setting remote description from offer');
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        console.log('[WebRTC] 🎯 Remote description set, creating answer');
-        
         const answer = await pc.createAnswer();
-        console.log('[WebRTC] 🎯 Answer created:', answer);
-        
         await pc.setLocalDescription(answer);
-        console.log('[WebRTC] 🎯 Local description set with answer');
         
         if (socket) {
-          console.log('[WebRTC] 🎯 Sending answer via WebSocket');
           socket.send(JSON.stringify({
             type: 'webrtc_answer',
             to: targetUserId,
@@ -568,32 +516,25 @@ const CallControls: React.FC<CallControlsProps> = ({
         }
       }
     } catch (error) {
-      console.error('[WebRTC] ❌ Error handling offer:', error);
+      console.error('[WebRTC] Error handling offer:', error);
       toast.error('Error establishing connection');
     }
   };
 
-  // 3. In handleAnswer, always ensure peer connection
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-    console.log('[WebRTC] 🎯 Handling answer:', answer);
-    console.log('[WebRTC] 🎯 Answer SDP type:', answer.type);
-    console.log('[WebRTC] 🎯 Current peer connection state:', peerConnection?.signalingState);
+    console.log('[WebRTC] Handling answer');
     
     try {
       let pc = peerConnection;
       if (!pc) {
-        console.log('[WebRTC] 🎯 Creating new peer connection for answer');
         pc = ensurePeerConnection(localStream);
       }
       
       if (pc) {
-        console.log('[WebRTC] 🎯 Setting remote description from answer');
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('[WebRTC] 🎯 Remote description set with answer');
-        console.log('[WebRTC] 🎯 Final peer connection state:', pc.signalingState);
       }
     } catch (error) {
-      console.error('[WebRTC] ❌ Error handling answer:', error);
+      console.error('[WebRTC] Error handling answer:', error);
       toast.error('Error completing connection');
     }
   };
@@ -748,33 +689,22 @@ const CallControls: React.FC<CallControlsProps> = ({
 
       // Create peer connection and handle the offer
       if (pendingOffer) {
-        console.log('[CallControls] 🎯 Creating peer connection for incoming call');
-        console.log('[CallControls] 🎯 Pending offer details:', {
-          type: pendingOffer.type,
-          sdpLength: pendingOffer.sdp?.length || 0
-        });
+        console.log('[CallControls] Creating peer connection for incoming call');
         
         const pc = createPeerConnection();
         
         if (pc) {
           // Add local tracks to peer connection
           stream.getTracks().forEach(track => {
-            console.log('[CallControls] 🎯 Adding track to peer connection:', track.kind, track.enabled);
+            console.log('[CallControls] Adding track to peer connection:', track.kind, track.enabled);
             pc.addTrack(track, stream);
           });
-          
-          console.log('[CallControls] 🎯 Peer connection senders after adding tracks:', 
-            pc.getSenders().map(sender => ({
-              track: sender.track ? {kind: sender.track.kind, enabled: sender.track.enabled} : null
-            }))
-          );
 
           // Handle the incoming offer
-          console.log('[CallControls] 🎯 Handling incoming offer now...');
-          console.log('[CallControls] 🎯 Local tracks being sent:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
+          console.log('[CallControls] Handling incoming offer now...');
           await handleOffer(pendingOffer);
           setPendingOffer(null);
-          console.log('[CallControls] 🎯 Offer handling completed');
+          console.log('[CallControls] Offer handling completed');
         }
       }
       
