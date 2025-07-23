@@ -80,31 +80,23 @@ const ChatPage: React.FC = () => {
     let timerInterval: ReturnType<typeof setInterval> | null = null;
     
     if (selectedChannel?.is_call_channel) {
-      console.log('Starting timer for call channel:', selectedChannel.name);
-      
       // Use call_started_at if available, otherwise start from now
       const startTime = selectedChannel.call_started_at 
         ? new Date(selectedChannel.call_started_at)
         : new Date();
       
-      console.log('Call started at:', startTime);
-      
       // Start timer for call channel
       timerInterval = setInterval(() => {
         const now = new Date();
         const duration = Math.floor((now.getTime() - startTime.getTime()) / 1000);
-        console.log('Timer tick - Duration:', duration, 'seconds');
         setCallDuration(duration);
       }, 1000);
     } else {
-      console.log('No call channel selected');
-      // Reset timer when not in a call channel
       setCallDuration(0);
     }
     
     return () => {
       if (timerInterval) {
-        console.log('Clearing timer interval');
         clearInterval(timerInterval);
       }
     };
@@ -138,10 +130,7 @@ const ChatPage: React.FC = () => {
 
   // Debug: Log current messages
   useEffect(() => {
-    // Only log timer ticks
-    if (selectedChannel?.is_call_channel) {
-      console.log('Timer tick - Duration:', callDuration, 'seconds');
-    }
+    // No-op: removed timer tick logs
   }, [callDuration, selectedChannel?.is_call_channel]);
 
   useEffect(() => {
