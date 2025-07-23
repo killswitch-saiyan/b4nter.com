@@ -380,72 +380,25 @@ const CallControls: React.FC<CallControlsProps> = ({
   // 2. Always attach local video stream to localVideoRef
   useEffect(() => {
     if (localStream && localVideoRef.current) {
-      console.log('🔧 [DEBUG] Attaching local stream to video element:', {
-        streamId: localStream.id,
-        tracks: localStream.getTracks().map(t => ({
-          kind: t.kind,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState
-        })),
-        videoElement: !!localVideoRef.current
-      });
-      
       localVideoRef.current.srcObject = localStream;
-      console.log('🔧 [DEBUG] ✅ Local stream attached to localVideoRef');
-    } else {
-      if (!localStream) {
-        console.log('🔧 [DEBUG] No local stream available');
-      }
-      if (!localVideoRef.current) {
-        console.log('🔧 [DEBUG] Local video ref not available');
-      }
+      console.log('✅ Local video attached');
     }
   }, [localStream]);
   // 3. Always attach remote video stream to remoteVideoRef
   useEffect(() => {
     if (remoteStream && remoteVideoRef.current) {
-      console.log('🔧 [DEBUG] Attaching remote stream to video element:', {
-        streamId: remoteStream.id,
-        tracks: remoteStream.getTracks().map(t => ({
-          kind: t.kind,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState
-        })),
-        videoElement: !!remoteVideoRef.current
-      });
-      
       remoteVideoRef.current.srcObject = remoteStream;
-      console.log('🔧 [DEBUG] ✅ Remote stream attached to remoteVideoRef');
+      console.log('✅ Remote video attached');
       
-      // Force play for both video and audio
+      // Force play
       remoteVideoRef.current.onloadedmetadata = () => {
-        console.log('🔧 [DEBUG] Remote video metadata loaded');
         if (remoteVideoRef.current) {
-          remoteVideoRef.current.play().then(() => {
-            console.log('🔧 [DEBUG] ✅ Remote video started playing successfully!');
-          }).catch(e => {
-            console.error('🔧 [DEBUG] ❌ Error playing remote stream:', e);
-          });
+          remoteVideoRef.current.play();
         }
       };
       
-      // Also try to play immediately if metadata is already loaded
       if (remoteVideoRef.current.readyState >= 1) {
-        console.log('🔧 [DEBUG] Metadata already loaded, playing immediately');
-        remoteVideoRef.current.play().then(() => {
-          console.log('🔧 [DEBUG] ✅ Remote video playing immediately!');
-        }).catch(e => {
-          console.error('🔧 [DEBUG] ❌ Error playing remote stream immediately:', e);
-        });
-      }
-    } else {
-      if (!remoteStream) {
-        console.log('🔧 [DEBUG] No remote stream available');
-      }
-      if (!remoteVideoRef.current) {
-        console.log('🔧 [DEBUG] Remote video ref not available');
+        remoteVideoRef.current.play();
       }
     }
   }, [remoteStream]);
@@ -481,118 +434,54 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const createPeerConnection = () => {
-    console.log('🔧 [DEBUG] Creating new peer connection');
-    console.log('🔧 [DEBUG] RTC Config:', rtcConfig);
+    console.log('Creating peer connection');
     try {
       const pc = new RTCPeerConnection(rtcConfig);
       
-      // Enhanced ICE candidate handling with debugging
       pc.onicecandidate = (event) => {
-        console.log('🔧 [DEBUG] ICE candidate event:', event.candidate);
         if (event.candidate && socket) {
-          console.log('🔧 [DEBUG] Sending ICE candidate to target:', targetUserId);
-          console.log('🔧 [DEBUG] ICE candidate details:', {
-            candidate: event.candidate.candidate,
-            component: event.candidate.component,
-            foundation: event.candidate.foundation,
-            port: event.candidate.port,
-            priority: event.candidate.priority,
-            protocol: event.candidate.protocol,
-            type: event.candidate.type
-          });
           socket.send(JSON.stringify({
             type: 'webrtc_ice_candidate',
             to: targetUserId,
             candidate: event.candidate
           }));
-        } else if (!event.candidate) {
-          console.log('🔧 [DEBUG] ICE gathering complete');
-        } else if (!socket) {
-          console.error('🔧 [DEBUG] Cannot send ICE candidate - socket not available');
         }
       };
 
-      // Enhanced ICE connection state monitoring
       pc.oniceconnectionstatechange = () => {
-        console.log('🔧 [DEBUG] ICE connection state changed:', pc.iceConnectionState);
-        console.log('🔧 [DEBUG] ICE gathering state:', pc.iceGatheringState);
-        console.log('🔧 [DEBUG] Signaling state:', pc.signalingState);
+        console.log('ICE state:', pc.iceConnectionState);
         
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-          console.log('🔧 [DEBUG] ✅ ICE connection established successfully!');
+          console.log('✅ Connected!');
           setCallState(prev => ({ ...prev, isConnected: true, isOutgoing: false, isIncoming: false }));
           setIsAcceptingCall(false);
           toast.success('Connection established!');
           
           if (currentCallChannel) {
-            console.log('🔧 [DEBUG] Joining call channel:', currentCallChannel);
             joinCallChannel(currentCallChannel, user?.id || '');
           }
         } else if (pc.iceConnectionState === 'failed') {
-          console.error('🔧 [DEBUG] ❌ ICE connection failed');
+          console.error('❌ Connection failed');
           setIsAcceptingCall(false);
           setHasAutoAccepted(false);
           toast.error('Connection failed - please try again');
         } else if (pc.iceConnectionState === 'disconnected') {
-          console.warn('🔧 [DEBUG] ⚠️ ICE connection disconnected');
           toast.error('Connection lost');
-        } else if (pc.iceConnectionState === 'checking') {
-          console.log('🔧 [DEBUG] 🔍 ICE connection checking...');
-        } else if (pc.iceConnectionState === 'new') {
-          console.log('🔧 [DEBUG] 🆕 ICE connection new');
         }
       };
-      
-      // Enhanced connection state monitoring
-      pc.onconnectionstatechange = () => {
-        console.log('🔧 [DEBUG] Overall connection state changed:', pc.connectionState);
-        const states = {
-          connectionState: pc.connectionState,
-          iceConnectionState: pc.iceConnectionState,
-          iceGatheringState: pc.iceGatheringState,
-          signalingState: pc.signalingState
-        };
-        console.log('🔧 [DEBUG] All connection states:', states);
-      };
 
-      // Enhanced track reception monitoring
       pc.ontrack = (event) => {
-        console.log('🔧 [DEBUG] ✅ Received remote track:', event.track.kind);
-        console.log('🔧 [DEBUG] Track details:', {
-          id: event.track.id,
-          kind: event.track.kind,
-          label: event.track.label,
-          enabled: event.track.enabled,
-          muted: event.track.muted,
-          readyState: event.track.readyState
-        });
-        console.log('🔧 [DEBUG] Event streams length:', event.streams.length);
+        console.log('✅ Received remote track:', event.track.kind);
         
         if (event.streams && event.streams[0]) {
-          const stream = event.streams[0];
-          console.log('🔧 [DEBUG] Using existing stream with tracks:', stream.getTracks().map(t => t.kind));
-          setRemoteStream(stream);
-          console.log('🔧 [DEBUG] Remote stream set from event.streams');
+          setRemoteStream(event.streams[0]);
         } else {
-          console.log('🔧 [DEBUG] Creating new stream with single track');
           const newStream = new MediaStream([event.track]);
           setRemoteStream(newStream);
-          console.log('🔧 [DEBUG] Created new stream with track:', event.track.kind);
         }
-      };
-
-      // Add ice gathering state monitoring
-      pc.onicegatheringstatechange = () => {
-        console.log('🔧 [DEBUG] ICE gathering state changed:', pc.iceGatheringState);
-      };
-
-      // Add signaling state monitoring
-      pc.onsignalingstatechange = () => {
-        console.log('🔧 [DEBUG] Signaling state changed:', pc.signalingState);
       };
 
       setPeerConnection(pc);
-      console.log('🔧 [DEBUG] Peer connection created and stored');
       return pc;
     } catch (error) {
       console.error('[WebRTC] Error creating peer connection:', error);
@@ -601,116 +490,49 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
-    console.log('🔧 [DEBUG] Handling WebRTC offer');
-    console.log('🔧 [DEBUG] Offer details:', {
-      type: offer.type,
-      sdp: offer.sdp?.substring(0, 200) + '...'
-    });
+    console.log('Handling offer');
     
     try {
       let pc = peerConnection;
       if (!pc) {
-        console.log('🔧 [DEBUG] No existing peer connection, creating new one');
         pc = ensurePeerConnection(localStream);
-      } else {
-        console.log('🔧 [DEBUG] Using existing peer connection');
       }
       
       if (pc) {
-        console.log('🔧 [DEBUG] Setting remote description (offer)');
-        console.log('🔧 [DEBUG] PC state before setRemoteDescription:', {
-          signalingState: pc.signalingState,
-          iceConnectionState: pc.iceConnectionState,
-          iceGatheringState: pc.iceGatheringState
-        });
-        
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        console.log('🔧 [DEBUG] ✅ Remote description set successfully');
-        
-        console.log('🔧 [DEBUG] Creating answer');
         const answer = await pc.createAnswer();
-        console.log('🔧 [DEBUG] ✅ Answer created:', {
-          type: answer.type,
-          sdp: answer.sdp?.substring(0, 200) + '...'
-        });
-        
-        console.log('🔧 [DEBUG] Setting local description (answer)');
         await pc.setLocalDescription(answer);
-        console.log('🔧 [DEBUG] ✅ Local description set successfully');
-        
-        console.log('🔧 [DEBUG] PC state after answer creation:', {
-          signalingState: pc.signalingState,
-          iceConnectionState: pc.iceConnectionState,
-          iceGatheringState: pc.iceGatheringState
-        });
         
         if (socket) {
-          console.log('🔧 [DEBUG] Sending answer to caller:', targetUserId);
           socket.send(JSON.stringify({
             type: 'webrtc_answer',
             to: targetUserId,
             answer: answer
           }));
-          console.log('🔧 [DEBUG] ✅ Answer sent via WebSocket');
-        } else {
-          console.error('🔧 [DEBUG] ❌ Cannot send answer - socket not available');
+          console.log('✅ Answer sent');
         }
-      } else {
-        console.error('🔧 [DEBUG] ❌ Failed to create peer connection');
       }
     } catch (error) {
-      console.error('🔧 [DEBUG] ❌ Error handling offer:', error);
-      console.error('🔧 [DEBUG] Error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      });
+      console.error('❌ Error handling offer:', error);
       toast.error('Error establishing connection');
     }
   };
 
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-    console.log('🔧 [DEBUG] Handling WebRTC answer');
-    console.log('🔧 [DEBUG] Answer details:', {
-      type: answer.type,
-      sdp: answer.sdp?.substring(0, 200) + '...'
-    });
+    console.log('Handling answer');
     
     try {
       let pc = peerConnection;
       if (!pc) {
-        console.log('🔧 [DEBUG] No existing peer connection, creating new one');
         pc = ensurePeerConnection(localStream);
-      } else {
-        console.log('🔧 [DEBUG] Using existing peer connection');
       }
       
       if (pc) {
-        console.log('🔧 [DEBUG] Setting remote description (answer)');
-        console.log('🔧 [DEBUG] PC state before setRemoteDescription:', {
-          signalingState: pc.signalingState,
-          iceConnectionState: pc.iceConnectionState,
-          iceGatheringState: pc.iceGatheringState
-        });
-        
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('🔧 [DEBUG] ✅ Remote description (answer) set successfully');
-        
-        console.log('🔧 [DEBUG] PC state after answer processing:', {
-          signalingState: pc.signalingState,
-          iceConnectionState: pc.iceConnectionState,
-          iceGatheringState: pc.iceGatheringState
-        });
-      } else {
-        console.error('🔧 [DEBUG] ❌ Failed to create peer connection');
+        console.log('✅ Answer processed');
       }
     } catch (error) {
-      console.error('🔧 [DEBUG] ❌ Error handling answer:', error);
-      console.error('🔧 [DEBUG] Error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      });
+      console.error('❌ Error handling answer:', error);
       toast.error('Error completing connection');
     }
   };
@@ -756,23 +578,12 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
       
       // Request media permissions
-      console.log('🔧 [DEBUG] Requesting user media with constraints:', { audio: true, video: isVideo });
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: isVideo
       });
       
-      console.log('🔧 [DEBUG] ✅ Media stream obtained:', {
-        id: stream.id,
-        tracks: stream.getTracks().map(t => ({
-          kind: t.kind,
-          id: t.id,
-          label: t.label,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState
-        }))
-      });
+      console.log('✅ Media obtained:', stream.getTracks().map(t => t.kind));
       
       // Set up voice activity detection for local audio
       setupVoiceActivityDetection(stream, true);
@@ -854,26 +665,14 @@ const CallControls: React.FC<CallControlsProps> = ({
         console.log('[CallControls] Joined call channel and participant list updated:', callChannel.call_participants);
       }
       
-      // Get user media for the call - check if the call is actually a video call
-      console.log('🔧 [DEBUG] [ACCEPT] Requesting user media...');
+      // Get user media for the call
       const isVideoCall = acceptedCall?.isVideo || false;
-      console.log('🔧 [DEBUG] [ACCEPT] Media constraints:', { audio: true, video: isVideoCall });
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: isVideoCall
       });
       
-      console.log('🔧 [DEBUG] [ACCEPT] ✅ Got user media stream:', {
-        id: stream.id,
-        tracks: stream.getTracks().map(t => ({
-          kind: t.kind,
-          id: t.id,
-          label: t.label,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState
-        }))
-      });
+      console.log('✅ Media obtained for accept:', stream.getTracks().map(t => t.kind));
       
       // Set up voice activity detection for local audio
       setupVoiceActivityDetection(stream, true);
@@ -888,29 +687,21 @@ const CallControls: React.FC<CallControlsProps> = ({
       // Create peer connection and handle the offer
       const offerToProcess = offer || pendingOffer;
       if (offerToProcess) {
-        console.log('🔧 [DEBUG] [ACCEPT] Creating peer connection for incoming call');
-        console.log('🔧 [DEBUG] [ACCEPT] Offer source:', offer ? 'parameter' : 'pending state');
+        console.log('Creating peer connection for incoming call');
         
         const pc = createPeerConnection();
         
         if (pc) {
-          console.log('🔧 [DEBUG] [ACCEPT] Adding local tracks to peer connection');
           // Add local tracks to peer connection
           stream.getTracks().forEach(track => {
-            console.log('🔧 [DEBUG] [ACCEPT] Adding track:', track.kind, track.enabled);
             pc.addTrack(track, stream);
           });
 
           // Handle the incoming offer
-          console.log('🔧 [DEBUG] [ACCEPT] Handling incoming offer now...');
           await handleOffer(offerToProcess);
           setPendingOffer(null);
-          console.log('🔧 [DEBUG] [ACCEPT] ✅ Offer handling completed');
-        } else {
-          console.error('🔧 [DEBUG] [ACCEPT] ❌ Failed to create peer connection');
+          console.log('✅ Call accepted');
         }
-      } else {
-        console.error('🔧 [DEBUG] [ACCEPT] ❌ No offer to process');
       }
       
       // Send call accepted message with channel info
@@ -940,14 +731,10 @@ const CallControls: React.FC<CallControlsProps> = ({
       !callState.isOutgoing &&
       !isAcceptingCall &&
       !hasAutoAccepted &&
+      !peerConnection && // Don't auto-accept if peer connection already exists
       (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
     ) {
-      console.log('🔧 [DEBUG] Auto-accepting call with offer');
-      console.log('🔧 [DEBUG] Offer details:', {
-        type: acceptedCall.offer?.type,
-        hasOffer: !!acceptedCall.offer,
-        channelId: acceptedCall.channelId
-      });
+      console.log('Auto-accepting call');
       
       setIsAcceptingCall(true);
       setHasAutoAccepted(true);
@@ -955,7 +742,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       setCurrentCallChannel(acceptedCall.channelId);
       acceptCall(acceptedCall.offer); // Pass offer directly to avoid race condition
     }
-  }, [acceptedCall, callState.isConnected, callState.isIncoming, callState.isOutgoing, isAcceptingCall, hasAutoAccepted, currentCallChannel]);
+  }, [acceptedCall, callState.isConnected, callState.isIncoming, callState.isOutgoing, isAcceptingCall, hasAutoAccepted, peerConnection, currentCallChannel]);
 
   const rejectCall = () => {
     stopRingtone();
