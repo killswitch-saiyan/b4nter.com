@@ -721,7 +721,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
   // --- End patch ---
 
-  // Auto-accept logic for receiver
+  // Auto-accept logic for receiver - fixed race condition
   useEffect(() => {
     if (
       acceptedCall &&
@@ -732,17 +732,23 @@ const CallControls: React.FC<CallControlsProps> = ({
       !isAcceptingCall &&
       !hasAutoAccepted &&
       !peerConnection && // Don't auto-accept if peer connection already exists
+      !localStream && // Don't auto-accept if we already have local stream
       (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
     ) {
-      console.log('Auto-accepting call');
+      console.log('Auto-accepting call - starting once');
       
+      // Set all flags immediately to prevent re-triggers
       setIsAcceptingCall(true);
       setHasAutoAccepted(true);
       setPendingOffer(acceptedCall.offer);
       setCurrentCallChannel(acceptedCall.channelId);
-      acceptCall(acceptedCall.offer); // Pass offer directly to avoid race condition
+      
+      // Small delay to ensure state updates are processed
+      setTimeout(() => {
+        acceptCall(acceptedCall.offer);
+      }, 50);
     }
-  }, [acceptedCall, callState.isConnected, callState.isIncoming, callState.isOutgoing, isAcceptingCall, hasAutoAccepted, peerConnection, currentCallChannel]);
+  }, [acceptedCall?.channelId, acceptedCall?.offer, callState.isConnected, hasAutoAccepted, peerConnection, localStream]);
 
   const rejectCall = () => {
     stopRingtone();
@@ -1034,8 +1040,8 @@ const CallControls: React.FC<CallControlsProps> = ({
     );
   }
 
-  // Active call UI
-  if (callState.isConnected) {
+  // Active call UI - show when connected OR when we have local/remote streams
+  if (callState.isConnected || localStream || remoteStream || isAcceptingCall) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div className="relative w-full h-full max-w-4xl max-h-[80vh]">
@@ -1116,11 +1122,19 @@ const CallControls: React.FC<CallControlsProps> = ({
                 <h2 className="text-3xl font-bold mb-4">{targetUsername}</h2>
                 <p className="text-xl opacity-80">Voice Call</p>
                 <p className="text-sm opacity-60 mt-2">
-                  {remoteStream ? 'Audio connected' : 'Connecting audio...'}
+                  {callState.isConnected ? 'Connected' :
+                   remoteStream ? 'Audio connected' : 
+                   localStream ? 'Connecting to peer...' :
+                   isAcceptingCall ? 'Setting up audio...' : 'Connecting audio...'}
                 </p>
-                {remoteStream && (
+                {callState.isConnected && (
+                  <p className="text-xs opacity-50 mt-1 text-green-300">
+                    ✅ You should be able to hear each other now
+                  </p>
+                )}
+                {!callState.isConnected && peerConnection && (
                   <p className="text-xs opacity-50 mt-1">
-                    You should be able to hear each other now
+                    ICE: {peerConnection.iceConnectionState}
                   </p>
                 )}
               </div>
@@ -1149,9 +1163,17 @@ const CallControls: React.FC<CallControlsProps> = ({
             </div>
           )}
           
-          {/* Call timer */}
+          {/* Call timer and connection status */}
           <div className="absolute top-4 left-4 bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg">
-            <div className="font-mono text-lg">{formatCallDuration(callDuration)}</div>
+            {callState.isConnected ? (
+              <div className="font-mono text-lg">{formatCallDuration(callDuration)}</div>
+            ) : (
+              <div className="text-sm">
+                {isAcceptingCall ? 'Connecting...' : 
+                 peerConnection ? `Connection: ${peerConnection.iceConnectionState}` : 
+                 'Setting up call...'}
+              </div>
+            )}
           </div>
           
           {/* Voice activity indicators */}
@@ -1197,7 +1219,7 @@ const CallControls: React.FC<CallControlsProps> = ({
                   } text-white`}
                   title={callState.isVideoEnabled ? 'Turn off video' : 'Turn on video'}
                 >
-                  {callState.isVideoEnabled ? '📹' : '📷'}
+                  {callState.isVideoEnabled ? '📹' : '📹'}
                 </button>
               )}
               
