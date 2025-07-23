@@ -156,7 +156,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     // Check if the channel already exists
     const existingChannel = channels.find(ch => ch.id === channelId);
     if (existingChannel) {
-      // Patch: update the name if it doesn't match
+      // Always update the name to match the incoming channelName
       if (existingChannel.name !== channelName) {
         const updatedChannel = { ...existingChannel, name: channelName };
         setChannels(prev => prev.map(ch => ch.id === channelId ? updatedChannel : ch));
@@ -164,10 +164,10 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       }
       return existingChannel;
     }
-
+    // Never use a fallback name, always use channelName
     const callChannel: Channel = {
       id: channelId,
-      name: channelName, // Use the exact name from the caller, no '#'
+      name: channelName,
       description: `${callType} call - click to join`,
       is_private: true,
       created_by: participants.find(p => p !== user?.id) || '',
@@ -179,7 +179,6 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       call_participants: [participants.find(p => p !== user?.id) || ''],
       call_started_at: new Date().toISOString(),
     };
-
     setChannels(prev => [...prev, callChannel]);
     return callChannel;
   };

@@ -59,6 +59,13 @@ const ChatPage: React.FC = () => {
     channelName?: string; // Added channelName
     offer: any;
   } | null>(null);
+  const [acceptedCall, setAcceptedCall] = useState<{
+    offer: any;
+    channelId: string;
+    channelName: string;
+    isVideo: boolean;
+    from: string;
+  } | null>(null);
 
   // Function to get username for a participant
   const getParticipantName = (participantId: string): string => {
@@ -1076,7 +1083,7 @@ const ChatPage: React.FC = () => {
           {/* Messages Area - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">
             {selectedChannel?.is_call_channel ? (
-              // Call channel UI
+              console.log('[ChatPage] Rendering CallControls for call channel:', selectedChannel.name),
               <div className="text-center py-8">
                 <div className="text-6xl mb-6">
                   {selectedChannel.call_type === 'voice' ? '🔊' : '📹'}
@@ -1092,6 +1099,7 @@ const ChatPage: React.FC = () => {
                     onCallEnd={handleEndCall}
                     socket={socket}
                     isGlobal={false}
+                    acceptedCall={selectedChannel.id === acceptedCall?.channelId ? acceptedCall : undefined}
                   />
                 </div>
                 {/* Call Timer */}
@@ -1253,79 +1261,37 @@ const ChatPage: React.FC = () => {
               <div className="flex gap-4 justify-center">
                 <button
                   onClick={async () => {
-                    try {
-                      console.log('🎯 Accepting incoming call from:', incomingCall.from);
-                      console.log('🎯 Call channel ID:', incomingCall.channelId);
-                      console.log('🎯 Current channels:', channels.map(ch => ({ id: ch.id, name: ch.name, isCall: ch.is_call_channel })));
-                      // Find or create the call channel
-                      let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
-                      if (!callChannel) {
-                        console.log('🎯 Call channel not found in local channels, creating it...');
-                        callChannel = createCallChannelForReceiver(
-                          incomingCall.channelId,
-                          incomingCall.channelName || `${incomingCall.isVideo ? 'Video' : 'Voice'} Call`,
-                          incomingCall.isVideo ? 'video' : 'voice',
-                          [incomingCall.from, user?.id || '']
-                        );
-                      } else {
-                        console.log('🎯 Found existing call channel:', callChannel);
+                    console.log('[ChatPage] Accept button clicked, channelName:', incomingCall.channelName);
+                    let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
+                    const safeChannelName = incomingCall.channelName || (incomingCall.isVideo ? 'video-channel' : 'voice-channel');
+                    if (!callChannel) {
+                      callChannel = createCallChannelForReceiver(
+                        incomingCall.channelId,
+                        safeChannelName,
+                        incomingCall.isVideo ? 'video' : 'voice',
+                        [incomingCall.from, user?.id || '']
+                      );
+                      console.log('[ChatPage] Created call channel for receiver:', callChannel);
+                    } else {
+                      // Patch: update the name if it doesn't match
+                      if (callChannel.name !== safeChannelName) {
+                        callChannel = { ...callChannel, name: safeChannelName };
+                        setChannels(prev => prev.map(ch => ch.id === callChannel!.id ? callChannel! : ch));
+                        console.log('[ChatPage] Updated call channel name for receiver:', callChannel);
                       }
-                      // Join the call channel
-                      console.log('🎯 Joining call channel:', incomingCall.channelId);
-                      joinCallChannel(incomingCall.channelId, user?.id || '');
-                      setActiveCallChannelId(incomingCall.channelId);
-                      // Wait for the channel to appear and have the correct participants
-                      for (let i = 0; i < 30; i++) { // Try for up to 3 seconds
-                        await new Promise(res => setTimeout(res, 100));
-                        callChannel = channels.find(ch => ch.id === incomingCall.channelId);
-                        if (callChannel && callChannel.call_participants?.includes(user?.id || '')) break;
-                      }
-                      if (!callChannel || !callChannel.call_participants?.includes(user?.id || '')) {
-                        toast.error("Call channel not ready yet. Please wait a moment and try again.");
-                        return;
-                      }
-                      // Switch to the call channel view
-                      console.log('🎯 Switching to call channel:', callChannel);
-                      setSelectedChannel(callChannel);
-                      
-                      // Send call accepted message
-                      if (socket) {
-                        socket.send(JSON.stringify({
-                          type: 'call_accepted',
-                          to: incomingCall.from
-                        }));
-                        
-                        // Notify caller that receiver has joined the channel
-                        socket.send(JSON.stringify({
-                          type: 'call_channel_joined',
-                          to: incomingCall.from,
-                          channelId: incomingCall.channelId,
-                          userId: user?.id,
-                          username: user?.username || user?.full_name || 'Unknown User'
-                        }));
-                        
-                        // Handle the WebRTC offer if present to establish connection
-                        if (incomingCall.offer) {
-                          console.log('🎯 Handling WebRTC offer from incoming call');
-                          socket.send(JSON.stringify({
-                            type: 'webrtc_offer',
-                            to: incomingCall.from,
-                            offer: incomingCall.offer
-                          }));
-                        }
-                      }
-                      
-                      // Clear the incoming call UI
-                      setIncomingCall(null);
-                      
-                      // Show success message
-                      toast.success(`Joined ${incomingCall.isVideo ? 'video' : 'voice'} call with ${incomingCall.fromName}`);
-                      
-                      console.log('🎯 Call accepted successfully - both users should now be in the same call channel');
-                    } catch (error) {
-                      console.error('🎯 Error accepting call:', error);
-                      toast.error('Failed to accept call');
                     }
+                    joinCallChannel(incomingCall.channelId, user?.id || '');
+                    setActiveCallChannelId(incomingCall.channelId);
+                    if (callChannel) setSelectedChannel(callChannel);
+                    setAcceptedCall({
+                      offer: incomingCall.offer,
+                      channelId: incomingCall.channelId,
+                      channelName: safeChannelName,
+                      isVideo: incomingCall.isVideo,
+                      from: incomingCall.from
+                    });
+                    setIncomingCall(null);
+                    toast.success(`Joined ${incomingCall.isVideo ? 'video' : 'voice'} call with ${incomingCall.fromName}`);
                   }}
                   className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
                 >

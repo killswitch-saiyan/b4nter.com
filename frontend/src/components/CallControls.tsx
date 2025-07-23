@@ -9,6 +9,13 @@ interface CallControlsProps {
   onCallEnd: () => void;
   socket: WebSocket | null;
   isGlobal?: boolean;
+  acceptedCall?: {
+    offer: any;
+    channelId: string;
+    channelName: string;
+    isVideo: boolean;
+    from: string;
+  };
 }
 
 interface CallState {
@@ -25,7 +32,8 @@ const CallControls: React.FC<CallControlsProps> = ({
   targetUsername, 
   onCallEnd, 
   socket, 
-  isGlobal 
+  isGlobal, 
+  acceptedCall 
 }) => {
   const { user } = useAuth();
   const { createCallChannel, createCallChannelForReceiver, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, channels, setSelectedChannel } = useChannels();
@@ -638,6 +646,21 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   };
   // --- End patch ---
+
+  // Auto-accept logic for receiver
+  useEffect(() => {
+    if (
+      acceptedCall &&
+      acceptedCall.offer &&
+      !callState.isConnected &&
+      (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
+    ) {
+      console.log('[CallControls] Auto-accepting call with offer:', acceptedCall.offer);
+      setPendingOffer(acceptedCall.offer);
+      acceptCall();
+    }
+    // eslint-disable-next-line
+  }, [acceptedCall, callState.isConnected, currentCallChannel]);
 
   const rejectCall = () => {
     stopRingtone();
