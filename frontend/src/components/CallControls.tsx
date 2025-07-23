@@ -132,7 +132,9 @@ const CallControls: React.FC<CallControlsProps> = ({
   }, []);
 
   // --- Ensure handleSocketMessage is defined before usage ---
-  const handleSocketMessage = (data: any) => {
+  const handleSocketMessage = React.useCallback((data: any) => {
+    console.log('🔊 CallControls processing message:', data.type);
+    
     if (data.type === 'call_channel_created' && data.to === user?.id) {
       let callChannel = channels.find(ch => ch.id === data.channelId);
       if (!callChannel) {
@@ -157,29 +159,35 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
     // --- Handle WebRTC signaling messages ---
     if (data.type === 'webrtc_offer' && data.offer) {
+      console.log('🔊 CallControls processing WebRTC offer');
       setPendingOffer(data.offer);
       return;
     }
     // Handle call_incoming which contains the offer
     if (data.type === 'call_incoming' && data.offer) {
+      console.log('🔊 CallControls processing call_incoming with offer');
       setPendingOffer(data.offer);
       return;
     }
     if (data.type === 'webrtc_answer' && data.answer) {
+      console.log('🔊 CallControls processing WebRTC answer');
       handleAnswer(data.answer);
       return;
     }
     if (data.type === 'webrtc_ice_candidate' && data.candidate) {
+      console.log('🔊 CallControls processing ICE candidate');
       if (peerConnection && peerConnection.remoteDescription) {
+        console.log('🔊 Adding ICE candidate to peer connection');
         peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => {
           console.error('Error adding ICE candidate:', e);
         });
       } else {
+        console.log('🔊 Peer connection not ready, queuing ICE candidate');
         setPendingIceCandidates(prev => [...prev, data.candidate]);
       }
       return;
     }
-  };
+  }, [user?.id, channels, peerConnection, handleAnswer, createCallChannelForReceiver, setCurrentCallChannel, setSelectedChannel, joinCallChannel]);
   // --- End patch ---
   // Now, the handleMessage function can safely call handleSocketMessage
 
@@ -407,7 +415,7 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // --- Robust Video Call Logic Patch ---
 
-  const ensurePeerConnection = (stream: MediaStream | null) => {
+  const ensurePeerConnection = React.useCallback((stream: MediaStream | null) => {
     if (!peerConnection) {
       const pc = createPeerConnection();
       if (pc && stream) {
@@ -431,15 +439,16 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     }
     return peerConnection;
-  };
+  }, [peerConnection, createPeerConnection]);
 
-  const createPeerConnection = () => {
+  const createPeerConnection = React.useCallback(() => {
     console.log('Creating peer connection');
     try {
       const pc = new RTCPeerConnection(rtcConfig);
       
       pc.onicecandidate = (event) => {
         if (event.candidate && socket) {
+          console.log('🔊 Sending ICE candidate to:', targetUserId);
           socket.send(JSON.stringify({
             type: 'webrtc_ice_candidate',
             to: targetUserId,
@@ -449,7 +458,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log('ICE state:', pc.iceConnectionState);
+        console.log('🔊 ICE state changed:', pc.iceConnectionState);
         
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           console.log('✅ Connected!');
@@ -487,7 +496,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       console.error('[WebRTC] Error creating peer connection:', error);
       return null;
     }
-  };
+  }, [rtcConfig, socket, targetUserId, currentCallChannel, joinCallChannel, user?.id]);
 
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
     console.log('Handling offer');
@@ -518,24 +527,26 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   };
 
-  const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-    console.log('Handling answer');
+  const handleAnswer = React.useCallback(async (answer: RTCSessionDescriptionInit) => {
+    console.log('🔊 CallControls handling answer');
     
     try {
       let pc = peerConnection;
       if (!pc) {
+        console.log('🔊 No peer connection, creating one');
         pc = ensurePeerConnection(localStream);
       }
       
       if (pc) {
+        console.log('🔊 Setting remote description with answer');
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('✅ Answer processed');
+        console.log('✅ Answer processed successfully');
       }
     } catch (error) {
       console.error('❌ Error handling answer:', error);
       toast.error('Error completing connection');
     }
-  };
+  }, [peerConnection, localStream, ensurePeerConnection]);
 
   // 4. In startCall and acceptCall, always attach local video stream
   const startCall = async (isVideo: boolean) => {
@@ -721,7 +732,9 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
   // --- End patch ---
 
-  // Auto-accept logic for receiver - fixed race condition
+  // Auto-accept logic for receiver - single execution only
+  const autoAcceptExecuted = useRef(false);
+  
   useEffect(() => {
     if (
       acceptedCall &&
@@ -731,11 +744,15 @@ const CallControls: React.FC<CallControlsProps> = ({
       !callState.isOutgoing &&
       !isAcceptingCall &&
       !hasAutoAccepted &&
-      !peerConnection && // Don't auto-accept if peer connection already exists
-      !localStream && // Don't auto-accept if we already have local stream
+      !peerConnection &&
+      !localStream &&
+      !autoAcceptExecuted.current &&
       (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
     ) {
-      console.log('Auto-accepting call - starting once');
+      console.log('Auto-accepting call - executing once only');
+      
+      // Mark as executed immediately
+      autoAcceptExecuted.current = true;
       
       // Set all flags immediately to prevent re-triggers
       setIsAcceptingCall(true);
@@ -743,12 +760,10 @@ const CallControls: React.FC<CallControlsProps> = ({
       setPendingOffer(acceptedCall.offer);
       setCurrentCallChannel(acceptedCall.channelId);
       
-      // Small delay to ensure state updates are processed
-      setTimeout(() => {
-        acceptCall(acceptedCall.offer);
-      }, 50);
+      // Execute accept call immediately
+      acceptCall(acceptedCall.offer);
     }
-  }, [acceptedCall?.channelId, acceptedCall?.offer, callState.isConnected, hasAutoAccepted, peerConnection, localStream]);
+  }, [acceptedCall?.channelId, acceptedCall?.offer]);
 
   const rejectCall = () => {
     stopRingtone();
