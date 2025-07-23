@@ -156,6 +156,12 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     // Check if the channel already exists
     const existingChannel = channels.find(ch => ch.id === channelId);
     if (existingChannel) {
+      // Patch: update the name if it doesn't match
+      if (existingChannel.name !== channelName) {
+        const updatedChannel = { ...existingChannel, name: channelName };
+        setChannels(prev => prev.map(ch => ch.id === channelId ? updatedChannel : ch));
+        return updatedChannel;
+      }
       return existingChannel;
     }
 

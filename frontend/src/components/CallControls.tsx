@@ -584,17 +584,17 @@ const CallControls: React.FC<CallControlsProps> = ({
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel);
         setSelectedChannel(callChannel); // Always set selected channel after accepting
-        console.log('✅ Joined call channel and participant list updated:', callChannel.call_participants);
+        console.log('[CallControls] ✅ Joined call channel and participant list updated:', callChannel.call_participants);
       }
       
       // Get user media for the call
-      console.log('🎯 Requesting user media...');
+      console.log('[CallControls] 🎯 Requesting user media...');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: pendingOffer ? true : false
       });
       
-      console.log('🎯 Got user media stream:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
+      console.log('[CallControls] 🎯 Got user media stream:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
       
       // Set up voice activity detection for local audio
       setupVoiceActivityDetection(stream, true);
@@ -608,18 +608,18 @@ const CallControls: React.FC<CallControlsProps> = ({
 
       // Create peer connection and handle the offer
       if (pendingOffer) {
-        console.log('🎯 Creating peer connection for incoming call');
+        console.log('[CallControls] 🎯 Creating peer connection for incoming call');
         const pc = createPeerConnection();
         
         if (pc) {
           // Add local tracks to peer connection
           stream.getTracks().forEach(track => {
-            console.log('🎯 Adding track to peer connection:', track.kind, track.enabled);
+            console.log('[CallControls] 🎯 Adding track to peer connection:', track.kind, track.enabled);
             pc.addTrack(track, stream);
           });
 
           // Handle the incoming offer
-          console.log('🎯 Handling incoming offer:', pendingOffer);
+          console.log('[CallControls] 🎯 Handling incoming offer:', pendingOffer);
           await handleOffer(pendingOffer);
           setPendingOffer(null);
         }
@@ -633,7 +633,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         }));
       }
     } catch (error) {
-      console.error('🎯 Error accepting call:', error);
+      console.error('[CallControls] 🎯 Error accepting call:', error);
       alert('Could not access camera/microphone. Please check permissions.');
     }
   };
