@@ -352,15 +352,19 @@ const CallControls: React.FC<CallControlsProps> = ({
   useEffect(() => {
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
+      console.log('[WebRTC] Local stream attached to localVideoRef:', localStream);
     }
   }, [localStream]);
   // 3. Always attach remote video stream to remoteVideoRef
   useEffect(() => {
     if (remoteStream && remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = remoteStream;
+      console.log('[WebRTC] Remote stream attached to remoteVideoRef:', remoteStream);
       if (callState.isVideoEnabled) {
         remoteVideoRef.current.onloadedmetadata = () => {
-          remoteVideoRef.current?.play().catch(() => {});
+          remoteVideoRef.current?.play().catch(e => {
+            console.error('[WebRTC] Error playing remote video:', e);
+          });
         };
       }
     }
@@ -386,11 +390,12 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const createPeerConnection = () => {
-    console.log('🔊 Creating new peer connection with enhanced STUN/TURN config');
+    console.log('[WebRTC] Creating new peer connection with config:', rtcConfig);
     try {
       const pc = new RTCPeerConnection(rtcConfig);
       pc.onicecandidate = (event) => {
         if (event.candidate && socket) {
+          console.log('[WebRTC] Sending ICE candidate:', event.candidate);
           socket.send(JSON.stringify({
             type: 'webrtc_ice_candidate',
             to: targetUserId,
@@ -399,6 +404,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         }
       };
       pc.oniceconnectionstatechange = () => {
+        console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           toast.success('Voice connection established!');
         } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
@@ -406,24 +412,25 @@ const CallControls: React.FC<CallControlsProps> = ({
         }
       };
       pc.ontrack = (event) => {
+        console.log('[WebRTC] ontrack event:', event);
         if (event.streams && event.streams[0]) {
           setRemoteStream(event.streams[0]);
-          console.log('✅ Remote stream received and set:', event.streams[0]);
+          console.log('[WebRTC] Remote stream received and set:', event.streams[0]);
         } else {
-          console.warn('⚠️ ontrack called but no streams found');
+          console.warn('[WebRTC] ontrack called but no streams found');
         }
       };
       setPeerConnection(pc);
       return pc;
     } catch (error) {
-      console.error('🔊 Error creating peer connection:', error);
+      console.error('[WebRTC] Error creating peer connection:', error);
       return null;
     }
   };
 
   // 2. In handleOffer, always ensure peer connection and add tracks
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
-    console.log('🔊 Handling offer:', offer);
+    console.log('[WebRTC] Handling offer:', offer);
     try {
       let pc = peerConnection;
       if (!pc) {
@@ -434,6 +441,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         if (socket) {
+          console.log('[WebRTC] Sending answer:', answer);
           socket.send(JSON.stringify({
             type: 'webrtc_answer',
             to: targetUserId,
@@ -442,14 +450,14 @@ const CallControls: React.FC<CallControlsProps> = ({
         }
       }
     } catch (error) {
-      console.error('🔊 Error handling offer:', error);
+      console.error('[WebRTC] Error handling offer:', error);
       toast.error('Error establishing video connection');
     }
   };
 
   // 3. In handleAnswer, always ensure peer connection
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-    console.log('🔊 Handling answer:', answer);
+    console.log('[WebRTC] Handling answer:', answer);
     try {
       let pc = peerConnection;
       if (!pc) {
@@ -459,7 +467,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
       }
     } catch (error) {
-      console.error('🔊 Error handling answer:', error);
+      console.error('[WebRTC] Error handling answer:', error);
     }
   };
 

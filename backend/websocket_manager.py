@@ -391,9 +391,10 @@ class WebSocketManager:
                     "from_name": caller_name,
                     "offer": message.get('offer'),
                     "isVideo": message.get('isVideo', False),
-                    "channelId": message.get('channelId')
+                    "channelId": message.get('channelId'),
+                    "channelName": message.get('channelName')
                 }))
-                logger.info(f"Call incoming from {user_id} ({caller_name}) to {target_user_id}")
+                logger.info(f"Call incoming from {user_id} ({caller_name}) to {target_user_id} with channelName: {message.get('channelName')}")
             except Exception as e:
                 logger.error(f"Error sending call incoming to user {target_user_id}: {e}")
                 # If we can't send to the user, they might be disconnected
