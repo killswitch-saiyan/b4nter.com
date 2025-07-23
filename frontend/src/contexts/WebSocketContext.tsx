@@ -26,6 +26,7 @@ interface WebSocketContextType {
   clearNotifications: () => void;
   connectedUsers: string[];
   socket: WebSocket | null;
+  onWebRTCMessage?: (data: any) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -51,6 +52,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const [userStatus, setUserStatus] = useState<{ [userId: string]: 'online' | 'offline' }>({});
   const [notifications, setNotifications] = useState<NotificationType[]>([]);
   const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
+  const webRTCMessageHandler = useRef<((data: any) => void) | null>(null);
 
   // Get backend URL from environment variable or default to localhost
   const getBackendUrl = () => {
@@ -253,9 +255,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           case 'webrtc_offer':
           case 'webrtc_answer':
           case 'webrtc_ice_candidate':
-            // These messages are handled by the CallControls component
-            // We don't need to do anything here as CallControls listens to the socket directly
-            console.log('Call-related message received:', data.type);
+            // Pass WebRTC messages to the CallControls component if handler is registered
+            console.log('WebRTC message received:', data.type, data);
+            if (webRTCMessageHandler.current) {
+              webRTCMessageHandler.current(data);
+            }
             break;
           case 'call_channel_created':
             console.log('Call channel created notification:', data);
@@ -372,6 +376,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
   const clearNotifications = () => setNotifications([]);
 
+  const setWebRTCMessageHandler = (handler: ((data: any) => void) | null) => {
+    webRTCMessageHandler.current = handler;
+  };
+
   const value: WebSocketContextType = {
     isConnected,
     sendMessage,
@@ -388,6 +396,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     clearNotifications,
     connectedUsers,
     socket: wsRef.current,
+    onWebRTCMessage: setWebRTCMessageHandler,
   };
 
   return (

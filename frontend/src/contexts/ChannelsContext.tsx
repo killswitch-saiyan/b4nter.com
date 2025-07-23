@@ -134,15 +134,15 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       created_by: user?.id || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      member_count: 1, // Only the caller initially
+      member_count: participants.length, // Use actual participant count
       is_call_channel: true,
       call_type: callType,
-      call_participants: [user?.id || ''], // Only the caller initially
+      call_participants: participants, // Include all participants from the start
       call_started_at: new Date().toISOString(),
     };
     setChannels(prev => [...prev, callChannel]);
     setSelectedChannel(callChannel);
-    console.log(`Created ${callType} call channel:`, callChannel);
+    console.log(`Created ${callType} call channel with participants:`, callChannel);
     return callChannel;
   };
   // --- End Patch ---
@@ -173,10 +173,10 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       created_by: participants.find(p => p !== user?.id) || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      member_count: 1,
+      member_count: participants.length, // Use actual participant count
       is_call_channel: true,
       call_type: callType,
-      call_participants: [participants.find(p => p !== user?.id) || ''],
+      call_participants: participants, // Include all participants
       call_started_at: new Date().toISOString(),
     };
     setChannels(prev => [...prev, callChannel]);

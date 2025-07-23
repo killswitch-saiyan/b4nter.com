@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useChannels } from '../contexts/ChannelsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useWebSocket } from '../contexts/WebSocketContext';
 import { toast } from 'react-hot-toast';
 
 interface CallControlsProps {
@@ -36,6 +37,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   acceptedCall 
 }) => {
   const { user } = useAuth();
+  const { onWebRTCMessage } = useWebSocket();
   const { createCallChannel, createCallChannelForReceiver, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, channels, setSelectedChannel } = useChannels();
   const [callState, setCallState] = useState<CallState>({
     isIncoming: false,
@@ -145,6 +147,15 @@ const CallControls: React.FC<CallControlsProps> = ({
       joinCallChannel(data.channelId, user?.id || ''); // Ensure receiver is added as participant
       return;
     }
+    if (data.type === 'call_accepted' && data.accepterId) {
+      console.log('📞 Call was accepted by:', data.accepterId);
+      // Ensure both users are in the call channel
+      if (data.channelId) {
+        joinCallChannel(data.channelId, data.accepterId);
+        console.log('📞 Receiver joined call channel, waiting for WebRTC connection');
+      }
+      return;
+    }
     // --- Handle WebRTC signaling messages ---
     if (data.type === 'webrtc_offer' && data.offer) {
       console.log('📡 Received WebRTC offer:', data);
@@ -160,11 +171,16 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
     if (data.type === 'webrtc_ice_candidate' && data.candidate) {
       console.log('📡 Received ICE candidate:', data);
+      console.log('📡 Peer connection state:', peerConnection?.signalingState);
+      console.log('📡 Has remote description:', !!peerConnection?.remoteDescription);
+      
       if (peerConnection && peerConnection.remoteDescription) {
+        console.log('📡 Adding ICE candidate immediately');
         peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => {
-          console.error('Error adding ICE candidate:', e);
+          console.error('📡 Error adding ICE candidate:', e);
         });
       } else {
+        console.log('📡 Storing ICE candidate for later');
         setPendingIceCandidates(prev => [...prev, data.candidate]);
       }
       return;
@@ -173,6 +189,15 @@ const CallControls: React.FC<CallControlsProps> = ({
   // --- End patch ---
   // Now, the handleMessage function can safely call handleSocketMessage
 
+  // Register WebRTC message handler with WebSocket context
+  useEffect(() => {
+    if (onWebRTCMessage) {
+      onWebRTCMessage(handleSocketMessage);
+      return () => onWebRTCMessage(null);
+    }
+  }, [onWebRTCMessage]);
+
+  // Keep original socket listener for backward compatibility
   useEffect(() => {
     if (socket) {
       const handleMessage = (event: MessageEvent) => {
@@ -396,12 +421,28 @@ const CallControls: React.FC<CallControlsProps> = ({
     if (!peerConnection) {
       const pc = createPeerConnection();
       if (pc && stream) {
+        console.log('[WebRTC] 🔧 Adding tracks to new peer connection:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
         stream.getTracks().forEach(track => {
           pc.addTrack(track, stream);
+          console.log('[WebRTC] 🔧 Added track:', track.kind, track.enabled);
         });
       }
       setPeerConnection(pc);
       return pc;
+    } else if (peerConnection && stream) {
+      // Ensure existing peer connection has the stream tracks
+      const existingTracks = peerConnection.getSenders().map(sender => sender.track);
+      const streamTracks = stream.getTracks();
+      
+      for (const track of streamTracks) {
+        const trackExists = existingTracks.some(existingTrack => 
+          existingTrack && existingTrack.kind === track.kind
+        );
+        if (!trackExists) {
+          console.log('[WebRTC] 🔧 Adding missing track to existing peer connection:', track.kind);
+          peerConnection.addTrack(track, stream);
+        }
+      }
     }
     return peerConnection;
   };
@@ -421,12 +462,28 @@ const CallControls: React.FC<CallControlsProps> = ({
         }
       };
       pc.oniceconnectionstatechange = () => {
-        console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
+        console.log('[WebRTC] ICE connection state changed:', pc.iceConnectionState);
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-          toast.success('Voice connection established!');
-        } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-          toast.error('Voice connection lost');
+          console.log('[WebRTC] ✅ Connection established successfully!');
+          setCallState(prev => ({ ...prev, isConnected: true, isOutgoing: false, isIncoming: false }));
+          toast.success('Connection established!');
+          
+          // Ensure both users appear in the call channel UI
+          if (currentCallChannel) {
+            joinCallChannel(currentCallChannel, user?.id || '');
+            console.log('[WebRTC] ✅ User joined call channel after connection established');
+          }
+        } else if (pc.iceConnectionState === 'failed') {
+          console.error('[WebRTC] ❌ Connection failed');
+          toast.error('Connection failed - please try again');
+        } else if (pc.iceConnectionState === 'disconnected') {
+          console.warn('[WebRTC] ⚠️ Connection lost');
+          toast.error('Connection lost');
         }
+      };
+      
+      pc.onconnectionstatechange = () => {
+        console.log('[WebRTC] Connection state changed:', pc.connectionState);
       };
       pc.ontrack = (event) => {
         console.log('[WebRTC] ontrack event:', event);
@@ -457,18 +514,30 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // 2. In handleOffer, always ensure peer connection and add tracks
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
-    console.log('[WebRTC] Handling offer:', offer);
+    console.log('[WebRTC] 🎯 Handling offer:', offer);
+    console.log('[WebRTC] 🎯 Offer SDP type:', offer.type);
+    console.log('[WebRTC] 🎯 Current peer connection state:', peerConnection?.signalingState);
+    
     try {
       let pc = peerConnection;
       if (!pc) {
+        console.log('[WebRTC] 🎯 Creating new peer connection for offer');
         pc = ensurePeerConnection(localStream);
       }
+      
       if (pc) {
+        console.log('[WebRTC] 🎯 Setting remote description from offer');
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        console.log('[WebRTC] 🎯 Remote description set, creating answer');
+        
         const answer = await pc.createAnswer();
+        console.log('[WebRTC] 🎯 Answer created:', answer);
+        
         await pc.setLocalDescription(answer);
+        console.log('[WebRTC] 🎯 Local description set with answer');
+        
         if (socket) {
-          console.log('[WebRTC] Sending answer:', answer);
+          console.log('[WebRTC] 🎯 Sending answer via WebSocket');
           socket.send(JSON.stringify({
             type: 'webrtc_answer',
             to: targetUserId,
@@ -477,24 +546,33 @@ const CallControls: React.FC<CallControlsProps> = ({
         }
       }
     } catch (error) {
-      console.error('[WebRTC] Error handling offer:', error);
-      toast.error('Error establishing video connection');
+      console.error('[WebRTC] ❌ Error handling offer:', error);
+      toast.error('Error establishing connection');
     }
   };
 
   // 3. In handleAnswer, always ensure peer connection
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-    console.log('[WebRTC] Handling answer:', answer);
+    console.log('[WebRTC] 🎯 Handling answer:', answer);
+    console.log('[WebRTC] 🎯 Answer SDP type:', answer.type);
+    console.log('[WebRTC] 🎯 Current peer connection state:', peerConnection?.signalingState);
+    
     try {
       let pc = peerConnection;
       if (!pc) {
+        console.log('[WebRTC] 🎯 Creating new peer connection for answer');
         pc = ensurePeerConnection(localStream);
       }
+      
       if (pc) {
+        console.log('[WebRTC] 🎯 Setting remote description from answer');
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('[WebRTC] 🎯 Remote description set with answer');
+        console.log('[WebRTC] 🎯 Final peer connection state:', pc.signalingState);
       }
     } catch (error) {
-      console.error('[WebRTC] Error handling answer:', error);
+      console.error('[WebRTC] ❌ Error handling answer:', error);
+      toast.error('Error completing connection');
     }
   };
 
@@ -519,6 +597,10 @@ const CallControls: React.FC<CallControlsProps> = ({
       setActiveCallChannelId(callChannel.id); // Set active call channel in context
       
       console.log('🚀 Created call channel:', callChannel);
+      
+      // Immediately join the call channel as the caller
+      joinCallChannel(callChannel.id, user?.id || '');
+      console.log('🚀 Caller joined their own call channel');
       
       // Notify target user about call channel creation
       if (socket) {
@@ -561,8 +643,12 @@ const CallControls: React.FC<CallControlsProps> = ({
           pc.addTrack(track, stream);
         });
 
+        console.log('🚀 Creating offer...');
         const offer = await pc.createOffer();
+        console.log('🚀 Offer created:', offer);
+        
         await pc.setLocalDescription(offer);
+        console.log('🚀 Local description set with offer');
 
         if (socket) {
           const callMessage = {
@@ -575,6 +661,7 @@ const CallControls: React.FC<CallControlsProps> = ({
           console.log('🚀 Sending call incoming message:', callMessage);
           console.log('🚀 Call type being sent:', isVideo ? 'VIDEO' : 'VOICE');
           console.log('🚀 Local stream tracks:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
+          console.log('🚀 Peer connection state after offer:', pc.signalingState);
           socket.send(JSON.stringify(callMessage));
         } else {
           console.error('🚀 WebSocket not connected');
@@ -597,7 +684,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   const acceptCall = async () => {
     try {
       stopRingtone();
-      setCallState(prev => ({ ...prev, isIncoming: false, isConnected: true }));
+      setCallState(prev => ({ ...prev, isIncoming: false })); // Don't set connected yet
       if (currentCallChannel) {
         // Wait for the call channel to appear in the channels list and for the user to be a participant
         let callChannel = channels.find(ch => ch.id === currentCallChannel);
@@ -656,11 +743,13 @@ const CallControls: React.FC<CallControlsProps> = ({
         }
       }
       
-      // Send call accepted message
+      // Send call accepted message with channel info
       if (socket) {
         socket.send(JSON.stringify({
           type: 'call_accepted',
-          to: targetUserId
+          to: targetUserId,
+          channelId: currentCallChannel,
+          accepterId: user?.id
         }));
       }
     } catch (error) {
@@ -983,15 +1072,20 @@ const CallControls: React.FC<CallControlsProps> = ({
             <audio
               ref={remoteVideoRef}
               autoPlay
+              playsInline
               muted={false}
               style={{ display: 'none' }}
               onLoadedMetadata={() => {
                 console.log('🔊 Voice call audio element loaded');
+                console.log('🔊 Remote stream tracks:', remoteStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
                 if (remoteVideoRef.current) {
                   const audioElement = remoteVideoRef.current as HTMLAudioElement;
                   audioElement.volume = 1.0;
+                  console.log('🔊 Audio element volume set to:', audioElement.volume);
                   audioElement.play().catch(e => {
                     console.error('🔊 Error playing voice call audio:', e);
+                    console.error('🔊 Error name:', e.name);
+                    console.error('🔊 Error message:', e.message);
                   });
                 }
               }}
@@ -1000,15 +1094,18 @@ const CallControls: React.FC<CallControlsProps> = ({
                 if (remoteVideoRef.current) {
                   const audioElement = remoteVideoRef.current as HTMLAudioElement;
                   audioElement.play().catch(e => {
-                    console.error('🔊 Error playing voice call audio:', e);
+                    console.error('🔊 Error playing voice call audio on canplay:', e);
                   });
                 }
               }}
               onPlay={() => {
-                console.log('🔊 Voice call audio started playing');
+                console.log('🔊 ✅ Voice call audio started playing successfully!');
               }}
               onError={(e) => {
                 console.error('🔊 Voice call audio error:', e);
+              }}
+              onVolumeChange={() => {
+                console.log('🔊 Audio volume changed:', remoteVideoRef.current?.volume);
               }}
             />
           )}
@@ -1019,7 +1116,21 @@ const CallControls: React.FC<CallControlsProps> = ({
               ref={remoteVideoRef}
               autoPlay
               playsInline
+              muted={false}
               className="w-full h-full object-cover rounded-lg"
+              onLoadedMetadata={() => {
+                console.log('📹 Video call element loaded');
+                console.log('📹 Remote stream tracks:', remoteStream?.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
+              }}
+              onCanPlay={() => {
+                console.log('📹 Video call can play');
+              }}
+              onPlay={() => {
+                console.log('📹 ✅ Video call started playing successfully!');
+              }}
+              onError={(e) => {
+                console.error('📹 Video call error:', e);
+              }}
             />
           )}
           
