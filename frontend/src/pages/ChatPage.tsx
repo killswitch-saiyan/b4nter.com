@@ -967,7 +967,7 @@ const ChatPage: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span># {channel.name}</span>
+                      <span>{channel.name}</span>
                       <span className="text-xs text-green-600 dark:text-green-400">
                         {channel.member_count} online
                       </span>
@@ -1095,7 +1095,16 @@ const ChatPage: React.FC = () => {
                 <h3 className="text-2xl font-bold mb-4 dark:text-white">
                   {selectedChannel.call_type === 'voice' ? 'Voice Call' : 'Video Call'}
                 </h3>
-                
+                {/* Embed CallControls for video/audio UI */}
+                <div className="flex justify-center mb-8">
+                  <CallControls
+                    targetUserId={selectedChannel.call_participants?.find(p => p !== user?.id) || ''}
+                    targetUsername={getParticipantName(selectedChannel.call_participants?.find(p => p !== user?.id) || '')}
+                    onCallEnd={handleEndCall}
+                    socket={socket}
+                    isGlobal={false}
+                  />
+                </div>
                 {/* Call Timer */}
                 <div className="mb-6">
                   <div className="text-3xl font-mono text-gray-600 dark:text-gray-300">
@@ -1108,11 +1117,9 @@ const ChatPage: React.FC = () => {
                   </div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Call Duration</p>
                 </div>
-                
                 <p className="text-gray-600 dark:text-gray-300 mb-6">
                   {selectedChannel.member_count} participants in this call
                 </p>
-                
                 {/* Call Controls */}
                 <div className="flex justify-center gap-4 mb-8">
                   <button
@@ -1123,7 +1130,6 @@ const ChatPage: React.FC = () => {
                     End Call
                   </button>
                 </div>
-                
                 <div className="bg-gray-100 dark:bg-dark-600 rounded-lg p-4 max-w-md mx-auto">
                   <h4 className="font-semibold mb-3 dark:text-white">Participants</h4>
                   <div className="space-y-3">

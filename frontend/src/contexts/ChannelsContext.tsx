@@ -128,7 +128,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     }
     const callChannel: Channel = {
       id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: `# ${channelName}`,
+      name: channelName, // Remove '#' here
       description: `${callType} call - waiting for others to join`,
       is_private: true,
       created_by: user?.id || '',
@@ -161,7 +161,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
 
     const callChannel: Channel = {
       id: channelId,
-      name: channelName, // <-- Use the exact name from the caller!
+      name: channelName, // Use the exact name from the caller, no '#'
       description: `${callType} call - click to join`,
       is_private: true,
       created_by: participants.find(p => p !== user?.id) || '',
