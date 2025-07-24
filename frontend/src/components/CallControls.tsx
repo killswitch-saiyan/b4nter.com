@@ -538,9 +538,16 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
       
       if (pc) {
-        console.log('🔊 Setting remote description with answer');
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('✅ Answer processed successfully');
+        console.log('🔊 Peer connection signaling state:', pc.signalingState);
+        
+        // Only process answer if we're in the right state
+        if (pc.signalingState === 'have-local-offer') {
+          console.log('🔊 Setting remote description with answer');
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log('✅ Answer processed successfully');
+        } else {
+          console.log('🔊 Ignoring answer - peer connection not in correct state:', pc.signalingState);
+        }
       }
     } catch (error) {
       console.error('❌ Error handling answer:', error);
@@ -735,7 +742,29 @@ const CallControls: React.FC<CallControlsProps> = ({
   // Auto-accept logic for receiver - single execution only
   const autoAcceptExecuted = useRef(false);
   
+  // Reset auto-accept flag when call ends
   useEffect(() => {
+    if (!acceptedCall) {
+      autoAcceptExecuted.current = false;
+    }
+  }, [acceptedCall]);
+  
+  useEffect(() => {
+    console.log('🔊 Auto-accept effect triggered:', {
+      acceptedCall: !!acceptedCall,
+      hasOffer: !!acceptedCall?.offer,
+      isConnected: callState.isConnected,
+      isIncoming: callState.isIncoming,
+      isOutgoing: callState.isOutgoing,
+      isAcceptingCall,
+      hasAutoAccepted,
+      hasPeerConnection: !!peerConnection,
+      hasLocalStream: !!localStream,
+      autoAcceptExecuted: autoAcceptExecuted.current,
+      currentCallChannel,
+      acceptedCallChannelId: acceptedCall?.channelId
+    });
+    
     if (
       acceptedCall &&
       acceptedCall.offer &&
@@ -749,7 +778,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       !autoAcceptExecuted.current &&
       (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
     ) {
-      console.log('Auto-accepting call - executing once only');
+      console.log('🔊 Auto-accepting call - executing once only');
       
       // Mark as executed immediately
       autoAcceptExecuted.current = true;
@@ -763,7 +792,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       // Execute accept call immediately
       acceptCall(acceptedCall.offer);
     }
-  }, [acceptedCall?.channelId, acceptedCall?.offer]);
+  }, [acceptedCall?.channelId, acceptedCall?.offer, callState.isConnected, isAcceptingCall, hasAutoAccepted, peerConnection, localStream]);
 
   const rejectCall = () => {
     stopRingtone();
