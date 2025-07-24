@@ -133,7 +133,22 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // --- Ensure handleSocketMessage is defined before usage ---
   const handleSocketMessage = React.useCallback((data: any) => {
-    console.log('🔊 CallControls processing message:', data.type);
+    console.log('🔊 CallControls processing message:', data.type, 'for target:', targetUserId, 'from:', data.from, 'to:', data.to);
+    
+    // Filter messages - only process if this CallControls is for the right user
+    // For answers: we are the caller, so we should receive messages FROM our target
+    // For offers: we are the receiver, so we should receive messages TO us
+    const isForThisInstance = 
+      (data.type === 'webrtc_answer' && data.from === targetUserId) ||
+      (data.type === 'webrtc_offer' && data.to === user?.id) ||
+      (data.type === 'call_incoming' && data.to === user?.id) ||
+      (data.type === 'webrtc_ice_candidate' && (data.from === targetUserId || data.to === user?.id)) ||
+      (data.type === 'call_channel_created' && data.to === user?.id);
+    
+    if (!isForThisInstance) {
+      console.log('🔊 Message not for this CallControls instance, ignoring');
+      return;
+    }
     
     if (data.type === 'call_channel_created' && data.to === user?.id) {
       let callChannel = channels.find(ch => ch.id === data.channelId);
@@ -194,12 +209,14 @@ const CallControls: React.FC<CallControlsProps> = ({
   // Register WebRTC message handler with WebSocket context
   useEffect(() => {
     if (onWebRTCMessage) {
+      console.log('🔊 Registering WebRTC message handler for CallControls with target:', targetUserId);
       onWebRTCMessage(handleSocketMessage);
       return () => {
+        console.log('🔊 Unregistering WebRTC message handler for CallControls with target:', targetUserId);
         onWebRTCMessage(null);
       };
     }
-  }, [onWebRTCMessage, targetUserId]);
+  }, [onWebRTCMessage, targetUserId, handleSocketMessage]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {
@@ -741,18 +758,27 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // Auto-accept logic for receiver - single execution only
   const autoAcceptExecuted = useRef(false);
+  const acceptedCallRef = useRef(acceptedCall);
   
-  // Reset auto-accept flag when call ends
+  // Update ref when acceptedCall changes
   useEffect(() => {
-    if (!acceptedCall) {
-      autoAcceptExecuted.current = false;
-    }
+    acceptedCallRef.current = acceptedCall;
   }, [acceptedCall]);
   
+  // Reset auto-accept flag only when component unmounts
   useEffect(() => {
+    return () => {
+      autoAcceptExecuted.current = false;
+    };
+  }, []);
+  
+  // Auto-accept effect with minimal dependencies to prevent multiple triggers
+  useEffect(() => {
+    const acceptedCallData = acceptedCallRef.current;
+    
     console.log('🔊 Auto-accept effect triggered:', {
-      acceptedCall: !!acceptedCall,
-      hasOffer: !!acceptedCall?.offer,
+      acceptedCall: !!acceptedCallData,
+      hasOffer: !!acceptedCallData?.offer,
       isConnected: callState.isConnected,
       isIncoming: callState.isIncoming,
       isOutgoing: callState.isOutgoing,
@@ -762,37 +788,37 @@ const CallControls: React.FC<CallControlsProps> = ({
       hasLocalStream: !!localStream,
       autoAcceptExecuted: autoAcceptExecuted.current,
       currentCallChannel,
-      acceptedCallChannelId: acceptedCall?.channelId
+      acceptedCallChannelId: acceptedCallData?.channelId
     });
     
+    // Only execute if all conditions are met and we haven't already executed
     if (
-      acceptedCall &&
-      acceptedCall.offer &&
+      acceptedCallData &&
+      acceptedCallData.offer &&
+      !autoAcceptExecuted.current &&
       !callState.isConnected &&
       !callState.isIncoming &&
       !callState.isOutgoing &&
       !isAcceptingCall &&
       !hasAutoAccepted &&
       !peerConnection &&
-      !localStream &&
-      !autoAcceptExecuted.current &&
-      (currentCallChannel === acceptedCall.channelId || !currentCallChannel)
+      !localStream
     ) {
       console.log('🔊 Auto-accepting call - executing once only');
       
-      // Mark as executed immediately
+      // Mark as executed immediately to prevent any re-execution
       autoAcceptExecuted.current = true;
       
       // Set all flags immediately to prevent re-triggers
       setIsAcceptingCall(true);
       setHasAutoAccepted(true);
-      setPendingOffer(acceptedCall.offer);
-      setCurrentCallChannel(acceptedCall.channelId);
+      setPendingOffer(acceptedCallData.offer);
+      setCurrentCallChannel(acceptedCallData.channelId);
       
       // Execute accept call immediately
-      acceptCall(acceptedCall.offer);
+      acceptCall(acceptedCallData.offer);
     }
-  }, [acceptedCall?.channelId, acceptedCall?.offer, callState.isConnected, isAcceptingCall, hasAutoAccepted, peerConnection, localStream]);
+  }, [callState.isConnected, callState.isIncoming, callState.isOutgoing]); // Minimal dependencies
 
   const rejectCall = () => {
     stopRingtone();
