@@ -79,8 +79,17 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
         );
         const merged = [...activeChannels, ...localCallChannels];
         // If none selected, select the first
+        // BUT: preserve call channel selection - don't override if current selection is a call channel
         if (merged.length > 0 && !selectedChannel) {
           setSelectedChannel(merged[0]);
+        } else if (selectedChannel?.is_call_channel) {
+          // Ensure the selected call channel still exists in the merged list
+          const callChannelStillExists = merged.some(ch => ch.id === selectedChannel.id);
+          if (!callChannelStillExists) {
+            // Call channel was removed, select first available channel
+            setSelectedChannel(merged[0] || null);
+          }
+          // Otherwise, keep the current call channel selected
         }
         return merged;
       });
