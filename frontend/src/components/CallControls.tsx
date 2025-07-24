@@ -585,11 +585,8 @@ const CallControls: React.FC<CallControlsProps> = ({
       setCurrentCallChannel(callChannel.id);
       setActiveCallChannelId(callChannel.id); // Set active call channel in context
       
-      console.log('🚀 Created call channel:', callChannel);
-      
       // Immediately join the call channel as the caller
       joinCallChannel(callChannel.id, user?.id || '');
-      console.log('🚀 Caller joined their own call channel');
       
       // Notify target user about call channel creation
       if (socket) {
@@ -601,7 +598,6 @@ const CallControls: React.FC<CallControlsProps> = ({
           callType: callType,
           participants: participants
         };
-        console.log('🚀 Sending call channel created message:', channelMessage);
         socket.send(JSON.stringify(channelMessage));
       }
       
@@ -625,10 +621,10 @@ const CallControls: React.FC<CallControlsProps> = ({
       }));
 
       const pc = createPeerConnection();
+      setPeerConnection(pc); // CRITICAL FIX: Save peer connection to state
       
       if (pc) {
         stream.getTracks().forEach(track => {
-          console.log('🚀 Adding track to peer connection:', track.kind);
           pc.addTrack(track, stream);
         });
 
@@ -709,6 +705,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       if (offerToProcess) {
         
         const pc = createPeerConnection();
+        setPeerConnection(pc); // CRITICAL FIX: Save peer connection to state
         
         if (pc) {
           // Add local tracks to peer connection
@@ -719,7 +716,7 @@ const CallControls: React.FC<CallControlsProps> = ({
           // Handle the incoming offer
           await handleOffer(offerToProcess);
           setPendingOffer(null);
-          console.log('✅ Call accepted');
+          console.log('✅ Video call accepted');
         }
       }
       
