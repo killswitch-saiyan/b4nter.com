@@ -209,20 +209,43 @@ const CallControls: React.FC<CallControlsProps> = ({
   useEffect(() => {
     // SIMPLIFIED: Register WebRTC handler if:
     // 1. This is NOT a global (DM) CallControls component (isGlobal=false)
-    // 2. AND this component has either currentCallChannel OR acceptedCall set
-    const shouldHandleWebRTC = !isGlobal && (currentCallChannel || acceptedCall);
+    // 2. AND this component has either currentCallChannel OR acceptedCall set OR is embedded in active call channel
+    const isEmbeddedInCallChannel = !isGlobal && activeCallChannelId && activeCallChannelId !== null;
+    const shouldHandleWebRTC = !isGlobal && (currentCallChannel || acceptedCall || isEmbeddedInCallChannel);
     
     if (onWebRTCMessage && shouldHandleWebRTC) { 
-      console.log('🔍 Component', componentId.current, 'registering WebRTC handler for channel:', currentCallChannel || acceptedCall?.channelId);
+      console.log('🔍 Component', componentId.current, 'registering WebRTC handler for channel:', currentCallChannel || acceptedCall?.channelId || activeCallChannelId, 'reason:', currentCallChannel ? 'currentCallChannel' : acceptedCall ? 'acceptedCall' : 'isEmbeddedInCallChannel');
       onWebRTCMessage(handleSocketMessage);
       return () => {
         console.log('🔍 Component', componentId.current, 'unregistering WebRTC handler');
         onWebRTCMessage(null);
       };
     } else {
-      console.log('🔍 Component', componentId.current, 'NOT registering WebRTC handler - isGlobal:', isGlobal, 'currentCallChannel:', currentCallChannel, 'acceptedCall:', !!acceptedCall);
+      console.log('🔍 Component', componentId.current, 'NOT registering WebRTC handler - isGlobal:', isGlobal, 'currentCallChannel:', currentCallChannel, 'acceptedCall:', !!acceptedCall, 'activeCallChannelId:', activeCallChannelId);
     }
-  }, [onWebRTCMessage, handleSocketMessage, isGlobal, currentCallChannel, acceptedCall]);
+  }, [onWebRTCMessage, handleSocketMessage, isGlobal, currentCallChannel, acceptedCall, activeCallChannelId]);
+
+  // Auto-start call for embedded CallControls
+  useEffect(() => {
+    // For embedded CallControls in active call channel
+    const isEmbeddedInCallChannel = !isGlobal && activeCallChannelId && activeCallChannelId !== null;
+    
+    if (isEmbeddedInCallChannel && !callState.isOutgoing && !callState.isIncoming && !callState.isConnected) {
+      // Check if this is the caller (user created the channel) or receiver (acceptedCall exists)
+      if (acceptedCall) {
+        console.log('🔍 Embedded CallControls auto-accepting call for receiver');
+        acceptCall(acceptedCall.offer);
+      } else {
+        // This might be the caller's embedded CallControls - check if user is channel creator
+        const currentChannel = channels.find(ch => ch.id === activeCallChannelId);
+        if (currentChannel && currentChannel.created_by === user?.id) {
+          console.log('🔍 Embedded CallControls auto-starting call for caller');
+          const isVideo = currentChannel.call_type === 'video';
+          startCall(isVideo);
+        }
+      }
+    }
+  }, [activeCallChannelId, isGlobal, acceptedCall, callState, channels, user?.id]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {

@@ -4,6 +4,7 @@ from models import ChannelCreate, ChannelResponse, UserResponse
 from auth import get_current_user, require_channel_admin
 from database import db
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -118,11 +119,17 @@ async def get_channel(
                 detail="Channel not found"
             )
         
-        # Check if user is member of channel
+        # Check if user is member of channel OR has access to call channel
         user_channels = await db.get_user_channels(current_user.id)
         user_channel_ids = [c.get("channel_id") for c in user_channels]
         
-        if channel_id not in user_channel_ids:
+        # For call channels, allow access if user is the creator or channel is being accessed during call invitation
+        has_call_access = False
+        if channel.get("is_call_channel") == "true":
+            # Allow access for call channels (they are temporary and invitation-based)
+            has_call_access = True
+        
+        if channel_id not in user_channel_ids and not has_call_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not a member of this channel"

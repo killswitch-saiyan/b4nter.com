@@ -1338,29 +1338,10 @@ const ChatPage: React.FC = () => {
           }}
           socket={socket}
           isGlobal={true}
+          acceptedCall={acceptedCall}
         />
       )}
       
-      {/* Global CallControls for active calls */}
-      {selectedChannel?.is_call_channel && activeCallChannelId && (
-        <CallControls
-          targetUserId={selectedChannel.call_participants?.find(p => p !== user?.id) || ''}
-          targetUsername={getParticipantName(selectedChannel.call_participants?.find(p => p !== user?.id) || '')}
-          onCallEnd={() => {
-            console.log('🔚 Global CallControls onCallEnd triggered');
-            // Don't delete channel here - let the actual CallControls component handle it
-            // Switch back to a regular channel
-            const regularChannels = channels.filter(ch => !ch.is_call_channel);
-            if (regularChannels.length > 0) {
-              setSelectedChannel(regularChannels[0]);
-            }
-            setActiveCallChannelId(null);
-            toast.success('Call ended');
-          }}
-          socket={socket}
-          isGlobal={false}
-        />
-      )}
     </div>
   );
 };
