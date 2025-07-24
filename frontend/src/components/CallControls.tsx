@@ -40,7 +40,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   console.log('🔍 CallControls component', componentId.current, 'rendered for target:', targetUserId, 'isGlobal:', isGlobal);
   const { user } = useAuth();
   const { onWebRTCMessage } = useWebSocket();
-  const { createCallChannel, createCallChannelForReceiver, removeCallChannel, deleteCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, activeCallChannelId, channels, setSelectedChannel } = useChannels();
+  const { createCallChannel, createCallChannelForReceiver, removeCallChannel, deleteCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, activeCallChannelId, channels, setSelectedChannel, refreshChannels } = useChannels();
   const [callState, setCallState] = useState<CallState>({
     isIncoming: false,
     isOutgoing: false,
@@ -695,12 +695,42 @@ const CallControls: React.FC<CallControlsProps> = ({
         // First try to find the channel locally
         let callChannel = channels.find(ch => ch.id === currentCallChannel);
         
-        // If not found locally, refresh channels from backend (the caller created it there)
+        // If not found locally, fetch directly from backend (the caller created it there)
         if (!callChannel) {
-          console.log('[CallControls] Channel not found locally, refreshing from backend...');
-          await refreshChannels();
-          // Look again after refresh
-          callChannel = channels.find(ch => ch.id === currentCallChannel);
+          console.log('[CallControls] Channel not found locally, fetching from backend...');
+          try {
+            const token = localStorage.getItem('access_token');
+            const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+            const response = await fetch(`${backendUrl}/channels/${currentCallChannel}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            if (response.ok) {
+              const channelData = await response.json();
+              console.log('[CallControls] Fetched channel from backend:', channelData);
+              
+              // Parse the channel data properly
+              callChannel = {
+                ...channelData,
+                is_call_channel: channelData.is_call_channel === "true" || channelData.is_call_channel === true,
+                call_type: channelData.call_type,
+                call_participants: typeof channelData.call_participants === 'string' 
+                  ? JSON.parse(channelData.call_participants) 
+                  : (channelData.call_participants || [acceptedCall?.from || '', user?.id || ''])
+              };
+              
+              // Refresh channels to make sure the fetched channel is available in local state
+              // This ensures the UI can see the call channel properties
+              await refreshChannels();
+            } else {
+              console.error('[CallControls] Failed to fetch channel from backend:', response.status);
+            }
+          } catch (error) {
+            console.error('[CallControls] Error fetching channel from backend:', error);
+          }
         }
         
         // If still not found, create local representation as fallback
@@ -714,7 +744,7 @@ const CallControls: React.FC<CallControlsProps> = ({
           );
         } else {
           console.log('[CallControls] Found call channel:', callChannel);
-          // Parse string fields if needed
+          // Parse string fields if needed (for locally found channels)
           if (typeof callChannel.call_participants === 'string') {
             callChannel = {
               ...callChannel,
@@ -729,6 +759,13 @@ const CallControls: React.FC<CallControlsProps> = ({
         setActiveCallChannelId(currentCallChannel);
         setSelectedChannel(callChannel);
         console.log('[CallControls] Switched to call channel:', callChannel.name);
+        console.log('[CallControls] Call channel properties:', {
+          id: callChannel.id,
+          name: callChannel.name,
+          is_call_channel: callChannel.is_call_channel,
+          call_type: callChannel.call_type,
+          call_participants: callChannel.call_participants
+        });
       }
       
       // Get user media for the call
