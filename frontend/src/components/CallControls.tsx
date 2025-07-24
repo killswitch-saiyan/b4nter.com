@@ -187,7 +187,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
       return;
     }
-  }, [user?.id, channels, peerConnection, handleAnswer, createCallChannelForReceiver, setCurrentCallChannel, setSelectedChannel, joinCallChannel]);
+  }, [user?.id, channels, peerConnection]);
   // --- End patch ---
   // Now, the handleMessage function can safely call handleSocketMessage
 
@@ -415,7 +415,7 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // --- Robust Video Call Logic Patch ---
 
-  const ensurePeerConnection = React.useCallback((stream: MediaStream | null) => {
+  const ensurePeerConnection = (stream: MediaStream | null) => {
     if (!peerConnection) {
       const pc = createPeerConnection();
       if (pc && stream) {
@@ -439,9 +439,9 @@ const CallControls: React.FC<CallControlsProps> = ({
       }
     }
     return peerConnection;
-  }, [peerConnection, createPeerConnection]);
+  };
 
-  const createPeerConnection = React.useCallback(() => {
+  const createPeerConnection = () => {
     console.log('Creating peer connection');
     try {
       const pc = new RTCPeerConnection(rtcConfig);
@@ -496,7 +496,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       console.error('[WebRTC] Error creating peer connection:', error);
       return null;
     }
-  }, [rtcConfig, socket, targetUserId, currentCallChannel, joinCallChannel, user?.id]);
+  };
 
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
     console.log('Handling offer');
@@ -527,7 +527,7 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   };
 
-  const handleAnswer = React.useCallback(async (answer: RTCSessionDescriptionInit) => {
+  const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
     console.log('🔊 CallControls handling answer');
     
     try {
@@ -553,7 +553,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       console.error('❌ Error handling answer:', error);
       toast.error('Error completing connection');
     }
-  }, [peerConnection, localStream, ensurePeerConnection]);
+  };
 
   // 4. In startCall and acceptCall, always attach local video stream
   const startCall = async (isVideo: boolean) => {
