@@ -28,7 +28,7 @@ import brandLogo from '../assets/brandlogo.png';
 const ChatPage: React.FC = () => {
   const { user, logout, updateUser } = useAuth();
   const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent, socket } = useWebSocket();
-  const { channels, loading, selectedChannel, setSelectedChannel, refreshChannels, createCallChannel, createCallChannelForReceiver, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, activeCallChannelId, setActiveCallChannelId } = useChannels();
+  const { channels, loading, selectedChannel, setSelectedChannel, refreshChannels, createCallChannel, createCallChannelForReceiver, removeCallChannel, deleteCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, activeCallChannelId, setActiveCallChannelId } = useChannels();
   const [message, setMessage] = useState('');
   const prevChannelRef = useRef<string | null>(null);
   const [users, setUsers] = useState<any[]>([]);
@@ -109,11 +109,13 @@ const ChatPage: React.FC = () => {
     };
   }, [selectedChannel?.id, selectedChannel?.is_call_channel, selectedChannel?.call_started_at, setCallDuration]);
 
-  // Function to end call and remove call channel
+  // Function to end call and delete call channel
   const handleEndCall = () => {
     if (selectedChannel?.is_call_channel && user) {
-      // Remove the call channel
-      removeCallChannel(selectedChannel.id);
+      console.log('🔚 ChatPage ending call and deleting channel:', selectedChannel.id);
+      
+      // Delete the call channel from backend and local state
+      deleteCallChannel(selectedChannel.id);
       
       // Switch to first available channel
       const regularChannels = channels.filter(ch => !ch.is_call_channel);
@@ -1262,23 +1264,25 @@ const ChatPage: React.FC = () => {
                 <button
                   onClick={async () => {
                     console.log('[ChatPage] Accept button clicked, channelName:', incomingCall.channelName);
+                    // SIMPLIFIED: Just join the existing channel the caller created
+                    console.log('[ChatPage] Receiver joining existing call channel:', incomingCall.channelId, incomingCall.channelName);
+                    
+                    // Find the channel locally (should exist if channels are synced properly)
                     let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
-                    const safeChannelName = incomingCall.channelName || (incomingCall.isVideo ? 'video-channel' : 'voice-channel');
+                    
+                    // If channel not found locally, refresh channels to get it from backend
                     if (!callChannel) {
-                      callChannel = createCallChannelForReceiver(
-                        incomingCall.channelId,
-                        safeChannelName,
-                        incomingCall.isVideo ? 'video' : 'voice',
-                        [incomingCall.from, user?.id || '']
-                      );
-                      console.log('[ChatPage] Created call channel for receiver:', callChannel);
-                    } else {
-                      // Patch: update the name if it doesn't match
-                      if (callChannel.name !== safeChannelName) {
-                        callChannel = { ...callChannel, name: safeChannelName };
-                        setChannels(prev => prev.map(ch => ch.id === callChannel!.id ? callChannel! : ch));
-                        console.log('[ChatPage] Updated call channel name for receiver:', callChannel);
-                      }
+                      console.log('[ChatPage] Channel not found locally, refreshing channels...');
+                      await refreshChannels();
+                      callChannel = channels.find(ch => ch.id === incomingCall.channelId);
+                    }
+                    
+                    // If still not found, the caller's channel creation failed
+                    if (!callChannel) {
+                      console.error('[ChatPage] Call channel not found even after refresh. Call may have ended.');
+                      toast.error('Call channel no longer exists');
+                      setIncomingCall(null);
+                      return;
                     }
                     joinCallChannel(incomingCall.channelId, user?.id || '');
                     setActiveCallChannelId(incomingCall.channelId);
@@ -1324,6 +1328,10 @@ const ChatPage: React.FC = () => {
           targetUserId={incomingCall.from}
           targetUsername={incomingCall.fromName}
           onCallEnd={() => {
+            // Delete the call channel when call ends from incoming call controls
+            if (incomingCall?.channelId) {
+              deleteCallChannel(incomingCall.channelId);
+            }
             setIncomingCall(null);
             // Switch back to a regular channel
             const regularChannels = channels.filter(ch => !ch.is_call_channel);
@@ -1342,6 +1350,10 @@ const ChatPage: React.FC = () => {
           targetUserId={selectedChannel.call_participants?.find(p => p !== user?.id) || ''}
           targetUsername={getParticipantName(selectedChannel.call_participants?.find(p => p !== user?.id) || '')}
           onCallEnd={() => {
+            // Delete the call channel when call ends from global controls
+            if (selectedChannel?.is_call_channel) {
+              deleteCallChannel(selectedChannel.id);
+            }
             // Switch back to a regular channel
             const regularChannels = channels.filter(ch => !ch.is_call_channel);
             if (regularChannels.length > 0) {

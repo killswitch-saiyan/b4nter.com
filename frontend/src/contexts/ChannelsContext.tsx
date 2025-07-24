@@ -9,9 +9,10 @@ interface ChannelsContextType {
   selectedChannel: Channel | null;
   setSelectedChannel: (channel: Channel | null) => void;
   refreshChannels: () => Promise<void>;
-  createCallChannel: (callType: 'voice' | 'video', participants: string[]) => Channel;
+  createCallChannel: (callType: 'voice' | 'video', participants: string[]) => Promise<Channel>;
   createCallChannelForReceiver: (channelId: string, channelName: string, callType: 'voice' | 'video', participants: string[]) => Channel;
   removeCallChannel: (channelId: string) => void;
+  deleteCallChannel: (channelId: string) => Promise<void>;
   joinCallChannel: (channelId: string, userId: string) => void;
   leaveCallChannel: (channelId: string, userId: string) => void;
   callDuration: number;
@@ -132,30 +133,77 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     return `video-channel-${index}`;
   }
 
-  const createCallChannel = (callType: 'voice' | 'video', participants: string[]): Channel => {
+  const createCallChannel = async (callType: 'voice' | 'video', participants: string[]): Promise<Channel> => {
     let channelName = '';
     if (callType === 'video') {
       channelName = getNextVideoChannelName();
     } else {
       channelName = `${callType === 'voice' ? 'voice-channel' : 'call'}-${Date.now()}`;
     }
-    const callChannel: Channel = {
-      id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: channelName, // Remove '#' here
-      description: `${callType} call - waiting for others to join`,
-      is_private: true,
-      created_by: user?.id || '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      member_count: participants.length, // Use actual participant count
-      is_call_channel: true,
-      call_type: callType,
-      call_participants: participants, // Include all participants from the start
-      call_started_at: new Date().toISOString(),
-    };
-    setChannels(prev => [...prev, callChannel]);
-    setSelectedChannelWithLogging(callChannel);
-    return callChannel;
+    
+    try {
+      const token = localStorage.getItem('access_token');
+      const backendUrl = getBackendUrl();
+      
+      // Create channel in backend database
+      const response = await fetch(`${backendUrl}/channels/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: channelName,
+          description: `${callType} call - waiting for others to join`,
+          is_private: true,
+          is_call_channel: true,
+          call_type: callType,
+          call_participants: participants,
+          call_started_at: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const createdChannel = await response.json();
+      console.log('✅ Call channel created in backend:', createdChannel);
+
+      // Add to local state
+      const callChannel: Channel = {
+        ...createdChannel,
+        member_count: participants.length,
+        call_participants: participants,
+      };
+      
+      setChannels(prev => [...prev, callChannel]);
+      setSelectedChannelWithLogging(callChannel);
+      return callChannel;
+      
+    } catch (error) {
+      console.error('❌ Failed to create call channel in backend:', error);
+      toast.error('Failed to create call channel');
+      
+      // Fallback to local-only channel
+      const callChannel: Channel = {
+        id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: channelName,
+        description: `${callType} call - waiting for others to join`,
+        is_private: true,
+        created_by: user?.id || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        member_count: participants.length,
+        is_call_channel: true,
+        call_type: callType,
+        call_participants: participants,
+        call_started_at: new Date().toISOString(),
+      };
+      setChannels(prev => [...prev, callChannel]);
+      setSelectedChannelWithLogging(callChannel);
+      return callChannel;
+    }
   };
   // --- End Patch ---
 
@@ -215,6 +263,36 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       console.error('Error fetching username:', error);
     }
     return 'Unknown User';
+  };
+
+  const deleteCallChannel = async (channelId: string): Promise<void> => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const backendUrl = getBackendUrl();
+      
+      // Delete channel from backend
+      const response = await fetch(`${backendUrl}/channels/${channelId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      console.log('✅ Call channel deleted from backend:', channelId);
+      
+      // Remove from local state
+      removeCallChannel(channelId);
+      
+    } catch (error) {
+      console.error('❌ Failed to delete call channel from backend:', error);
+      // Still remove locally even if backend deletion fails
+      removeCallChannel(channelId);
+    }
   };
 
   const removeCallChannel = (channelId: string) => {
@@ -319,6 +397,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     createCallChannel,
     createCallChannelForReceiver,
     removeCallChannel,
+    deleteCallChannel,
     joinCallChannel,
     leaveCallChannel,
     callDuration,

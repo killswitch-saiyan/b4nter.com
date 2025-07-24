@@ -40,7 +40,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   console.log('🔍 CallControls component', componentId.current, 'rendered for target:', targetUserId, 'isGlobal:', isGlobal);
   const { user } = useAuth();
   const { onWebRTCMessage } = useWebSocket();
-  const { createCallChannel, createCallChannelForReceiver, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, channels, setSelectedChannel } = useChannels();
+  const { createCallChannel, createCallChannelForReceiver, removeCallChannel, deleteCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, activeCallChannelId, channels, setSelectedChannel } = useChannels();
   const [callState, setCallState] = useState<CallState>({
     isIncoming: false,
     isOutgoing: false,
@@ -207,17 +207,29 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // Register WebRTC message handler with WebSocket context
   useEffect(() => {
-    if (onWebRTCMessage && !isGlobal) { // Only register for embedded CallControls, not global ones
-      console.log('🔍 Component', componentId.current, 'registering WebRTC handler');
+    // CRITICAL FIX: Only register WebRTC handler if:
+    // 1. This is NOT a global (DM) CallControls component (isGlobal=false)
+    // 2. AND either:
+    //    - This component has currentCallChannel set (it's handling an active call)
+    //    - OR this component's currentCallChannel matches the global activeCallChannelId
+    //    - OR this component has acceptedCall for the active channel
+    const shouldHandleWebRTC = !isGlobal && (
+      (currentCallChannel && currentCallChannel === activeCallChannelId) ||
+      (acceptedCall && acceptedCall.channelId === activeCallChannelId) ||
+      (currentCallChannel && !activeCallChannelId) // Fallback for newly created calls
+    );
+    
+    if (onWebRTCMessage && shouldHandleWebRTC) { 
+      console.log('🔍 Component', componentId.current, 'registering WebRTC handler for channel:', currentCallChannel || acceptedCall?.channelId, 'activeCallChannelId:', activeCallChannelId);
       onWebRTCMessage(handleSocketMessage);
       return () => {
         console.log('🔍 Component', componentId.current, 'unregistering WebRTC handler');
         onWebRTCMessage(null);
       };
     } else {
-      console.log('🔍 Component', componentId.current, 'NOT registering WebRTC handler, isGlobal:', isGlobal);
+      console.log('🔍 Component', componentId.current, 'NOT registering WebRTC handler - isGlobal:', isGlobal, 'currentCallChannel:', currentCallChannel, 'activeCallChannelId:', activeCallChannelId, 'shouldHandle:', shouldHandleWebRTC);
     }
-  }, [onWebRTCMessage, targetUserId, handleSocketMessage, isGlobal]);
+  }, [onWebRTCMessage, handleSocketMessage, isGlobal, currentCallChannel, acceptedCall, activeCallChannelId]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {
@@ -592,12 +604,15 @@ const CallControls: React.FC<CallControlsProps> = ({
         await Notification.requestPermission();
       }
       
-      // Create call channel
+      // Create call channel in backend
       const callType = isVideo ? 'video' : 'voice';
       const participants = [user?.id || '', targetUserId];
-      const callChannel = createCallChannel(callType, participants);
+      const callChannel = await createCallChannel(callType, participants);
       setCurrentCallChannel(callChannel.id);
       setActiveCallChannelId(callChannel.id); // Set active call channel in context
+      
+      // CRITICAL FIX: Immediately switch caller to the call channel
+      setSelectedChannel(callChannel);
       
       // Immediately join the call channel as the caller
       joinCallChannel(callChannel.id, user?.id || '');
@@ -653,7 +668,8 @@ const CallControls: React.FC<CallControlsProps> = ({
             to: targetUserId,
             offer: offer,
             isVideo: isVideo,
-            channelId: callChannel.id
+            channelId: callChannel.id,
+            channelName: callChannel.name
           };
           socket.send(JSON.stringify(callMessage));
         } else {
@@ -793,6 +809,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       setHasAutoAccepted(true);
       setPendingOffer(acceptedCallData.offer);
       setCurrentCallChannel(acceptedCallData.channelId);
+      setActiveCallChannelId(acceptedCallData.channelId); // CRITICAL FIX: Set active call channel
       
       // Execute accept call immediately
       acceptCall(acceptedCallData.offer);
@@ -805,9 +822,9 @@ const CallControls: React.FC<CallControlsProps> = ({
     setCallState(prev => ({ ...prev, isIncoming: false }));
     setPendingOffer(null);
     
-    // Leave the call channel when rejecting
+    // Delete the call channel when rejecting
     if (currentCallChannel) {
-      leaveCallChannel(currentCallChannel, user?.id || '');
+      deleteCallChannel(currentCallChannel);
       setCurrentCallChannel(null);
     }
     
@@ -861,15 +878,14 @@ const CallControls: React.FC<CallControlsProps> = ({
     setCallDuration(0);
     setActiveCallChannelId(null);
     
-    // Leave the call channel and notify other participants
+    // Leave the call channel and delete it from backend
     if (currentCallChannel) {
-      console.log('🔚 Leaving call channel:', currentCallChannel);
-      leaveCallChannel(currentCallChannel, user?.id || '');
+      console.log('🔚 Ending call and deleting call channel:', currentCallChannel);
       
-      // Notify other participants that you're leaving
+      // Notify other participants that the call is ending
       if (socket) {
         socket.send(JSON.stringify({
-          type: 'call_channel_left',
+          type: 'call_ended',
           to: targetUserId,
           channelId: currentCallChannel,
           userId: user?.id,
@@ -877,6 +893,8 @@ const CallControls: React.FC<CallControlsProps> = ({
         }));
       }
       
+      // Delete the call channel from backend and local state
+      deleteCallChannel(currentCallChannel);
       setCurrentCallChannel(null);
     }
     

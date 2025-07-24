@@ -242,6 +242,46 @@ async def leave_channel(
         )
 
 
+@router.delete("/{channel_id}")
+async def delete_channel(
+    channel_id: str,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Delete a channel (only for channel creators or call channels)"""
+    try:
+        # Get channel info first
+        channel = await db.get_channel_by_id(channel_id)
+        if not channel:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Channel not found"
+            )
+        
+        # Allow deletion if:
+        # 1. User is the channel creator, OR
+        # 2. It's a call channel (temporary channels should be deletable by participants)
+        if channel.get("created_by") != current_user.id and not channel.get("is_call_channel"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only channel creators can delete regular channels"
+            )
+        
+        # Delete the channel
+        await db.delete_channel(channel_id)
+        logger.info(f"Channel {channel_id} deleted by user {current_user.id}")
+        
+        return {"message": "Channel deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting channel {channel_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete channel"
+        )
+
+
 @router.get("/{channel_id}/members")
 async def get_channel_members(
     channel_id: str,
