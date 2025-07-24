@@ -597,9 +597,9 @@ const CallControls: React.FC<CallControlsProps> = ({
         await Notification.requestPermission();
       }
       
-      // Create call channel in backend with updated schema
+      // Create call channel in backend with updated schema - only caller initially
       const callType = isVideo ? 'video' : 'voice';
-      const participants = [user?.id || '', targetUserId];
+      const participants = [user?.id || '']; // Only caller initially, receiver added when they accept
       const callChannel = await createCallChannel(callType, participants);
       setCurrentCallChannel(callChannel.id);
       setActiveCallChannelId(callChannel.id); // Set active call channel in context
