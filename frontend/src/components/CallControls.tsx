@@ -133,8 +133,6 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // --- Ensure handleSocketMessage is defined before usage ---
   const handleSocketMessage = React.useCallback((data: any) => {
-    console.log('🔊 CallControls processing message:', data.type, 'for target:', targetUserId, 'from:', data.from, 'to:', data.to);
-    
     // Filter messages - only process if this CallControls is for the right user
     // For answers: we are the caller, so we should receive messages FROM our target
     // For offers: we are the receiver, so we should receive messages TO us
@@ -146,14 +144,13 @@ const CallControls: React.FC<CallControlsProps> = ({
       (data.type === 'call_channel_created' && data.to === user?.id);
     
     if (!isForThisInstance) {
-      console.log('🔊 Message not for this CallControls instance, ignoring');
       return;
     }
     
     if (data.type === 'call_channel_created' && data.to === user?.id) {
       let callChannel = channels.find(ch => ch.id === data.channelId);
       if (!callChannel) {
-        // Use the exact name from the caller!
+        // Use the exact name and ID from the caller!
         callChannel = createCallChannelForReceiver(
           data.channelId,
           data.channelName,
@@ -174,30 +171,24 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
     // --- Handle WebRTC signaling messages ---
     if (data.type === 'webrtc_offer' && data.offer) {
-      console.log('🔊 CallControls processing WebRTC offer');
       setPendingOffer(data.offer);
       return;
     }
     // Handle call_incoming which contains the offer
     if (data.type === 'call_incoming' && data.offer) {
-      console.log('🔊 CallControls processing call_incoming with offer');
       setPendingOffer(data.offer);
       return;
     }
     if (data.type === 'webrtc_answer' && data.answer) {
-      console.log('🔊 CallControls processing WebRTC answer');
       handleAnswer(data.answer);
       return;
     }
     if (data.type === 'webrtc_ice_candidate' && data.candidate) {
-      console.log('🔊 CallControls processing ICE candidate');
       if (peerConnection && peerConnection.remoteDescription) {
-        console.log('🔊 Adding ICE candidate to peer connection');
         peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => {
-          console.error('Error adding ICE candidate:', e);
+          console.error('❌ Error adding ICE candidate:', e);
         });
       } else {
-        console.log('🔊 Peer connection not ready, queuing ICE candidate');
         setPendingIceCandidates(prev => [...prev, data.candidate]);
       }
       return;
@@ -208,15 +199,13 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // Register WebRTC message handler with WebSocket context
   useEffect(() => {
-    if (onWebRTCMessage) {
-      console.log('🔊 Registering WebRTC message handler for CallControls with target:', targetUserId);
+    if (onWebRTCMessage && !isGlobal) { // Only register for embedded CallControls, not global ones
       onWebRTCMessage(handleSocketMessage);
       return () => {
-        console.log('🔊 Unregistering WebRTC message handler for CallControls with target:', targetUserId);
         onWebRTCMessage(null);
       };
     }
-  }, [onWebRTCMessage, targetUserId, handleSocketMessage]);
+  }, [onWebRTCMessage, targetUserId, handleSocketMessage, isGlobal]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {
@@ -434,24 +423,30 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   const ensurePeerConnection = (stream: MediaStream | null) => {
     if (!peerConnection) {
+      console.log('🔄 Creating new peer connection');
       const pc = createPeerConnection();
       if (pc && stream) {
         stream.getTracks().forEach(track => {
+          console.log('🔄 Adding track to new peer connection:', track.kind);
           pc.addTrack(track, stream);
         });
       }
       setPeerConnection(pc);
       return pc;
-    } else if (peerConnection && stream) {
-      const existingTracks = peerConnection.getSenders().map(sender => sender.track);
-      const streamTracks = stream.getTracks();
-      
-      for (const track of streamTracks) {
-        const trackExists = existingTracks.some(existingTrack => 
-          existingTrack && existingTrack.kind === track.kind
-        );
-        if (!trackExists) {
-          peerConnection.addTrack(track, stream);
+    } else {
+      console.log('🔄 Using existing peer connection, state:', peerConnection.signalingState);
+      if (peerConnection && stream) {
+        const existingTracks = peerConnection.getSenders().map(sender => sender.track);
+        const streamTracks = stream.getTracks();
+        
+        for (const track of streamTracks) {
+          const trackExists = existingTracks.some(existingTrack => 
+            existingTrack && existingTrack.kind === track.kind
+          );
+          if (!trackExists) {
+            console.log('🔄 Adding missing track to existing peer connection:', track.kind);
+            peerConnection.addTrack(track, stream);
+          }
         }
       }
     }
@@ -497,7 +492,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       };
 
       pc.ontrack = (event) => {
-        console.log('✅ Received remote track:', event.track.kind);
+        console.log('✅ Received remote', event.track.kind);
         
         if (event.streams && event.streams[0]) {
           setRemoteStream(event.streams[0]);
@@ -548,23 +543,24 @@ const CallControls: React.FC<CallControlsProps> = ({
     console.log('🔊 CallControls handling answer');
     
     try {
-      let pc = peerConnection;
-      if (!pc) {
-        console.log('🔊 No peer connection, creating one');
-        pc = ensurePeerConnection(localStream);
+      // DO NOT create a new peer connection here - use the existing one that sent the offer
+      if (!peerConnection) {
+        console.error('❌ No peer connection available for answer - this should not happen');
+        return;
       }
       
-      if (pc) {
-        console.log('🔊 Peer connection signaling state:', pc.signalingState);
+      console.log('🔊 Peer connection signaling state:', peerConnection.signalingState);
+      
+      // Only process answer if we're in the right state
+      if (peerConnection.signalingState === 'have-local-offer') {
+        console.log('🔊 Setting remote description with answer');
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('✅ Answer processed successfully');
         
-        // Only process answer if we're in the right state
-        if (pc.signalingState === 'have-local-offer') {
-          console.log('🔊 Setting remote description with answer');
-          await pc.setRemoteDescription(new RTCSessionDescription(answer));
-          console.log('✅ Answer processed successfully');
-        } else {
-          console.log('🔊 Ignoring answer - peer connection not in correct state:', pc.signalingState);
-        }
+        // Update call state to indicate connection is being established
+        setCallState(prev => ({ ...prev, isConnected: false, isOutgoing: true }));
+      } else {
+        console.log('🔊 Ignoring answer - peer connection not in correct state:', peerConnection.signalingState);
       }
     } catch (error) {
       console.error('❌ Error handling answer:', error);
@@ -575,10 +571,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   // 4. In startCall and acceptCall, always attach local video stream
   const startCall = async (isVideo: boolean) => {
     try {
-      console.log('🚀 Starting call with video:', isVideo);
-      console.log('🚀 Target user ID:', targetUserId);
-      console.log('🚀 Current user ID:', user?.id);
-      console.log('🚀 Socket connected:', !!socket);
+      console.log('📞 Starting', isVideo ? 'video' : 'voice', 'call');
       
       // Request notification permission if not granted
       if ('Notification' in window && Notification.permission === 'default') {
@@ -618,7 +611,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         video: isVideo
       });
       
-      console.log('✅ Media obtained:', stream.getTracks().map(t => t.kind));
+      console.log('✅ Media obtained for', isVideo ? 'video' : 'voice', 'call');
       
       // Set up voice activity detection for local audio
       setupVoiceActivityDetection(stream, true);
@@ -639,12 +632,8 @@ const CallControls: React.FC<CallControlsProps> = ({
           pc.addTrack(track, stream);
         });
 
-        console.log('🚀 Creating offer...');
         const offer = await pc.createOffer();
-        console.log('🚀 Offer created:', offer);
-        
         await pc.setLocalDescription(offer);
-        console.log('🚀 Local description set with offer');
 
         if (socket) {
           const callMessage = {
@@ -654,10 +643,6 @@ const CallControls: React.FC<CallControlsProps> = ({
             isVideo: isVideo,
             channelId: callChannel.id
           };
-          console.log('🚀 Sending call incoming message:', callMessage);
-          console.log('🚀 Call type being sent:', isVideo ? 'VIDEO' : 'VOICE');
-          console.log('🚀 Local stream tracks:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
-          console.log('🚀 Peer connection state after offer:', pc.signalingState);
           socket.send(JSON.stringify(callMessage));
         } else {
           console.error('🚀 WebSocket not connected');
@@ -707,7 +692,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         video: isVideoCall
       });
       
-      console.log('✅ Media obtained for accept:', stream.getTracks().map(t => t.kind));
+      console.log('✅ Media obtained for call accept');
       
       // Set up voice activity detection for local audio
       setupVoiceActivityDetection(stream, true);
@@ -722,7 +707,6 @@ const CallControls: React.FC<CallControlsProps> = ({
       // Create peer connection and handle the offer
       const offerToProcess = offer || pendingOffer;
       if (offerToProcess) {
-        console.log('Creating peer connection for incoming call');
         
         const pc = createPeerConnection();
         
@@ -776,35 +760,17 @@ const CallControls: React.FC<CallControlsProps> = ({
   useEffect(() => {
     const acceptedCallData = acceptedCallRef.current;
     
-    console.log('🔊 Auto-accept effect triggered:', {
-      acceptedCall: !!acceptedCallData,
-      hasOffer: !!acceptedCallData?.offer,
-      isConnected: callState.isConnected,
-      isIncoming: callState.isIncoming,
-      isOutgoing: callState.isOutgoing,
-      isAcceptingCall,
-      hasAutoAccepted,
-      hasPeerConnection: !!peerConnection,
-      hasLocalStream: !!localStream,
-      autoAcceptExecuted: autoAcceptExecuted.current,
-      currentCallChannel,
-      acceptedCallChannelId: acceptedCallData?.channelId
-    });
-    
-    // Only execute if all conditions are met and we haven't already executed
+    // Only execute ONCE when all conditions are met
     if (
       acceptedCallData &&
       acceptedCallData.offer &&
       !autoAcceptExecuted.current &&
-      !callState.isConnected &&
-      !callState.isIncoming &&
-      !callState.isOutgoing &&
       !isAcceptingCall &&
       !hasAutoAccepted &&
       !peerConnection &&
       !localStream
     ) {
-      console.log('🔊 Auto-accepting call - executing once only');
+      console.log('📞 Auto-accepting incoming call');
       
       // Mark as executed immediately to prevent any re-execution
       autoAcceptExecuted.current = true;
@@ -818,7 +784,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       // Execute accept call immediately
       acceptCall(acceptedCallData.offer);
     }
-  }, [callState.isConnected, callState.isIncoming, callState.isOutgoing]); // Minimal dependencies
+  }, []); // NO dependencies to prevent any re-triggers
 
   const rejectCall = () => {
     stopRingtone();

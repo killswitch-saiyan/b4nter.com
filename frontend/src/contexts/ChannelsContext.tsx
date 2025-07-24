@@ -78,18 +78,15 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
           ch => ch.is_call_channel && !activeChannels.some(bch => bch.id === ch.id)
         );
         const merged = [...activeChannels, ...localCallChannels];
-        // If none selected, select the first
-        // BUT: preserve call channel selection - don't override if current selection is a call channel
-        if (merged.length > 0 && !selectedChannel) {
+        
+        // CRITICAL FIX: Never change selectedChannel if it's a call channel
+        // The fetchChannels refresh should NEVER override an active call
+        if (selectedChannel?.is_call_channel) {
+          console.log('📞 Preserving active call channel');
+          // Don't change the selected channel at all during a call
+        } else if (merged.length > 0 && !selectedChannel) {
+          // Only set to first channel if no channel is selected and it's not a call
           setSelectedChannel(merged[0]);
-        } else if (selectedChannel?.is_call_channel) {
-          // Ensure the selected call channel still exists in the merged list
-          const callChannelStillExists = merged.some(ch => ch.id === selectedChannel.id);
-          if (!callChannelStillExists) {
-            // Call channel was removed, select first available channel
-            setSelectedChannel(merged[0] || null);
-          }
-          // Otherwise, keep the current call channel selected
         }
         return merged;
       });
@@ -151,7 +148,6 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     };
     setChannels(prev => [...prev, callChannel]);
     setSelectedChannel(callChannel);
-    console.log(`Created ${callType} call channel with participants:`, callChannel);
     return callChannel;
   };
   // --- End Patch ---
@@ -226,18 +222,14 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       return updatedChannels;
     });
     
-    console.log(`Removed call channel: ${channelId}`);
   };
 
   const joinCallChannel = (channelId: string, userId: string) => {
-    console.log(`🔄 Joining call channel ${channelId} for user ${userId}`);
-    console.log(`🔄 Current channels:`, channels.map(ch => ({ id: ch.id, name: ch.name, participants: ch.call_participants })));
     
     setChannels(prev => {
       const updatedChannels = prev.map(channel => {
         if (channel.id === channelId && channel.is_call_channel) {
           const participants = channel.call_participants || [];
-          console.log(`🔄 Channel ${channelId} current participants:`, participants);
           
           if (!participants.includes(userId)) {
             const updatedChannel = {
@@ -246,33 +238,28 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
               member_count: participants.length + 1,
               updated_at: new Date().toISOString()
             };
-            console.log(`🔄 Updated channel ${channelId} with new participant ${userId}:`, updatedChannel);
             
             // Force immediate re-render by updating selected channel if it's the current one
             if (selectedChannel?.id === channelId) {
               setTimeout(() => {
                 setSelectedChannel(updatedChannel);
-                console.log(`🔄 Forced update of selected channel with new participant`);
               }, 0);
             }
             
             return updatedChannel;
-          } else {
-            console.log(`🔄 User ${userId} already in channel ${channelId}`);
           }
         }
         return channel;
       });
       
-      console.log(`🔄 Updated channels state:`, updatedChannels.map(ch => ({ id: ch.id, name: ch.name, participants: ch.call_participants })));
       return updatedChannels;
     });
     
     // Force a re-render of the channels list
-    setTimeout(() => {
-      console.log(`🔄 Forcing channels refresh after join`);
-      fetchChannels();
-    }, 200);
+    // DISABLED: This was causing call channels to be overridden
+    // setTimeout(() => {
+    //   fetchChannels();
+    // }, 200);
   };
 
   // --- Fix call channel removal and selection logic ---

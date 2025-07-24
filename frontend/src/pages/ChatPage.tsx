@@ -1083,7 +1083,6 @@ const ChatPage: React.FC = () => {
           {/* Messages Area - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">
             {selectedChannel?.is_call_channel ? (
-              console.log('[ChatPage] Rendering CallControls for call channel:', selectedChannel.name),
               <div className="text-center py-8">
                 <div className="text-6xl mb-6">
                   {selectedChannel.call_type === 'voice' ? '🔊' : '📹'}
