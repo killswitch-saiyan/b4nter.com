@@ -1085,7 +1085,15 @@ const ChatPage: React.FC = () => {
 
           {/* Messages Area - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">
-            {selectedChannel?.is_call_channel ? (
+            {(() => {
+              console.log('🔍 Call channel UI check:', {
+                selectedChannel: selectedChannel?.name,
+                isCallChannel: selectedChannel?.is_call_channel,
+                callType: selectedChannel?.call_type,
+                participants: selectedChannel?.call_participants
+              });
+              return selectedChannel?.is_call_channel;
+            })() ? (
               <div className="text-center py-8">
                 <div className="text-6xl mb-6">
                   {selectedChannel.call_type === 'voice' ? '🔊' : '📹'}
@@ -1095,14 +1103,26 @@ const ChatPage: React.FC = () => {
                 </h3>
                 {/* Embed CallControls for video/audio UI */}
                 <div className="flex justify-center mb-8">
-                  <CallControls
-                    targetUserId={selectedChannel.call_participants?.find(p => p !== user?.id) || ''}
-                    targetUsername={getParticipantName(selectedChannel.call_participants?.find(p => p !== user?.id) || '')}
-                    onCallEnd={handleEndCall}
-                    socket={socket}
-                    isGlobal={false}
-                    acceptedCall={selectedChannel.id === acceptedCall?.channelId ? acceptedCall : undefined}
-                  />
+                  {(() => {
+                    const targetUserId = selectedChannel.call_participants?.find(p => p !== user?.id) || '';
+                    console.log('🔍 Embedded CallControls rendering:', {
+                      targetUserId,
+                      participants: selectedChannel.call_participants,
+                      currentUserId: user?.id,
+                      channelId: selectedChannel.id,
+                      acceptedCall: selectedChannel.id === acceptedCall?.channelId ? acceptedCall : undefined
+                    });
+                    return (
+                      <CallControls
+                        targetUserId={targetUserId}
+                        targetUsername={getParticipantName(targetUserId)}
+                        onCallEnd={handleEndCall}
+                        socket={socket}
+                        isGlobal={false}
+                        acceptedCall={selectedChannel.id === acceptedCall?.channelId ? acceptedCall : undefined}
+                      />
+                    );
+                  })()}
                 </div>
                 {/* Call Timer */}
                 <div className="mb-6">
@@ -1277,9 +1297,10 @@ const ChatPage: React.FC = () => {
                       callChannel = channels.find(ch => ch.id === incomingCall.channelId);
                     }
                     
-                    // If still not found, the caller's channel creation failed
+                    // If still not found, the caller's channel creation failed or was deleted
                     if (!callChannel) {
-                      console.error('[ChatPage] Call channel not found even after refresh. Call may have ended.');
+                      console.error('[ChatPage] Call channel not found even after refresh. Available channels:', channels.map(ch => ({ id: ch.id, name: ch.name, isCall: ch.is_call_channel })));
+                      console.error('[ChatPage] Looking for channel ID:', incomingCall.channelId);
                       toast.error('Call channel no longer exists');
                       setIncomingCall(null);
                       return;
@@ -1328,10 +1349,8 @@ const ChatPage: React.FC = () => {
           targetUserId={incomingCall.from}
           targetUsername={incomingCall.fromName}
           onCallEnd={() => {
-            // Delete the call channel when call ends from incoming call controls
-            if (incomingCall?.channelId) {
-              deleteCallChannel(incomingCall.channelId);
-            }
+            console.log('🔚 Incoming call CallControls onCallEnd triggered');
+            // Don't delete channel here - let the actual CallControls component handle it
             setIncomingCall(null);
             // Switch back to a regular channel
             const regularChannels = channels.filter(ch => !ch.is_call_channel);
@@ -1350,10 +1369,8 @@ const ChatPage: React.FC = () => {
           targetUserId={selectedChannel.call_participants?.find(p => p !== user?.id) || ''}
           targetUsername={getParticipantName(selectedChannel.call_participants?.find(p => p !== user?.id) || '')}
           onCallEnd={() => {
-            // Delete the call channel when call ends from global controls
-            if (selectedChannel?.is_call_channel) {
-              deleteCallChannel(selectedChannel.id);
-            }
+            console.log('🔚 Global CallControls onCallEnd triggered');
+            // Don't delete channel here - let the actual CallControls component handle it
             // Switch back to a regular channel
             const regularChannels = channels.filter(ch => !ch.is_call_channel);
             if (regularChannels.length > 0) {

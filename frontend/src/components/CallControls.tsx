@@ -207,29 +207,22 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // Register WebRTC message handler with WebSocket context
   useEffect(() => {
-    // CRITICAL FIX: Only register WebRTC handler if:
+    // SIMPLIFIED: Register WebRTC handler if:
     // 1. This is NOT a global (DM) CallControls component (isGlobal=false)
-    // 2. AND either:
-    //    - This component has currentCallChannel set (it's handling an active call)
-    //    - OR this component's currentCallChannel matches the global activeCallChannelId
-    //    - OR this component has acceptedCall for the active channel
-    const shouldHandleWebRTC = !isGlobal && (
-      (currentCallChannel && currentCallChannel === activeCallChannelId) ||
-      (acceptedCall && acceptedCall.channelId === activeCallChannelId) ||
-      (currentCallChannel && !activeCallChannelId) // Fallback for newly created calls
-    );
+    // 2. AND this component has either currentCallChannel OR acceptedCall set
+    const shouldHandleWebRTC = !isGlobal && (currentCallChannel || acceptedCall);
     
     if (onWebRTCMessage && shouldHandleWebRTC) { 
-      console.log('🔍 Component', componentId.current, 'registering WebRTC handler for channel:', currentCallChannel || acceptedCall?.channelId, 'activeCallChannelId:', activeCallChannelId);
+      console.log('🔍 Component', componentId.current, 'registering WebRTC handler for channel:', currentCallChannel || acceptedCall?.channelId);
       onWebRTCMessage(handleSocketMessage);
       return () => {
         console.log('🔍 Component', componentId.current, 'unregistering WebRTC handler');
         onWebRTCMessage(null);
       };
     } else {
-      console.log('🔍 Component', componentId.current, 'NOT registering WebRTC handler - isGlobal:', isGlobal, 'currentCallChannel:', currentCallChannel, 'activeCallChannelId:', activeCallChannelId, 'shouldHandle:', shouldHandleWebRTC);
+      console.log('🔍 Component', componentId.current, 'NOT registering WebRTC handler - isGlobal:', isGlobal, 'currentCallChannel:', currentCallChannel, 'acceptedCall:', !!acceptedCall);
     }
-  }, [onWebRTCMessage, handleSocketMessage, isGlobal, currentCallChannel, acceptedCall, activeCallChannelId]);
+  }, [onWebRTCMessage, handleSocketMessage, isGlobal, currentCallChannel, acceptedCall]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {
@@ -822,8 +815,9 @@ const CallControls: React.FC<CallControlsProps> = ({
     setCallState(prev => ({ ...prev, isIncoming: false }));
     setPendingOffer(null);
     
-    // Delete the call channel when rejecting
-    if (currentCallChannel) {
+    // Only delete the call channel when explicitly rejecting (not during auto-accept)
+    if (currentCallChannel && !hasAutoAccepted) {
+      console.log('🔚 Deleting call channel due to rejection');
       deleteCallChannel(currentCallChannel);
       setCurrentCallChannel(null);
     }

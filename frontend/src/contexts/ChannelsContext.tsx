@@ -170,11 +170,15 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       const createdChannel = await response.json();
       console.log('✅ Call channel created in backend:', createdChannel);
 
-      // Add to local state
+      // Add to local state - ensure call channel properties are set
       const callChannel: Channel = {
         ...createdChannel,
         member_count: participants.length,
+        // Force call channel properties in case backend doesn't support them
+        is_call_channel: true,
+        call_type: callType,
         call_participants: participants,
+        call_started_at: new Date().toISOString(),
       };
       
       setChannels(prev => [...prev, callChannel]);
@@ -266,6 +270,9 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   };
 
   const deleteCallChannel = async (channelId: string): Promise<void> => {
+    console.log('🗑️ deleteCallChannel called for:', channelId);
+    console.trace('🗑️ deleteCallChannel call stack');
+    
     try {
       const token = localStorage.getItem('access_token');
       const backendUrl = getBackendUrl();
