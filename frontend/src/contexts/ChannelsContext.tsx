@@ -39,6 +39,13 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  
+  // Debug: Track selected channel changes
+  const setSelectedChannelWithLogging = (channel: Channel | null) => {
+    console.log('📍 Selected channel changing from:', selectedChannel?.name, 'to:', channel?.name, 'isCall:', channel?.is_call_channel);
+    console.trace('📍 Channel selection stack trace');
+    setSelectedChannel(channel);
+  };
   const [callDuration, setCallDuration] = useState(0);
   const [activeCallChannelId, setActiveCallChannelId] = useState<string | null>(null);
 
@@ -86,7 +93,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
           // Don't change the selected channel at all during a call
         } else if (merged.length > 0 && !selectedChannel) {
           // Only set to first channel if no channel is selected and it's not a call
-          setSelectedChannel(merged[0]);
+          setSelectedChannelWithLogging(merged[0]);
         }
         return merged;
       });
@@ -147,7 +154,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       call_started_at: new Date().toISOString(),
     };
     setChannels(prev => [...prev, callChannel]);
-    setSelectedChannel(callChannel);
+    setSelectedChannelWithLogging(callChannel);
     return callChannel;
   };
   // --- End Patch ---
@@ -216,7 +223,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       
       // If the removed channel was selected, select the first available channel
       if (selectedChannel?.id === channelId) {
-        setSelectedChannel(updatedChannels.length > 0 ? updatedChannels[0] : null);
+        setSelectedChannelWithLogging(updatedChannels.length > 0 ? updatedChannels[0] : null);
       }
       
       return updatedChannels;
@@ -242,7 +249,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
             // Force immediate re-render by updating selected channel if it's the current one
             if (selectedChannel?.id === channelId) {
               setTimeout(() => {
-                setSelectedChannel(updatedChannel);
+                setSelectedChannelWithLogging(updatedChannel);
               }, 0);
             }
             
@@ -273,10 +280,8 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       if (updatedParticipants.length === 0) {
         // If the removed channel was selected, select the first available channel
         setTimeout(() => {
-          setSelectedChannel(prevChannels => {
-            const remainingChannels = prev.filter(ch => ch.id !== channelId);
-            return remainingChannels.length > 0 ? remainingChannels[0] : null;
-          });
+          const remainingChannels = prev.filter(ch => ch.id !== channelId);
+          setSelectedChannelWithLogging(remainingChannels.length > 0 ? remainingChannels[0] : null);
         }, 0);
         return prev.filter(ch => ch.id !== channelId);
       }
@@ -301,7 +306,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       fetchChannels();
     } else {
       setChannels([]);
-      setSelectedChannel(null);
+      setSelectedChannelWithLogging(null);
     }
   }, [user]);
 
@@ -309,7 +314,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
     channels,
     loading,
     selectedChannel,
-    setSelectedChannel,
+    setSelectedChannel: setSelectedChannelWithLogging,
     refreshChannels,
     createCallChannel,
     createCallChannelForReceiver,

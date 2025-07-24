@@ -36,6 +36,8 @@ const CallControls: React.FC<CallControlsProps> = ({
   isGlobal, 
   acceptedCall 
 }) => {
+  const componentId = React.useRef(Math.random().toString(36).substr(2, 9));
+  console.log('🔍 CallControls component', componentId.current, 'rendered for target:', targetUserId, 'isGlobal:', isGlobal);
   const { user } = useAuth();
   const { onWebRTCMessage } = useWebSocket();
   const { createCallChannel, createCallChannelForReceiver, removeCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, setActiveCallChannelId, channels, setSelectedChannel } = useChannels();
@@ -51,6 +53,11 @@ const CallControls: React.FC<CallControlsProps> = ({
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
+  
+  // Debug: Track peer connection state changes
+  useEffect(() => {
+    console.log('🔍 Component', componentId.current, 'peerConnection state changed:', !!peerConnection, peerConnection?.signalingState);
+  }, [peerConnection]);
   const [pendingIceCandidates, setPendingIceCandidates] = useState<RTCIceCandidateInit[]>([]);
   const [pendingOffer, setPendingOffer] = useState<RTCSessionDescriptionInit | null>(null);
   const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
@@ -180,6 +187,7 @@ const CallControls: React.FC<CallControlsProps> = ({
       return;
     }
     if (data.type === 'webrtc_answer' && data.answer) {
+      console.log('🔍 Component', componentId.current, 'processing webrtc_answer');
       handleAnswer(data.answer);
       return;
     }
@@ -200,10 +208,14 @@ const CallControls: React.FC<CallControlsProps> = ({
   // Register WebRTC message handler with WebSocket context
   useEffect(() => {
     if (onWebRTCMessage && !isGlobal) { // Only register for embedded CallControls, not global ones
+      console.log('🔍 Component', componentId.current, 'registering WebRTC handler');
       onWebRTCMessage(handleSocketMessage);
       return () => {
+        console.log('🔍 Component', componentId.current, 'unregistering WebRTC handler');
         onWebRTCMessage(null);
       };
+    } else {
+      console.log('🔍 Component', componentId.current, 'NOT registering WebRTC handler, isGlobal:', isGlobal);
     }
   }, [onWebRTCMessage, targetUserId, handleSocketMessage, isGlobal]);
 
@@ -540,12 +552,14 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-    console.log('🔊 CallControls handling answer');
+    console.log('🔍 handleAnswer called - peerConnection exists:', !!peerConnection);
+    console.log('🔍 peerConnection state:', peerConnection?.signalingState);
     
     try {
       // DO NOT create a new peer connection here - use the existing one that sent the offer
       if (!peerConnection) {
-        console.error('❌ No peer connection available for answer - this should not happen');
+        console.error('❌ No peer connection available for answer');
+        console.error('❌ This means the peer connection was lost between offer and answer');
         return;
       }
       
@@ -621,7 +635,9 @@ const CallControls: React.FC<CallControlsProps> = ({
       }));
 
       const pc = createPeerConnection();
+      console.log('🔍 CALLER: Created peer connection, setting to state');
       setPeerConnection(pc); // CRITICAL FIX: Save peer connection to state
+      console.log('🔍 CALLER: Peer connection set to state');
       
       if (pc) {
         stream.getTracks().forEach(track => {

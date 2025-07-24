@@ -1048,6 +1048,7 @@ const ChatPage: React.FC = () => {
                     targetUsername={selectedDMUser.username}
                     onCallEnd={() => setIsInCall(false)}
                     socket={socket}
+                    isGlobal={true}
                   />
                 )}
                 {selectedDMUser && (
