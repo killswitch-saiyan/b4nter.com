@@ -46,6 +46,11 @@ class ChannelBase(BaseModel):
     name: str
     description: Optional[str] = None
     is_private: bool = False
+    # Call channel fields
+    is_call_channel: Optional[str] = None  # VARCHAR field
+    call_type: Optional[str] = None  # VARCHAR field  
+    call_participants: Optional[str] = None  # VARCHAR field (JSON string)
+    call_started_at: Optional[str] = None  # VARCHAR field
 
 
 class ChannelCreate(ChannelBase):

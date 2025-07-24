@@ -145,7 +145,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       const token = localStorage.getItem('access_token');
       const backendUrl = getBackendUrl();
       
-      // Create channel in backend database
+      // Create channel in backend database with new call channel fields
       const response = await fetch(`${backendUrl}/channels/`, {
         method: 'POST',
         headers: {
@@ -156,30 +156,36 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
           name: channelName,
           description: `${callType} call - waiting for others to join`,
           is_private: true,
-          is_call_channel: true,
+          is_call_channel: "true", // Send as string since backend expects varchar
           call_type: callType,
-          call_participants: participants,
+          call_participants: JSON.stringify(participants), // Serialize array to string
           call_started_at: new Date().toISOString(),
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Backend error:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
       const createdChannel = await response.json();
       console.log('✅ Call channel created in backend:', createdChannel);
 
-      // Add to local state - ensure call channel properties are set
+      // Ensure call channel properties are properly set in frontend
       const callChannel: Channel = {
         ...createdChannel,
         member_count: participants.length,
-        // Force call channel properties in case backend doesn't support them
-        is_call_channel: true,
-        call_type: callType,
-        call_participants: participants,
-        call_started_at: new Date().toISOString(),
+        // Parse the string fields back to proper types
+        is_call_channel: createdChannel.is_call_channel === "true" || createdChannel.is_call_channel === true,
+        call_type: createdChannel.call_type || callType,
+        call_participants: typeof createdChannel.call_participants === 'string' 
+          ? JSON.parse(createdChannel.call_participants) 
+          : (createdChannel.call_participants || participants),
+        call_started_at: createdChannel.call_started_at || new Date().toISOString(),
       };
+      
+      console.log('✅ Final call channel with parsed properties:', callChannel);
       
       setChannels(prev => [...prev, callChannel]);
       setSelectedChannelWithLogging(callChannel);
@@ -189,7 +195,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       console.error('❌ Failed to create call channel in backend:', error);
       toast.error('Failed to create call channel');
       
-      // Fallback to local-only channel
+      // Fallback to local-only channel if backend fails
       const callChannel: Channel = {
         id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: channelName,
@@ -271,7 +277,6 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
 
   const deleteCallChannel = async (channelId: string): Promise<void> => {
     console.log('🗑️ deleteCallChannel called for:', channelId);
-    console.trace('🗑️ deleteCallChannel call stack');
     
     try {
       const token = localStorage.getItem('access_token');
@@ -287,19 +292,20 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        console.error(`Failed to delete channel from backend: ${response.status}`);
+        // Continue with local deletion even if backend fails
+      } else {
+        console.log('✅ Call channel deleted from backend:', channelId);
       }
-
-      console.log('✅ Call channel deleted from backend:', channelId);
-      
-      // Remove from local state
-      removeCallChannel(channelId);
       
     } catch (error) {
       console.error('❌ Failed to delete call channel from backend:', error);
-      // Still remove locally even if backend deletion fails
-      removeCallChannel(channelId);
+      // Continue with local deletion even if backend fails
     }
+    
+    // Always remove from local state
+    removeCallChannel(channelId);
+    console.log('✅ Call channel removed from local state:', channelId);
   };
 
   const removeCallChannel = (channelId: string) => {

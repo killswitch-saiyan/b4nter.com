@@ -1282,41 +1282,19 @@ const ChatPage: React.FC = () => {
               </p>
               <div className="flex gap-4 justify-center">
                 <button
-                  onClick={async () => {
-                    console.log('[ChatPage] Accept button clicked, channelName:', incomingCall.channelName);
-                    // SIMPLIFIED: Just join the existing channel the caller created
-                    console.log('[ChatPage] Receiver joining existing call channel:', incomingCall.channelId, incomingCall.channelName);
+                  onClick={() => {
+                    console.log('[ChatPage] Accept button clicked - accepting call immediately');
                     
-                    // Find the channel locally (should exist if channels are synced properly)
-                    let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
-                    
-                    // If channel not found locally, refresh channels to get it from backend
-                    if (!callChannel) {
-                      console.log('[ChatPage] Channel not found locally, refreshing channels...');
-                      await refreshChannels();
-                      callChannel = channels.find(ch => ch.id === incomingCall.channelId);
-                    }
-                    
-                    // If still not found, the caller's channel creation failed or was deleted
-                    if (!callChannel) {
-                      console.error('[ChatPage] Call channel not found even after refresh. Available channels:', channels.map(ch => ({ id: ch.id, name: ch.name, isCall: ch.is_call_channel })));
-                      console.error('[ChatPage] Looking for channel ID:', incomingCall.channelId);
-                      toast.error('Call channel no longer exists');
-                      setIncomingCall(null);
-                      return;
-                    }
-                    joinCallChannel(incomingCall.channelId, user?.id || '');
-                    setActiveCallChannelId(incomingCall.channelId);
-                    if (callChannel) setSelectedChannel(callChannel);
+                    // SIMPLIFIED: Just accept the call and let CallControls handle channel switching
                     setAcceptedCall({
                       offer: incomingCall.offer,
                       channelId: incomingCall.channelId,
-                      channelName: safeChannelName,
+                      channelName: incomingCall.channelName || (incomingCall.isVideo ? 'video-channel' : 'voice-channel'),
                       isVideo: incomingCall.isVideo,
                       from: incomingCall.from
                     });
                     setIncomingCall(null);
-                    toast.success(`Joined ${incomingCall.isVideo ? 'video' : 'voice'} call with ${incomingCall.fromName}`);
+                    toast.success(`Accepting ${incomingCall.isVideo ? 'video' : 'voice'} call from ${incomingCall.fromName}`);
                   }}
                   className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
                 >

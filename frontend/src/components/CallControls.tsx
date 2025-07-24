@@ -597,7 +597,7 @@ const CallControls: React.FC<CallControlsProps> = ({
         await Notification.requestPermission();
       }
       
-      // Create call channel in backend
+      // Create call channel in backend with updated schema
       const callType = isVideo ? 'video' : 'voice';
       const participants = [user?.id || '', targetUserId];
       const callChannel = await createCallChannel(callType, participants);
@@ -688,22 +688,47 @@ const CallControls: React.FC<CallControlsProps> = ({
       console.log('[CallControls] Starting call acceptance process');
       stopRingtone();
       setCallState(prev => ({ ...prev, isIncoming: false })); // Don't set connected yet
+      
       if (currentCallChannel) {
-        // Wait for the call channel to appear in the channels list and for the user to be a participant
+        console.log('[CallControls] Looking for call channel:', currentCallChannel);
+        
+        // First try to find the channel locally
         let callChannel = channels.find(ch => ch.id === currentCallChannel);
-        for (let i = 0; i < 30; i++) { // Try for up to 3 seconds
-          await new Promise(res => setTimeout(res, 100));
+        
+        // If not found locally, refresh channels from backend (the caller created it there)
+        if (!callChannel) {
+          console.log('[CallControls] Channel not found locally, refreshing from backend...');
+          await refreshChannels();
+          // Look again after refresh
           callChannel = channels.find(ch => ch.id === currentCallChannel);
-          if (callChannel && callChannel.call_participants?.includes(user?.id || '')) break;
         }
-        if (!callChannel || !callChannel.call_participants?.includes(user?.id || '')) {
-          toast.error("Call channel not ready yet. Please wait a moment and try again.");
-          return;
+        
+        // If still not found, create local representation as fallback
+        if (!callChannel) {
+          console.log('[CallControls] Channel not found in backend, creating fallback');
+          callChannel = createCallChannelForReceiver(
+            currentCallChannel,
+            acceptedCall?.channelName || 'call-channel',
+            acceptedCall?.isVideo ? 'video' : 'voice',
+            [acceptedCall?.from || '', user?.id || '']
+          );
+        } else {
+          console.log('[CallControls] Found call channel:', callChannel);
+          // Parse string fields if needed
+          if (typeof callChannel.call_participants === 'string') {
+            callChannel = {
+              ...callChannel,
+              is_call_channel: callChannel.is_call_channel === "true" || callChannel.is_call_channel === true,
+              call_participants: JSON.parse(callChannel.call_participants as string)
+            };
+          }
         }
+        
+        // Join the channel and switch to it
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel);
-        setSelectedChannel(callChannel); // Always set selected channel after accepting
-        console.log('[CallControls] Joined call channel and participant list updated:', callChannel.call_participants);
+        setSelectedChannel(callChannel);
+        console.log('[CallControls] Switched to call channel:', callChannel.name);
       }
       
       // Get user media for the call
