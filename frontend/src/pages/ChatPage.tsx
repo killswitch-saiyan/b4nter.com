@@ -1371,15 +1371,8 @@ const ChatPage: React.FC = () => {
                           });
                           
                           if (updateResponse.ok) {
-                            // Send WebSocket message to update caller immediately
-                            if (socket) {
-                              socket.send(JSON.stringify({
-                                type: 'call_participant_joined',
-                                to: incomingCall.from,
-                                channelId: incomingCall.channelId,
-                                participants: [incomingCall.from, user?.id]
-                              }));
-                            }
+                            // Force all connected users to refresh channels
+                            refreshChannels();
                           }
                           
                           // Step 4: Create proper channel object with both participants
