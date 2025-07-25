@@ -122,7 +122,16 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
               }
               return [];
             })(),
-            call_started_at: channel.call_started_at || new Date().toISOString()
+            call_started_at: channel.call_started_at || new Date().toISOString(),
+            member_count: (() => {
+              // Set member_count based on call_participants length
+              const participants = Array.isArray(channel.call_participants) 
+                ? channel.call_participants 
+                : (typeof channel.call_participants === 'string' 
+                  ? JSON.parse(channel.call_participants || '[]')
+                  : []);
+              return participants.length;
+            })()
           };
           
           console.log('📞 Parsed call channel:', {

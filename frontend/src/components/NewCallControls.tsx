@@ -304,6 +304,14 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   }, [remoteStream]);
 
   // Video call UI
+  console.log('🎥 Video UI check:', {
+    isConnected: callState.isConnected,
+    isOutgoing: callState.isOutgoing, 
+    hasLocal: !!localStream,
+    hasRemote: !!remoteStream,
+    shouldShow: callState.isConnected || callState.isOutgoing || localStream || remoteStream
+  });
+  
   if (callState.isConnected || callState.isOutgoing || localStream || remoteStream) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
