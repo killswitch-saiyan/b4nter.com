@@ -220,17 +220,15 @@ const ChatPage: React.FC = () => {
           }
           
           if (data.type === 'call_incoming') {
-            console.log('🎯 Global incoming call received:', data);
             setIncomingCall({
               from: data.from,
               fromName: data.from_name || 'Unknown User',
               isVideo: data.isVideo,
               channelId: data.channelId,
-              channelName: data.channelName, // Always use the exact name from the sender
+              channelName: data.channelName,
               offer: data.offer
             });
             
-            // Show browser notification
             if ('Notification' in window && Notification.permission === 'granted') {
               new Notification(`Incoming call from ${data.from_name || 'Unknown User'}`, {
                 body: data.isVideo ? 'Video call' : 'Voice call',
@@ -238,8 +236,30 @@ const ChatPage: React.FC = () => {
               });
             }
             
-            // Show toast notification
             toast.success(`Incoming ${data.isVideo ? 'video' : 'voice'} call from ${data.from_name || 'Unknown User'}`);
+          }
+          
+          if (data.type === 'call_participant_joined') {
+            // Update caller's channel when receiver joins
+            setChannels(prev => prev.map(ch => {
+              if (ch.id === data.channelId) {
+                return {
+                  ...ch,
+                  call_participants: data.participants,
+                  member_count: data.participants.length
+                };
+              }
+              return ch;
+            }));
+            
+            // Update selected channel if it's the call channel
+            if (selectedChannel?.id === data.channelId) {
+              setSelectedChannel(prev => prev ? {
+                ...prev,
+                call_participants: data.participants,
+                member_count: data.participants.length
+              } : prev);
+            }
           }
         } catch (error) {
           console.error('Error handling call message:', error);
@@ -1350,9 +1370,16 @@ const ChatPage: React.FC = () => {
                           });
                           
                           if (updateResponse.ok) {
-                            console.log('[ChatPage] ✅ Updated call_participants in backend');
-                          } else {
-                            console.error('[ChatPage] ❌ Failed to update call_participants in backend');
+                            // Notify caller that receiver has joined
+                            if (socket) {
+                              socket.send(JSON.stringify({
+                                type: 'call_participant_joined',
+                                to: incomingCall.from,
+                                from: user?.id,
+                                channelId: incomingCall.channelId,
+                                participants: [incomingCall.from, user?.id]
+                              }));
+                            }
                           }
                           
                           // Step 4: Create proper channel object with both participants
