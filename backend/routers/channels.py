@@ -166,19 +166,21 @@ async def join_channel(
                 detail="Channel not found"
             )
         
-        # Check if user is already a member
+        # For call channels, skip membership check entirely (they're invitation-based)
+        if channel.get("is_call_channel") == "true":
+            logger.info(f"Call channel join: User {current_user.id} joining {channel_id} (skipping membership check)")
+            # Don't add to database membership - call channels use call_participants field
+            return {"message": "Joined call channel"}
+        
+        # For regular channels, check if user is already a member
         user_channels = await db.get_user_channels(current_user.id)
         user_channel_ids = [c.get("channel_id") for c in user_channels]
         
-        # For call channels, allow "rejoining" (just return success)
         if channel_id in user_channel_ids:
-            if channel.get("is_call_channel") == "true":
-                return {"message": "Already a member of this call channel"}
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Already a member of this channel"
-                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Already a member of this channel"
+            )
         
         # Add user to channel
         member_data = {
