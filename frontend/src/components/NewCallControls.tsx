@@ -284,6 +284,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   useEffect(() => {
     if (!isGlobal && !acceptedCall && !callState.isOutgoing && !callState.isConnected && !localStream) {
       // Caller is in embedded call controls (call channel) - auto-start immediately  
+      console.log('🚀 Auto-starting call for caller');
       startCall(true); // Auto-start video call
     }
   }, []); // Run once on mount
