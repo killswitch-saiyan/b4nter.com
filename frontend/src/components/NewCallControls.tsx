@@ -280,7 +280,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
     }
   }, [onWebRTCMessage, isGlobal, currentCallChannel, acceptedCall, activeCallChannelId]);
 
-  // Remove auto-start - caller should manually start call
+  // No auto-start - user must manually click video/voice buttons
 
   // Auto-accept for receiver
   useEffect(() => {

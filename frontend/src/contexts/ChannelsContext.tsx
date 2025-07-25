@@ -51,16 +51,16 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
   const [callDuration, setCallDuration] = useState(0);
   const [activeCallChannelId, setActiveCallChannelId] = useState<string | null>(null);
   
-  // Polling for call channels - refresh every 2 seconds when in a call
+  // Polling for call channels - only when actively in a call (not on page load)
   useEffect(() => {
-    if (selectedChannel?.is_call_channel) {
+    if (selectedChannel?.is_call_channel && activeCallChannelId) {
       const interval = setInterval(() => {
         fetchChannels(); // Refresh call channel data
       }, 2000); // Every 2 seconds
       
       return () => clearInterval(interval);
     }
-  }, [selectedChannel?.is_call_channel]);
+  }, [selectedChannel?.is_call_channel, activeCallChannelId]);
 
   // Get backend URL from environment variable or default to localhost
   const getBackendUrl = () => {
