@@ -192,6 +192,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   const startCall = async (isVideo: boolean) => {
     try {
       console.log('✅ CALLER: Starting call');
+      console.log('🔊 Caller ringtone ref available:', !!callerRingtoneRef.current);
       
       let callChannelId: string;
       
@@ -404,11 +405,13 @@ const NewCallControls: React.FC<CallControlsProps> = ({
     hasRemote: !!remoteStream,
     shouldShow: callState.isConnected || callState.isOutgoing || localStream || remoteStream
   });
+
+  // Render content based on state
+  let content = null;
   
   if (callState.isConnected || callState.isOutgoing || localStream || remoteStream) {
-    return (
-      <>
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+    content = (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
         <div className="relative w-full h-full max-w-4xl max-h-[80vh]">
           {/* Remote video (main) */}
           {callState.isVideoEnabled && (
@@ -460,44 +463,17 @@ const NewCallControls: React.FC<CallControlsProps> = ({
             </div>
           </div>
         </div>
-        </div>
-        {/* Hidden audio element for caller ringtone */}
-        <audio
-          ref={callerRingtoneRef}
-          src="/ringtone.mp3"
-          preload="auto"
-          style={{ display: 'none' }}
-          onLoadedData={() => console.log('✅ Caller ringtone loaded successfully')}
-          onError={(e) => console.error('❌ Failed to load caller ringtone:', e)}
-        />
-      </>
+      </div>
     );
   }
 
   // Call buttons (when not in call)
-  if (!targetUserId || targetUserId === "" || (isGlobal && acceptedCall)) {
-    return (
-      <>
-        {/* Hidden audio element for caller ringtone */}
-        <audio
-          ref={callerRingtoneRef}
-          src="/ringtone.mp3"
-          preload="auto"
-          style={{ display: 'none' }}
-          onLoadedData={() => console.log('✅ Caller ringtone loaded successfully (null return)')}
-          onError={(e) => console.error('❌ Failed to load caller ringtone (null return):', e)}
-        />
-      </>
-    );
+  else if (!targetUserId || targetUserId === "" || (isGlobal && acceptedCall)) {
+    content = null; // No content to show
   }
-  
   // Show call buttons even for 'waiting-for-receiver' in call channels
-  if (targetUserId === 'waiting-for-receiver') {
-    // Caller is in call channel waiting - show video buttons
-  }
-  
-  return (
-    <>
+  else {
+    content = (
       <div className="flex gap-2">
       <button
         onClick={() => startCall(false)}
@@ -514,14 +490,21 @@ const NewCallControls: React.FC<CallControlsProps> = ({
         📹 Video
       </button>
       </div>
-      {/* Hidden audio element for caller ringtone */}
+    );
+  }
+
+  // Always render with audio element
+  return (
+    <>
+      {content}
+      {/* Hidden audio element for caller ringtone - ALWAYS rendered */}
       <audio
         ref={callerRingtoneRef}
         src="/ringtone.mp3"
         preload="auto"
         style={{ display: 'none' }}
-        onLoadedData={() => console.log('✅ Caller ringtone loaded successfully (buttons)')}
-        onError={(e) => console.error('❌ Failed to load caller ringtone (buttons):', e)}
+        onLoadedData={() => console.log('✅ Caller ringtone loaded successfully')}
+        onError={(e) => console.error('❌ Failed to load caller ringtone:', e)}
       />
     </>
   );
