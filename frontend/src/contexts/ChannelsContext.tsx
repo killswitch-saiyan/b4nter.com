@@ -74,9 +74,57 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
       }
 
       const channelsData = await response.json();
-      console.log('Fetched channels:', channelsData);
+      console.log('Fetched channels (raw):', channelsData);
+      
+      // Parse call channel properties for all channels
+      const parsedChannels = channelsData.map((channel: any) => {
+        if (channel.is_call_channel === "true" || channel.is_call_channel === true) {
+          console.log('📞 Parsing call channel properties for:', channel.name, {
+            raw_is_call_channel: channel.is_call_channel,
+            raw_call_type: channel.call_type,
+            raw_call_participants: channel.call_participants,
+            raw_call_participants_type: typeof channel.call_participants
+          });
+          
+          const parsedChannel = {
+            ...channel,
+            is_call_channel: true, // Force boolean
+            call_type: channel.call_type || 'voice',
+            call_participants: (() => {
+              if (Array.isArray(channel.call_participants)) {
+                return channel.call_participants;
+              }
+              if (typeof channel.call_participants === 'string') {
+                try {
+                  const parsed = JSON.parse(channel.call_participants);
+                  return Array.isArray(parsed) ? parsed : [parsed];
+                } catch (e) {
+                  console.error('Failed to parse call_participants:', e);
+                  return [];
+                }
+              }
+              return [];
+            })(),
+            call_started_at: channel.call_started_at || new Date().toISOString()
+          };
+          
+          console.log('📞 Parsed call channel:', {
+            name: parsedChannel.name,
+            is_call_channel: parsedChannel.is_call_channel,
+            call_type: parsedChannel.call_type,
+            call_participants: parsedChannel.call_participants,
+            call_participants_length: parsedChannel.call_participants?.length
+          });
+          
+          return parsedChannel;
+        }
+        return channel;
+      });
+      
+      console.log('Fetched channels (parsed):', parsedChannels);
+      
       // Filter out call channels that have ended
-      const activeChannels = channelsData.filter((channel: Channel) => 
+      const activeChannels = parsedChannels.filter((channel: Channel) => 
         !channel.is_call_channel || !channel.call_ended_at
       );
       // --- Merge local call channels not present in backend response ---

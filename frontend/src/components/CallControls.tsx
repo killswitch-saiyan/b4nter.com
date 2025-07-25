@@ -225,27 +225,35 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   }, [onWebRTCMessage, handleSocketMessage, isGlobal, currentCallChannel, acceptedCall, activeCallChannelId]);
 
-  // Auto-start call for embedded CallControls
+  // Auto-start call for embedded CallControls (with guards to prevent multiple calls)
+  const hasAutoStarted = useRef(false);
   useEffect(() => {
     // For embedded CallControls in active call channel
     const isEmbeddedInCallChannel = !isGlobal && activeCallChannelId && activeCallChannelId !== null;
     
-    if (isEmbeddedInCallChannel && !callState.isOutgoing && !callState.isIncoming && !callState.isConnected) {
+    if (isEmbeddedInCallChannel && !callState.isOutgoing && !callState.isIncoming && !callState.isConnected && !hasAutoStarted.current) {
       // Check if this is the caller (user created the channel) or receiver (acceptedCall exists)
       if (acceptedCall) {
         console.log('🔍 Embedded CallControls auto-accepting call for receiver');
+        hasAutoStarted.current = true;
         acceptCall(acceptedCall.offer);
       } else {
         // This might be the caller's embedded CallControls - check if user is channel creator
         const currentChannel = channels.find(ch => ch.id === activeCallChannelId);
-        if (currentChannel && currentChannel.created_by === user?.id) {
+        if (currentChannel && currentChannel.created_by === user?.id && !currentCallChannel) {
           console.log('🔍 Embedded CallControls auto-starting call for caller');
+          hasAutoStarted.current = true;
           const isVideo = currentChannel.call_type === 'video';
           startCall(isVideo);
         }
       }
     }
-  }, [activeCallChannelId, isGlobal, acceptedCall, callState, channels, user?.id]);
+    
+    // Reset the flag when call ends
+    if (!activeCallChannelId) {
+      hasAutoStarted.current = false;
+    }
+  }, [activeCallChannelId, isGlobal, acceptedCall, callState, channels, user?.id, currentCallChannel]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {
@@ -612,6 +620,17 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // 4. In startCall and acceptCall, always attach local video stream
   const startCall = async (isVideo: boolean) => {
+    // Prevent multiple calls and prevent global CallControls from starting calls
+    if (isGlobal) {
+      console.log('🚫 Global CallControls cannot start calls - this should be handled by embedded CallControls');
+      return;
+    }
+    
+    if (callState.isOutgoing || callState.isIncoming || callState.isConnected || currentCallChannel) {
+      console.log('🚫 Call already in progress, ignoring startCall');
+      return;
+    }
+    
     try {
       console.log('📞 Starting', isVideo ? 'video' : 'voice', 'call');
       
@@ -765,29 +784,71 @@ const CallControls: React.FC<CallControlsProps> = ({
             acceptedCall?.isVideo ? 'video' : 'voice',
             [acceptedCall?.from || '', user?.id || '']
           );
+          console.log('[CallControls] Created fallback channel:', callChannel);
         } else {
-          console.log('[CallControls] Found call channel:', callChannel);
-          // Parse string fields if needed (for locally found channels)
-          if (typeof callChannel.call_participants === 'string') {
-            callChannel = {
-              ...callChannel,
-              is_call_channel: callChannel.is_call_channel === "true" || callChannel.is_call_channel === true,
-              call_participants: JSON.parse(callChannel.call_participants as string)
-            };
-          }
+          console.log('[CallControls] Found call channel from backend:', callChannel);
         }
+
+        // ALWAYS ensure call channel properties are properly formatted, regardless of source
+        console.log('[CallControls] Raw channel before parsing:', {
+          is_call_channel: callChannel.is_call_channel,
+          call_type: callChannel.call_type,
+          call_participants: callChannel.call_participants,
+          call_participants_type: typeof callChannel.call_participants
+        });
+
+        // Force proper formatting of all call channel properties
+        callChannel = {
+          ...callChannel,
+          is_call_channel: true, // Force true since this is definitely a call channel
+          call_type: callChannel.call_type || (acceptedCall?.isVideo ? 'video' : 'voice'),
+          call_participants: (() => {
+            if (Array.isArray(callChannel.call_participants)) {
+              return callChannel.call_participants;
+            }
+            if (typeof callChannel.call_participants === 'string') {
+              try {
+                return JSON.parse(callChannel.call_participants);
+              } catch (e) {
+                console.error('[CallControls] Failed to parse call_participants JSON:', e);
+                return [acceptedCall?.from || '', user?.id || ''];
+              }
+            }
+            // Fallback if call_participants is null/undefined
+            return [acceptedCall?.from || '', user?.id || ''];
+          })(),
+          call_started_at: callChannel.call_started_at || new Date().toISOString()
+        };
+
+        console.log('[CallControls] Channel after parsing:', {
+          is_call_channel: callChannel.is_call_channel,
+          call_type: callChannel.call_type,
+          call_participants: callChannel.call_participants,
+          call_participants_length: callChannel.call_participants?.length
+        });
         
         // Join the channel and switch to it
         joinCallChannel(currentCallChannel, user?.id || '');
         setActiveCallChannelId(currentCallChannel);
+        
+        // Set the selected channel with the properly parsed call channel
         setSelectedChannel(callChannel);
-        console.log('[CallControls] Switched to call channel:', callChannel.name);
-        console.log('[CallControls] Call channel properties:', {
+        console.log('[CallControls] ✅ Successfully switched to call channel:', callChannel.name);
+        console.log('[CallControls] ✅ Final selected channel properties:', {
           id: callChannel.id,
           name: callChannel.name,
           is_call_channel: callChannel.is_call_channel,
           call_type: callChannel.call_type,
-          call_participants: callChannel.call_participants
+          call_participants: callChannel.call_participants,
+          call_participants_length: callChannel.call_participants?.length
+        });
+        
+        // CRITICAL: Also refresh channels to ensure this channel is in the global state
+        console.log('[CallControls] Refreshing channels to ensure call channel is in global state...');
+        refreshChannels().then(() => {
+          console.log('[CallControls] ✅ Channels refreshed after call acceptance');
+        }).catch(error => {
+          console.error('[CallControls] ❌ Failed to refresh channels:', error);
         });
       }
       
@@ -1392,7 +1453,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   }
 
   // Call buttons (when not in call)
-  if (!targetUserId || targetUserId === "") {
+  if (!targetUserId || targetUserId === "" || isGlobal) {
     return null; // Don't render anything for global/invalid components
   }
   
