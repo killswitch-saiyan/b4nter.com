@@ -239,28 +239,6 @@ const ChatPage: React.FC = () => {
             toast.success(`Incoming ${data.isVideo ? 'video' : 'voice'} call from ${data.from_name || 'Unknown User'}`);
           }
           
-          if (data.type === 'call_participant_joined') {
-            // Update caller's channel when receiver joins
-            setChannels(prev => prev.map(ch => {
-              if (ch.id === data.channelId) {
-                return {
-                  ...ch,
-                  call_participants: data.participants,
-                  member_count: data.participants.length
-                };
-              }
-              return ch;
-            }));
-            
-            // Update selected channel if it's the call channel
-            if (selectedChannel?.id === data.channelId) {
-              setSelectedChannel(prev => prev ? {
-                ...prev,
-                call_participants: data.participants,
-                member_count: data.participants.length
-              } : prev);
-            }
-          }
         } catch (error) {
           console.error('Error handling call message:', error);
         }
@@ -1370,16 +1348,10 @@ const ChatPage: React.FC = () => {
                           });
                           
                           if (updateResponse.ok) {
-                            // Notify caller that receiver has joined
-                            if (socket) {
-                              socket.send(JSON.stringify({
-                                type: 'call_participant_joined',
-                                to: incomingCall.from,
-                                from: user?.id,
-                                channelId: incomingCall.channelId,
-                                participants: [incomingCall.from, user?.id]
-                              }));
-                            }
+                            // Force refresh channels for all users to update caller's frontend
+                            setTimeout(() => {
+                              refreshChannels();
+                            }, 500);
                           }
                           
                           // Step 4: Create proper channel object with both participants
