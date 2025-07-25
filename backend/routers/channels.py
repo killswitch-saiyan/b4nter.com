@@ -166,11 +166,32 @@ async def join_channel(
                 detail="Channel not found"
             )
         
-        # For call channels, skip membership check entirely (they're invitation-based)
+        # For call channels, allow joining even if already a member (invitation-based)
         if channel.get("is_call_channel") == "true":
-            logger.info(f"Call channel join: User {current_user.id} joining {channel_id} (skipping membership check)")
-            # Don't add to database membership - call channels use call_participants field
-            return {"message": "Joined call channel"}
+            logger.info(f"Call channel join: User {current_user.id} joining {channel_id}")
+            # Check if already a member
+            user_channels = await db.get_user_channels(current_user.id)
+            user_channel_ids = [c.get("channel_id") for c in user_channels]
+            
+            if channel_id not in user_channel_ids:
+                # Add user to channel as database member
+                member_data = {
+                    "user_id": current_user.id,
+                    "channel_id": channel_id,
+                    "role": "user"
+                }
+                
+                new_member = await db.add_channel_member(member_data)
+                if not new_member:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to join call channel"
+                    )
+                logger.info(f"Added user {current_user.id} as member of call channel {channel_id}")
+            else:
+                logger.info(f"User {current_user.id} already member of call channel {channel_id}")
+            
+            return {"message": "Successfully joined call channel"}
         
         # For regular channels, check if user is already a member
         user_channels = await db.get_user_channels(current_user.id)
@@ -252,6 +273,60 @@ async def leave_channel(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
+        )
+
+
+@router.patch("/{channel_id}")
+async def update_channel(
+    channel_id: str,
+    update_data: dict,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Update a channel (for call participants updates)"""
+    try:
+        # Get channel info first
+        channel = await db.get_channel_by_id(channel_id)
+        if not channel:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Channel not found"
+            )
+        
+        # For call channels, allow updating call_participants
+        if channel.get("is_call_channel") == "true" and "call_participants" in update_data:
+            logger.info(f"Updating call_participants for channel {channel_id}: {update_data['call_participants']}")
+            updated_channel = await db.update_channel(channel_id, update_data)
+            if updated_channel:
+                return {"message": "Channel updated successfully", "channel": updated_channel}
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update channel"
+                )
+        
+        # For regular channels, require admin permissions
+        if channel.get("created_by") != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only channel creators can update channels"
+            )
+        
+        updated_channel = await db.update_channel(channel_id, update_data)
+        if updated_channel:
+            return {"message": "Channel updated successfully", "channel": updated_channel}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update channel"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating channel {channel_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update channel"
         )
 
 

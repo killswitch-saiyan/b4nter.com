@@ -129,6 +129,15 @@ class DatabaseManager:
             logger.error(f"Error getting channel by name: {e}")
             return None
     
+    async def update_channel(self, channel_id: str, update_data: dict):
+        """Update a channel"""
+        try:
+            response = self.client.table('channels').update(update_data).eq('id', channel_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error updating channel: {e}")
+            return None
+    
     async def get_user_channels(self, user_id: str):
         """Get all channels a user is a member of"""
         try:

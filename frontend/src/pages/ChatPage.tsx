@@ -1327,7 +1327,25 @@ const ChatPage: React.FC = () => {
                         if (joinResponse.ok) {
                           console.log('[ChatPage] ✅ Joined call channel in backend');
                           
-                          // Step 3: Create proper channel object with both participants
+                          // Step 3: Update backend call_participants to include receiver
+                          const updateResponse = await fetch(`${backendUrl}/channels/${incomingCall.channelId}`, {
+                            method: 'PATCH',
+                            headers: {
+                              'Authorization': `Bearer ${token}`,
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                              call_participants: JSON.stringify([incomingCall.from, user?.id])
+                            }),
+                          });
+                          
+                          if (updateResponse.ok) {
+                            console.log('[ChatPage] ✅ Updated call_participants in backend');
+                          } else {
+                            console.error('[ChatPage] ❌ Failed to update call_participants in backend');
+                          }
+                          
+                          // Step 4: Create proper channel object with both participants
                           const callChannel = {
                             ...channelData,
                             is_call_channel: true,
