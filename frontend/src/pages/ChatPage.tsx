@@ -1348,10 +1348,8 @@ const ChatPage: React.FC = () => {
                           });
                           
                           if (updateResponse.ok) {
-                            // Force refresh channels for all users to update caller's frontend
-                            setTimeout(() => {
-                              refreshChannels();
-                            }, 500);
+                            // Immediately refresh channels to update caller's frontend
+                            refreshChannels();
                           }
                           
                           // Step 4: Create proper channel object with both participants
@@ -1363,17 +1361,7 @@ const ChatPage: React.FC = () => {
                             member_count: 2
                           };
                           
-                          // Step 4: Update local channels state
-                          setChannels(prev => {
-                            const exists = prev.find(ch => ch.id === callChannel.id);
-                            if (exists) {
-                              return prev.map(ch => ch.id === callChannel.id ? callChannel : ch);
-                            }
-                            return [...prev, callChannel];
-                          });
-                          
-                          // Step 5: Switch to the call channel
-                          console.log('[ChatPage] ✅ Switching to call channel with both participants');
+                          // Step 4: Switch to the call channel (refreshChannels will update the data)
                           setSelectedChannel(callChannel);
                           setActiveCallChannelId(callChannel.id);
                           
