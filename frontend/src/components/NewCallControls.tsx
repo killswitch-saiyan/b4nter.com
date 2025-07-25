@@ -59,6 +59,25 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const callerRingtoneRef = useRef<HTMLAudioElement>(null);
+
+  // Caller ringtone functions
+  const playCallerRingtone = () => {
+    if (callerRingtoneRef.current) {
+      callerRingtoneRef.current.loop = true;
+      callerRingtoneRef.current.play().catch(e => {
+        console.error('Failed to play caller ringtone:', e);
+      });
+    }
+  };
+
+  const stopCallerRingtone = () => {
+    if (callerRingtoneRef.current) {
+      callerRingtoneRef.current.pause();
+      callerRingtoneRef.current.currentTime = 0;
+      callerRingtoneRef.current.loop = false;
+    }
+  };
 
   // Create peer connection
   const createPeerConnection = () => {
@@ -100,12 +119,17 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   // Handle WebRTC messages
   const handleSocketMessage = (data: any) => {
     if (data.type === 'webrtc_answer' && data.answer) {
+      stopCallerRingtone(); // Stop caller ringtone when receiver answers
       handleAnswer(data.answer);
     }
     if (data.type === 'webrtc_ice_candidate' && data.candidate) {
       if (peerConnection) {
         peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
+    }
+    if (data.type === 'call_rejected') {
+      stopCallerRingtone(); // Stop caller ringtone when call is rejected
+      console.log('📞 Call was rejected by receiver');
     }
   };
 
@@ -181,6 +205,9 @@ const NewCallControls: React.FC<CallControlsProps> = ({
           channelName: callChannelId, // Use channel ID as fallback name
           targetUserId: targetUserId
         }));
+        
+        // Start caller ringtone after sending the call invitation
+        playCallerRingtone();
       }
     } catch (error) {
       console.error('❌ CALLER: Error starting call:', error);
@@ -241,6 +268,9 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   // End call
   const endCall = async () => {
     console.log('✅ Ending call');
+    
+    // Stop caller ringtone if it's playing
+    stopCallerRingtone();
     
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
@@ -382,6 +412,13 @@ const NewCallControls: React.FC<CallControlsProps> = ({
             </div>
           </div>
         </div>
+        {/* Hidden audio element for caller ringtone */}
+        <audio
+          ref={callerRingtoneRef}
+          src="/ringtone.mp3"
+          preload="auto"
+          style={{ display: 'none' }}
+        />
       </div>
     );
   }
@@ -412,6 +449,13 @@ const NewCallControls: React.FC<CallControlsProps> = ({
       >
         📹 Video
       </button>
+      {/* Hidden audio element for caller ringtone */}
+      <audio
+        ref={callerRingtoneRef}
+        src="/ringtone.mp3"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
     </div>
   );
 };
