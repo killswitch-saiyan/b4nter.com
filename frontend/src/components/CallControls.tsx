@@ -241,10 +241,9 @@ const CallControls: React.FC<CallControlsProps> = ({
         // This might be the caller's embedded CallControls - check if user is channel creator
         const currentChannel = channels.find(ch => ch.id === activeCallChannelId);
         if (currentChannel && currentChannel.created_by === user?.id && !currentCallChannel) {
-          console.log('🔍 Embedded CallControls auto-starting call for caller');
-          hasAutoStarted.current = true;
-          const isVideo = currentChannel.call_type === 'video';
-          startCall(isVideo);
+          console.log('🔍 Embedded CallControls detected caller channel - NOT auto-starting (DM CallControls should handle)');
+          // Don't auto-start for caller's embedded CallControls - the DM CallControls will handle the initial call
+          // The embedded CallControls will only show the video UI once the call is established
         }
       }
     }
@@ -620,12 +619,6 @@ const CallControls: React.FC<CallControlsProps> = ({
 
   // 4. In startCall and acceptCall, always attach local video stream
   const startCall = async (isVideo: boolean) => {
-    // Prevent multiple calls and prevent global CallControls from starting calls
-    if (isGlobal) {
-      console.log('🚫 Global CallControls cannot start calls - this should be handled by embedded CallControls');
-      return;
-    }
-    
     if (callState.isOutgoing || callState.isIncoming || callState.isConnected || currentCallChannel) {
       console.log('🚫 Call already in progress, ignoring startCall');
       return;
@@ -1453,8 +1446,13 @@ const CallControls: React.FC<CallControlsProps> = ({
   }
 
   // Call buttons (when not in call)
-  if (!targetUserId || targetUserId === "" || isGlobal) {
-    return null; // Don't render anything for global/invalid components
+  if (!targetUserId || targetUserId === "") {
+    return null; // Don't render anything for invalid components
+  }
+  
+  // Hide call buttons for incoming call CallControls (but show for DM CallControls)
+  if (isGlobal && acceptedCall) {
+    return null; // This is the incoming call CallControls, don't show buttons
   }
   
   return (
