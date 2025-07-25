@@ -225,21 +225,15 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   }, [onWebRTCMessage, handleSocketMessage, isGlobal, currentCallChannel, acceptedCall, activeCallChannelId]);
 
-  // Auto-accept call for receiver's embedded CallControls only
+  // Auto-accept for receiver only
   const hasAutoAccepted = useRef(false);
   useEffect(() => {
-    // Only auto-accept for receiver when acceptedCall prop exists and hasn't been processed yet
-    if (acceptedCall && !hasAutoAccepted.current && !callState.isIncoming && !callState.isOutgoing && !callState.isConnected) {
-      console.log('🔍 Embedded CallControls auto-accepting call for receiver');
+    if (acceptedCall && !hasAutoAccepted.current && !callState.isConnected) {
+      console.log('✅ RECEIVER: Auto-accepting call in embedded CallControls');
       hasAutoAccepted.current = true;
       acceptCall(acceptedCall.offer);
     }
-    
-    // Reset when call ends
-    if (!acceptedCall && !activeCallChannelId) {
-      hasAutoAccepted.current = false;
-    }
-  }, [acceptedCall, callState.isIncoming, callState.isOutgoing, callState.isConnected, activeCallChannelId]);
+  }, [acceptedCall, callState.isConnected]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {
@@ -619,9 +613,9 @@ const CallControls: React.FC<CallControlsProps> = ({
         await Notification.requestPermission();
       }
       
-      // Create call channel in backend with updated schema - include both participants for UI purposes
+      // Create call channel in backend - ONLY caller initially
       const callType = isVideo ? 'video' : 'voice';
-      const participants = [user?.id || '', targetUserId]; // Include both for UI, but only caller is actually in channel initially
+      const participants = [user?.id || '']; // Only caller initially
       const callChannel = await createCallChannel(callType, participants);
       setCurrentCallChannel(callChannel.id);
       setActiveCallChannelId(callChannel.id); // Set active call channel in context
@@ -681,10 +675,13 @@ const CallControls: React.FC<CallControlsProps> = ({
           const callMessage = {
             type: 'call_incoming',
             to: targetUserId,
+            from: user?.id,
+            from_name: user?.username,
             offer: offer,
             isVideo: isVideo,
             channelId: callChannel.id,
-            channelName: callChannel.name
+            channelName: callChannel.name,
+            targetUserId: targetUserId
           };
           socket.send(JSON.stringify(callMessage));
         } else {

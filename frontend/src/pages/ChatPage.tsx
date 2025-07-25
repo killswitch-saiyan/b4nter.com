@@ -7,7 +7,7 @@ import MessageInput from '../components/MessageInput';
 import MessageDisplay from '../components/MessageDisplay';
 import EncryptionStatus from '../components/EncryptionStatus';
 import UserProfileDropdown from '../components/UserProfileDropdown';
-import CallControls from '../components/CallControls';
+import NewCallControls from '../components/NewCallControls';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -1045,7 +1045,7 @@ const ChatPage: React.FC = () => {
               </div>
               <div className="flex items-center space-x-4">
                 {selectedDMUser && !isBlocked && (
-                  <CallControls
+                  <NewCallControls
                     targetUserId={selectedDMUser.id}
                     targetUsername={selectedDMUser.username}
                     onCallEnd={() => setIsInCall(false)}
@@ -1104,18 +1104,31 @@ const ChatPage: React.FC = () => {
                 {/* Embed CallControls for video/audio UI */}
                 <div className="flex justify-center mb-8">
                   {(() => {
-                    const targetUserId = selectedChannel.call_participants?.find(p => p !== user?.id) || '';
+                    // Get target user from participants OR from acceptedCall
+                    let targetUserId = '';
+                    let targetUsername = '';
+                    
+                    if (selectedChannel.call_participants && selectedChannel.call_participants.length > 1) {
+                      targetUserId = selectedChannel.call_participants.find(p => p !== user?.id) || '';
+                    } else if (acceptedCall && selectedChannel.id === acceptedCall.channelId) {
+                      targetUserId = acceptedCall.from;
+                    }
+                    
+                    targetUsername = getParticipantName(targetUserId);
+                    
                     console.log('🔍 Embedded CallControls rendering:', {
                       targetUserId,
+                      targetUsername,
                       participants: selectedChannel.call_participants,
                       currentUserId: user?.id,
                       channelId: selectedChannel.id,
                       acceptedCall: selectedChannel.id === acceptedCall?.channelId ? acceptedCall : undefined
                     });
+                    
                     return (
-                      <CallControls
+                      <NewCallControls
                         targetUserId={targetUserId}
-                        targetUsername={getParticipantName(targetUserId)}
+                        targetUsername={targetUsername}
                         onCallEnd={handleEndCall}
                         socket={socket}
                         isGlobal={false}
@@ -1283,63 +1296,83 @@ const ChatPage: React.FC = () => {
               <div className="flex gap-4 justify-center">
                 <button
                   onClick={async () => {
-                    console.log('[ChatPage] Accept button clicked - accepting call and switching to channel');
+                    console.log('[ChatPage] ✅ RECEIVER: Accepting call and joining caller channel');
                     
-                    // Set accepted call state
-                    setAcceptedCall({
-                      offer: incomingCall.offer,
-                      channelId: incomingCall.channelId,
-                      channelName: incomingCall.channelName || (incomingCall.isVideo ? 'video-channel' : 'voice-channel'),
-                      isVideo: incomingCall.isVideo,
-                      from: incomingCall.from
-                    });
-                    
-                    // CRITICAL: Immediately switch to the call channel
                     try {
-                      // First check if channel exists locally
-                      let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
+                      // Step 1: Fetch the call channel from backend
+                      const token = localStorage.getItem('access_token');
+                      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
                       
-                      if (!callChannel) {
-                        console.log('[ChatPage] Call channel not found locally, fetching from backend...');
-                        // Fetch channel from backend if not found locally
-                        const token = localStorage.getItem('access_token');
-                        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
-                        const response = await fetch(`${backendUrl}/channels/${incomingCall.channelId}`, {
+                      console.log('[ChatPage] 🔍 Fetching call channel:', incomingCall.channelId);
+                      const response = await fetch(`${backendUrl}/channels/${incomingCall.channelId}`, {
+                        headers: {
+                          'Authorization': `Bearer ${token}`,
+                          'Content-Type': 'application/json',
+                        },
+                      });
+                      
+                      if (response.ok) {
+                        const channelData = await response.json();
+                        console.log('[ChatPage] ✅ Found caller channel:', channelData);
+                        
+                        // Step 2: Join the channel in the backend (add receiver to participants)
+                        const joinResponse = await fetch(`${backendUrl}/channels/${incomingCall.channelId}/join`, {
+                          method: 'POST',
                           headers: {
                             'Authorization': `Bearer ${token}`,
                             'Content-Type': 'application/json',
                           },
                         });
                         
-                        if (response.ok) {
-                          const channelData = await response.json();
-                          console.log('[ChatPage] Fetched call channel from backend:', channelData);
+                        if (joinResponse.ok) {
+                          console.log('[ChatPage] ✅ Joined call channel in backend');
                           
-                          // Parse channel data properly
-                          callChannel = {
+                          // Step 3: Create proper channel object with both participants
+                          const callChannel = {
                             ...channelData,
                             is_call_channel: true,
                             call_type: channelData.call_type || (incomingCall.isVideo ? 'video' : 'voice'),
-                            call_participants: typeof channelData.call_participants === 'string' 
-                              ? JSON.parse(channelData.call_participants) 
-                              : (channelData.call_participants || [incomingCall.from, user?.id])
+                            call_participants: [incomingCall.from, user?.id], // Both users now
+                            member_count: 2
                           };
+                          
+                          // Step 4: Update local channels state
+                          setChannels(prev => {
+                            const exists = prev.find(ch => ch.id === callChannel.id);
+                            if (exists) {
+                              return prev.map(ch => ch.id === callChannel.id ? callChannel : ch);
+                            }
+                            return [...prev, callChannel];
+                          });
+                          
+                          // Step 5: Switch to the call channel
+                          console.log('[ChatPage] ✅ Switching to call channel with both participants');
+                          setSelectedChannel(callChannel);
+                          setActiveCallChannelId(callChannel.id);
+                          
+                          // Step 6: Set accepted call for WebRTC
+                          setAcceptedCall({
+                            offer: incomingCall.offer,
+                            channelId: incomingCall.channelId,
+                            channelName: incomingCall.channelName,
+                            isVideo: incomingCall.isVideo,
+                            from: incomingCall.from,
+                            targetUserId: incomingCall.targetUserId
+                          });
+                          
+                          console.log('[ChatPage] ✅ RECEIVER SETUP COMPLETE - Now in same channel as caller');
+                        } else {
+                          console.error('[ChatPage] ❌ Failed to join channel in backend');
                         }
-                      }
-                      
-                      if (callChannel) {
-                        console.log('[ChatPage] Switching to call channel:', callChannel.name);
-                        setSelectedChannel(callChannel);
-                        setActiveCallChannelId(callChannel.id);
                       } else {
-                        console.error('[ChatPage] Could not find or fetch call channel');
+                        console.error('[ChatPage] ❌ Failed to fetch call channel from backend');
                       }
                     } catch (error) {
-                      console.error('[ChatPage] Error switching to call channel:', error);
+                      console.error('[ChatPage] ❌ Error during call acceptance:', error);
                     }
                     
                     setIncomingCall(null);
-                    toast.success(`Accepting ${incomingCall.isVideo ? 'video' : 'voice'} call from ${incomingCall.fromName}`);
+                    toast.success(`Joining ${incomingCall.isVideo ? 'video' : 'voice'} call with ${incomingCall.fromName}`);
                   }}
                   className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
                 >
@@ -1366,14 +1399,14 @@ const ChatPage: React.FC = () => {
         </div>
       )}
       
-      {/* Global CallControls for WebRTC connections */}
+      {/* Global NewCallControls for WebRTC connections */}
       {incomingCall && (
-        <CallControls
+        <NewCallControls
           targetUserId={incomingCall.from}
           targetUsername={incomingCall.fromName}
           onCallEnd={() => {
-            console.log('🔚 Incoming call CallControls onCallEnd triggered');
-            // Don't delete channel here - let the actual CallControls component handle it
+            console.log('🔚 Incoming call NewCallControls onCallEnd triggered');
+            // Don't delete channel here - let the actual NewCallControls component handle it
             setIncomingCall(null);
             // Switch back to a regular channel
             const regularChannels = channels.filter(ch => !ch.is_call_channel);
