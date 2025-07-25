@@ -63,21 +63,54 @@ const NewCallControls: React.FC<CallControlsProps> = ({
 
   // Caller ringtone functions
   const playCallerRingtone = () => {
+    console.log('🔊 Attempting to play caller ringtone');
     if (callerRingtoneRef.current) {
       callerRingtoneRef.current.loop = true;
-      callerRingtoneRef.current.play().catch(e => {
-        console.error('Failed to play caller ringtone:', e);
+      callerRingtoneRef.current.volume = 0.8; // Set volume
+      callerRingtoneRef.current.play().then(() => {
+        console.log('✅ Caller ringtone started playing');
+      }).catch(e => {
+        console.error('❌ Failed to play caller ringtone:', e);
+        if (e.name === 'NotAllowedError') {
+          console.log('🔊 Audio blocked - need user interaction first');
+        }
       });
+    } else {
+      console.error('❌ Caller ringtone ref is null');
     }
   };
 
   const stopCallerRingtone = () => {
+    console.log('🔇 Stopping caller ringtone');
     if (callerRingtoneRef.current) {
       callerRingtoneRef.current.pause();
       callerRingtoneRef.current.currentTime = 0;
       callerRingtoneRef.current.loop = false;
+      console.log('✅ Caller ringtone stopped');
     }
   };
+
+  // Initialize audio context on first user interaction
+  const initializeCallerAudio = () => {
+    if (callerRingtoneRef.current) {
+      callerRingtoneRef.current.play().then(() => {
+        callerRingtoneRef.current?.pause();
+        console.log('✅ Audio context initialized for caller ringtone');
+      }).catch(e => {
+        console.log('Caller audio initialization failed:', e);
+      });
+    }
+  };
+
+  // Add click listener to initialize audio on any click
+  useEffect(() => {
+    const handleClick = () => {
+      initializeCallerAudio();
+      document.removeEventListener('click', handleClick);
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
   // Create peer connection
   const createPeerConnection = () => {
@@ -418,6 +451,8 @@ const NewCallControls: React.FC<CallControlsProps> = ({
           src="/ringtone.mp3"
           preload="auto"
           style={{ display: 'none' }}
+          onLoadedData={() => console.log('✅ Caller ringtone loaded successfully')}
+          onError={(e) => console.error('❌ Failed to load caller ringtone:', e)}
         />
       </div>
     );
@@ -455,6 +490,8 @@ const NewCallControls: React.FC<CallControlsProps> = ({
         src="/ringtone.mp3"
         preload="auto"
         style={{ display: 'none' }}
+        onLoadedData={() => console.log('✅ Caller ringtone loaded successfully (buttons)')}
+        onError={(e) => console.error('❌ Failed to load caller ringtone (buttons):', e)}
       />
     </div>
   );

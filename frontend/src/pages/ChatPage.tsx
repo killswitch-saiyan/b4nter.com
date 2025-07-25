@@ -52,21 +52,70 @@ const ChatPage: React.FC = () => {
 
   // Ringtone functions
   const playRingtone = () => {
+    console.log('🔊 Attempting to play receiver ringtone');
     if (ringtoneRef.current) {
       ringtoneRef.current.loop = true;
-      ringtoneRef.current.play().catch(e => {
-        console.error('Failed to play ringtone:', e);
+      ringtoneRef.current.volume = 0.8; // Set volume
+      ringtoneRef.current.play().then(() => {
+        console.log('✅ Receiver ringtone started playing');
+      }).catch(e => {
+        console.error('❌ Failed to play receiver ringtone:', e);
+        // Try to enable audio context after user interaction
+        if (e.name === 'NotAllowedError') {
+          console.log('🔊 Audio blocked - need user interaction first');
+        }
       });
+    } else {
+      console.error('❌ Receiver ringtone ref is null');
     }
   };
 
   const stopRingtone = () => {
+    console.log('🔇 Stopping receiver ringtone');
     if (ringtoneRef.current) {
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
       ringtoneRef.current.loop = false;
+      console.log('✅ Receiver ringtone stopped');
     }
   };
+
+  // Initialize audio context on first user interaction
+  const initializeAudio = () => {
+    if (ringtoneRef.current) {
+      ringtoneRef.current.play().then(() => {
+        ringtoneRef.current?.pause();
+        console.log('✅ Audio context initialized for receiver ringtone');
+      }).catch(e => {
+        console.log('Audio initialization failed:', e);
+      });
+    }
+  };
+
+  // Add click listener to initialize audio on any click
+  useEffect(() => {
+    const handleClick = () => {
+      initializeAudio();
+      document.removeEventListener('click', handleClick);
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+  // Test ringtone function (for debugging)
+  const testRingtone = () => {
+    console.log('🧪 Testing ringtone manually');
+    playRingtone();
+    setTimeout(() => {
+      stopRingtone();
+    }, 3000); // Stop after 3 seconds
+  };
+
+  // Make test function available globally for debugging
+  useEffect(() => {
+    (window as any).testRingtone = testRingtone;
+  }, []);
+
   const [userSearch, setUserSearch] = useState('');
   const [channelSearch, setChannelSearch] = useState('');
   const [isInCall, setIsInCall] = useState(false);
@@ -1464,6 +1513,8 @@ const ChatPage: React.FC = () => {
         src="/ringtone.mp3"
         preload="auto"
         style={{ display: 'none' }}
+        onLoadedData={() => console.log('✅ Receiver ringtone loaded successfully')}
+        onError={(e) => console.error('❌ Failed to load receiver ringtone:', e)}
       />
     </div>
   );
