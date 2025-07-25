@@ -137,10 +137,12 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
         const merged = [...activeChannels, ...localCallChannels];
         
         // CRITICAL FIX: Never change selectedChannel if it's a call channel
-        // The fetchChannels refresh should NEVER override an active call
+        // But DO update the call channel data if it exists in the fresh data
         if (selectedChannel?.is_call_channel) {
-          console.log('📞 Preserving active call channel');
-          // Don't change the selected channel at all during a call
+          const updatedCallChannel = merged.find(ch => ch.id === selectedChannel.id);
+          if (updatedCallChannel) {
+            setSelectedChannelWithLogging(updatedCallChannel);
+          }
         } else if (merged.length > 0 && !selectedChannel) {
           // Only set to first channel if no channel is selected and it's not a call
           setSelectedChannelWithLogging(merged[0]);
