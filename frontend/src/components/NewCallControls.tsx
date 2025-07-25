@@ -280,13 +280,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
     }
   }, [onWebRTCMessage, isGlobal, currentCallChannel, acceptedCall, activeCallChannelId]);
 
-  // Auto-start for caller when in call channel
-  useEffect(() => {
-    if (!isGlobal && !acceptedCall && !callState.isOutgoing && !localStream) {
-      // Caller is in embedded call controls - auto-start video call only once
-      startCall(true);
-    }
-  }, [isGlobal, acceptedCall, callState.isOutgoing, localStream]);
+  // Remove auto-start - caller should manually start call
 
   // Auto-accept for receiver
   useEffect(() => {
@@ -371,6 +365,11 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   // Call buttons (when not in call)
   if (!targetUserId || targetUserId === "" || (isGlobal && acceptedCall)) {
     return null;
+  }
+  
+  // Show call buttons even for 'waiting-for-receiver' in call channels
+  if (targetUserId === 'waiting-for-receiver') {
+    // Caller is in call channel waiting - show video buttons
   }
   
   return (

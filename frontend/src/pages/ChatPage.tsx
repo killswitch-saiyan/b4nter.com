@@ -239,28 +239,6 @@ const ChatPage: React.FC = () => {
             toast.success(`Incoming ${data.isVideo ? 'video' : 'voice'} call from ${data.from_name || 'Unknown User'}`);
           }
           
-          if (data.type === 'call_participant_joined') {
-            // Update caller's channel when receiver joins
-            setChannels(prev => prev.map(ch => {
-              if (ch.id === data.channelId) {
-                return {
-                  ...ch,
-                  call_participants: data.participants,
-                  member_count: data.participants.length
-                };
-              }
-              return ch;
-            }));
-            
-            // Update selected channel if it's the call channel
-            if (selectedChannel?.id === data.channelId) {
-              setSelectedChannel(prev => prev ? {
-                ...prev,
-                call_participants: data.participants,
-                member_count: data.participants.length
-              } : prev);
-            }
-          }
           
         } catch (error) {
           console.error('Error handling call message:', error);
@@ -1370,10 +1348,7 @@ const ChatPage: React.FC = () => {
                             }),
                           });
                           
-                          if (updateResponse.ok) {
-                            // Force all connected users to refresh channels
-                            refreshChannels();
-                          }
+                          // Backend updated - polling will pick up the changes automatically
                           
                           // Step 4: Create proper channel object with both participants
                           const callChannel = {
