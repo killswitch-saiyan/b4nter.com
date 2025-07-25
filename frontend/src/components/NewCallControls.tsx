@@ -10,6 +10,7 @@ interface CallControlsProps {
   onCallEnd: () => void;
   socket: WebSocket | null;
   isGlobal?: boolean;
+  currentChannelId?: string;
   acceptedCall?: {
     offer: any;
     channelId: string;
@@ -35,6 +36,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   onCallEnd, 
   socket, 
   isGlobal, 
+  currentChannelId,
   acceptedCall 
 }) => {
   const { user } = useAuth();
@@ -120,12 +122,26 @@ const NewCallControls: React.FC<CallControlsProps> = ({
     try {
       console.log('✅ CALLER: Starting call');
       
-      // Create call channel
-      const callType = isVideo ? 'video' : 'voice';
-      const participants = [user?.id || ''];
-      const callChannel = await createCallChannel(callType, participants);
-      setCurrentCallChannel(callChannel.id);
-      setActiveCallChannelId(callChannel.id);
+      let callChannelId: string;
+      
+      // Check if we're already in a call channel
+      if (currentChannelId || activeCallChannelId || currentCallChannel) {
+        console.log('✅ CALLER: Using existing call channel:', currentChannelId || activeCallChannelId || currentCallChannel);
+        callChannelId = currentChannelId || activeCallChannelId || currentCallChannel!;
+        // Update tracking variables
+        if (currentChannelId) {
+          setCurrentCallChannel(currentChannelId);
+          setActiveCallChannelId(currentChannelId);
+        }
+      } else {
+        // Create new call channel
+        const callType = isVideo ? 'video' : 'voice';
+        const participants = [user?.id || ''];
+        const callChannel = await createCallChannel(callType, participants);
+        setCurrentCallChannel(callChannel.id);
+        setActiveCallChannelId(callChannel.id);
+        callChannelId = callChannel.id;
+      }
 
       // Get media
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -161,8 +177,8 @@ const NewCallControls: React.FC<CallControlsProps> = ({
           from_name: user?.username,
           offer: offer,
           isVideo: isVideo,
-          channelId: callChannel.id,
-          channelName: callChannel.name,
+          channelId: callChannelId,
+          channelName: callChannelId, // Use channel ID as fallback name
           targetUserId: targetUserId
         }));
       }

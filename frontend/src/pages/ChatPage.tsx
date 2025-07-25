@@ -41,6 +41,7 @@ const ChatPage: React.FC = () => {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
+  const ringtoneRef = useRef<HTMLAudioElement>(null);
   const [autoScroll, setAutoScroll] = React.useState(true);
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -48,6 +49,24 @@ const ChatPage: React.FC = () => {
     }
     return false;
   });
+
+  // Ringtone functions
+  const playRingtone = () => {
+    if (ringtoneRef.current) {
+      ringtoneRef.current.loop = true;
+      ringtoneRef.current.play().catch(e => {
+        console.error('Failed to play ringtone:', e);
+      });
+    }
+  };
+
+  const stopRingtone = () => {
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+      ringtoneRef.current.loop = false;
+    }
+  };
   const [userSearch, setUserSearch] = useState('');
   const [channelSearch, setChannelSearch] = useState('');
   const [isInCall, setIsInCall] = useState(false);
@@ -185,6 +204,7 @@ const ChatPage: React.FC = () => {
               channelName: data.channelName, // Always use the exact name from the sender
               offer: null
             });
+            playRingtone();
           }
           
           if (data.type === 'call_channel_joined') {
@@ -228,6 +248,7 @@ const ChatPage: React.FC = () => {
               channelName: data.channelName,
               offer: data.offer
             });
+            playRingtone();
             
             if ('Notification' in window && Notification.permission === 'granted') {
               new Notification(`Incoming call from ${data.from_name || 'Unknown User'}`, {
@@ -1141,6 +1162,7 @@ const ChatPage: React.FC = () => {
                         onCallEnd={handleEndCall}
                         socket={socket}
                         isGlobal={false}
+                        currentChannelId={selectedChannel.id}
                         acceptedCall={selectedChannel.id === acceptedCall?.channelId ? acceptedCall : undefined}
                       />
                     );
@@ -1384,6 +1406,7 @@ const ChatPage: React.FC = () => {
                       console.error('[ChatPage] ❌ Error during call acceptance:', error);
                     }
                     
+                    stopRingtone();
                     setIncomingCall(null);
                     toast.success(`Joining ${incomingCall.isVideo ? 'video' : 'voice'} call with ${incomingCall.fromName}`);
                   }}
@@ -1400,6 +1423,7 @@ const ChatPage: React.FC = () => {
                         to: incomingCall.from
                       }));
                     }
+                    stopRingtone();
                     setIncomingCall(null);
                   }}
                   className="bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-full flex items-center gap-2 text-lg font-semibold transition-colors"
@@ -1420,6 +1444,7 @@ const ChatPage: React.FC = () => {
           onCallEnd={() => {
             console.log('🔚 Incoming call NewCallControls onCallEnd triggered');
             // Don't delete channel here - let the actual NewCallControls component handle it
+            stopRingtone();
             setIncomingCall(null);
             // Switch back to a regular channel
             const regularChannels = channels.filter(ch => !ch.is_call_channel);
@@ -1433,6 +1458,13 @@ const ChatPage: React.FC = () => {
         />
       )}
       
+      {/* Hidden audio element for ringtone */}
+      <audio
+        ref={ringtoneRef}
+        src="/ringtone.mp3"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
     </div>
   );
 };
