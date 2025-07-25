@@ -170,11 +170,15 @@ async def join_channel(
         user_channels = await db.get_user_channels(current_user.id)
         user_channel_ids = [c.get("channel_id") for c in user_channels]
         
+        # For call channels, allow "rejoining" (just return success)
         if channel_id in user_channel_ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Already a member of this channel"
-            )
+            if channel.get("is_call_channel") == "true":
+                return {"message": "Already a member of this call channel"}
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Already a member of this channel"
+                )
         
         # Add user to channel
         member_data = {

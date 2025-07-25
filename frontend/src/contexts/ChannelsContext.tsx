@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 
 interface ChannelsContextType {
   channels: Channel[];
+  setChannels: (channels: Channel[] | ((prev: Channel[]) => Channel[])) => void;
   loading: boolean;
   selectedChannel: Channel | null;
   setSelectedChannel: (channel: Channel | null) => void;
@@ -451,6 +452,7 @@ export const ChannelsProvider: React.FC<ChannelsProviderProps> = ({ children }) 
 
   const value: ChannelsContextType = {
     channels,
+    setChannels,
     loading,
     selectedChannel,
     setSelectedChannel: setSelectedChannelWithLogging,

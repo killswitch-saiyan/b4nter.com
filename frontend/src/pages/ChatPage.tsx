@@ -28,7 +28,7 @@ import brandLogo from '../assets/brandlogo.png';
 const ChatPage: React.FC = () => {
   const { user, logout, updateUser } = useAuth();
   const { isConnected, sendMessage, joinChannel, messages, setMessages, sendCustomEvent, socket } = useWebSocket();
-  const { channels, loading, selectedChannel, setSelectedChannel, refreshChannels, createCallChannel, createCallChannelForReceiver, removeCallChannel, deleteCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, activeCallChannelId, setActiveCallChannelId } = useChannels();
+  const { channels, setChannels, loading, selectedChannel, setSelectedChannel, refreshChannels, createCallChannel, createCallChannelForReceiver, removeCallChannel, deleteCallChannel, joinCallChannel, leaveCallChannel, callDuration, setCallDuration, activeCallChannelId, setActiveCallChannelId } = useChannels();
   const [message, setMessage] = useState('');
   const prevChannelRef = useRef<string | null>(null);
   const [users, setUsers] = useState<any[]>([]);
