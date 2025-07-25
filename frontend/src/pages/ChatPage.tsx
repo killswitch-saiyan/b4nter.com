@@ -1282,10 +1282,10 @@ const ChatPage: React.FC = () => {
               </p>
               <div className="flex gap-4 justify-center">
                 <button
-                  onClick={() => {
-                    console.log('[ChatPage] Accept button clicked - accepting call immediately');
+                  onClick={async () => {
+                    console.log('[ChatPage] Accept button clicked - accepting call and switching to channel');
                     
-                    // SIMPLIFIED: Just accept the call and let CallControls handle channel switching
+                    // Set accepted call state
                     setAcceptedCall({
                       offer: incomingCall.offer,
                       channelId: incomingCall.channelId,
@@ -1293,6 +1293,51 @@ const ChatPage: React.FC = () => {
                       isVideo: incomingCall.isVideo,
                       from: incomingCall.from
                     });
+                    
+                    // CRITICAL: Immediately switch to the call channel
+                    try {
+                      // First check if channel exists locally
+                      let callChannel = channels.find(ch => ch.id === incomingCall.channelId);
+                      
+                      if (!callChannel) {
+                        console.log('[ChatPage] Call channel not found locally, fetching from backend...');
+                        // Fetch channel from backend if not found locally
+                        const token = localStorage.getItem('access_token');
+                        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+                        const response = await fetch(`${backendUrl}/channels/${incomingCall.channelId}`, {
+                          headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                          },
+                        });
+                        
+                        if (response.ok) {
+                          const channelData = await response.json();
+                          console.log('[ChatPage] Fetched call channel from backend:', channelData);
+                          
+                          // Parse channel data properly
+                          callChannel = {
+                            ...channelData,
+                            is_call_channel: true,
+                            call_type: channelData.call_type || (incomingCall.isVideo ? 'video' : 'voice'),
+                            call_participants: typeof channelData.call_participants === 'string' 
+                              ? JSON.parse(channelData.call_participants) 
+                              : (channelData.call_participants || [incomingCall.from, user?.id])
+                          };
+                        }
+                      }
+                      
+                      if (callChannel) {
+                        console.log('[ChatPage] Switching to call channel:', callChannel.name);
+                        setSelectedChannel(callChannel);
+                        setActiveCallChannelId(callChannel.id);
+                      } else {
+                        console.error('[ChatPage] Could not find or fetch call channel');
+                      }
+                    } catch (error) {
+                      console.error('[ChatPage] Error switching to call channel:', error);
+                    }
+                    
                     setIncomingCall(null);
                     toast.success(`Accepting ${incomingCall.isVideo ? 'video' : 'voice'} call from ${incomingCall.fromName}`);
                   }}

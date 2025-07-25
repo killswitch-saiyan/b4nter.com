@@ -225,34 +225,21 @@ const CallControls: React.FC<CallControlsProps> = ({
     }
   }, [onWebRTCMessage, handleSocketMessage, isGlobal, currentCallChannel, acceptedCall, activeCallChannelId]);
 
-  // Auto-start call for embedded CallControls (with guards to prevent multiple calls)
-  const hasAutoStarted = useRef(false);
+  // Auto-accept call for receiver's embedded CallControls only
+  const hasAutoAccepted = useRef(false);
   useEffect(() => {
-    // For embedded CallControls in active call channel
-    const isEmbeddedInCallChannel = !isGlobal && activeCallChannelId && activeCallChannelId !== null;
-    
-    if (isEmbeddedInCallChannel && !callState.isOutgoing && !callState.isIncoming && !callState.isConnected && !hasAutoStarted.current) {
-      // Check if this is the caller (user created the channel) or receiver (acceptedCall exists)
-      if (acceptedCall) {
-        console.log('🔍 Embedded CallControls auto-accepting call for receiver');
-        hasAutoStarted.current = true;
-        acceptCall(acceptedCall.offer);
-      } else {
-        // This might be the caller's embedded CallControls - check if user is channel creator
-        const currentChannel = channels.find(ch => ch.id === activeCallChannelId);
-        if (currentChannel && currentChannel.created_by === user?.id && !currentCallChannel) {
-          console.log('🔍 Embedded CallControls detected caller channel - NOT auto-starting (DM CallControls should handle)');
-          // Don't auto-start for caller's embedded CallControls - the DM CallControls will handle the initial call
-          // The embedded CallControls will only show the video UI once the call is established
-        }
-      }
+    // Only auto-accept for receiver when acceptedCall prop exists and hasn't been processed yet
+    if (acceptedCall && !hasAutoAccepted.current && !callState.isIncoming && !callState.isOutgoing && !callState.isConnected) {
+      console.log('🔍 Embedded CallControls auto-accepting call for receiver');
+      hasAutoAccepted.current = true;
+      acceptCall(acceptedCall.offer);
     }
     
-    // Reset the flag when call ends
-    if (!activeCallChannelId) {
-      hasAutoStarted.current = false;
+    // Reset when call ends
+    if (!acceptedCall && !activeCallChannelId) {
+      hasAutoAccepted.current = false;
     }
-  }, [activeCallChannelId, isGlobal, acceptedCall, callState, channels, user?.id, currentCallChannel]);
+  }, [acceptedCall, callState.isIncoming, callState.isOutgoing, callState.isConnected, activeCallChannelId]);
 
   // Keep original socket listener for backward compatibility
   useEffect(() => {
@@ -632,9 +619,9 @@ const CallControls: React.FC<CallControlsProps> = ({
         await Notification.requestPermission();
       }
       
-      // Create call channel in backend with updated schema - only caller initially
+      // Create call channel in backend with updated schema - include both participants for UI purposes
       const callType = isVideo ? 'video' : 'voice';
-      const participants = [user?.id || '']; // Only caller initially, receiver added when they accept
+      const participants = [user?.id || '', targetUserId]; // Include both for UI, but only caller is actually in channel initially
       const callChannel = await createCallChannel(callType, participants);
       setCurrentCallChannel(callChannel.id);
       setActiveCallChannelId(callChannel.id); // Set active call channel in context
