@@ -1109,12 +1109,22 @@ const ChatPage: React.FC = () => {
                     let targetUsername = '';
                     
                     if (selectedChannel.call_participants && selectedChannel.call_participants.length > 1) {
+                      // Multiple participants - find the other user
                       targetUserId = selectedChannel.call_participants.find(p => p !== user?.id) || '';
                     } else if (acceptedCall && selectedChannel.id === acceptedCall.channelId) {
+                      // Receiver case - target is the caller
                       targetUserId = acceptedCall.from;
+                    } else if (selectedChannel.call_participants && selectedChannel.call_participants.length === 1) {
+                      // Caller case - only one participant (themselves), but we can use a placeholder
+                      // This allows the caller to see the video UI while waiting for receiver
+                      targetUserId = 'waiting-for-receiver';
+                      targetUsername = 'Waiting for receiver...';
                     }
                     
-                    targetUsername = getParticipantName(targetUserId);
+                    // Only get participant name if not already set
+                    if (!targetUsername) {
+                      targetUsername = getParticipantName(targetUserId);
+                    }
                     
                     console.log('🔍 Embedded CallControls rendering:', {
                       targetUserId,
