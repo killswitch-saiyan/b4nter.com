@@ -43,8 +43,9 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        sendCustomEvent('webrtc_ice_candidate', {
-          target_user_id: targetUserId,
+        sendCustomEvent({
+          type: 'webrtc_ice_candidate',
+          to: targetUserId,
           candidate: event.candidate
         });
       }
@@ -128,7 +129,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      sendCustomEvent('video_call_offer', {
+      sendCustomEvent({
+        type: 'video_call_offer',
         target_user_id: targetUserId,
         caller_name: user?.username || 'Unknown',
         offer: offer
@@ -207,7 +209,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      sendCustomEvent('video_call_answer', {
+      sendCustomEvent({
+        type: 'video_call_answer',
         target_user_id: targetUserId,
         answer: answer
       });
@@ -225,7 +228,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     console.log('❌ Rejecting call from:', targetUsername);
     setCallState({ isInCall: false, isIncoming: false, isConnecting: false });
     
-    sendCustomEvent('call_ended', {
+    sendCustomEvent({
+      type: 'call_ended',
       target_user_id: targetUserId
     });
     
@@ -267,7 +271,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     }
     
     // Send end call signal
-    sendCustomEvent('call_ended', {
+    sendCustomEvent({
+      type: 'call_ended',
       target_user_id: targetUserId
     });
     

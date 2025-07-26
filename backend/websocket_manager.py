@@ -332,6 +332,10 @@ class WebSocketManager:
                     await self.handle_webrtc_answer(user_id, message)
                 elif message_type == 'webrtc_ice_candidate':
                     await self.handle_webrtc_ice_candidate(user_id, message)
+                elif message_type == 'video_call_offer':
+                    await self.handle_video_call_offer(user_id, message)
+                elif message_type == 'video_call_answer':
+                    await self.handle_video_call_answer(user_id, message)
                 elif message_type == 'call_channel_created':
                     await self.handle_call_channel_created(user_id, message)
                 elif message_type == 'call_channel_joined':
@@ -485,6 +489,37 @@ class WebSocketManager:
                 logger.info(f"WebRTC ICE candidate from {user_id} to {target_user_id}")
             except Exception as e:
                 logger.error(f"Error sending WebRTC ICE candidate to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_video_call_offer(self, user_id: str, message: dict):
+        """Handle video call offer for direct user-to-user calling"""
+        target_user_id = message.get('target_user_id')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "video_call_offer",
+                    "sender_id": user_id,
+                    "caller_name": message.get('caller_name', 'Unknown'),
+                    "offer": message.get('offer')
+                }))
+                logger.info(f"Video call offer from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending video call offer to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_video_call_answer(self, user_id: str, message: dict):
+        """Handle video call answer for direct user-to-user calling"""
+        target_user_id = message.get('target_user_id')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "video_call_answer",
+                    "sender_id": user_id,
+                    "answer": message.get('answer')
+                }))
+                logger.info(f"Video call answer from {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending video call answer to user {target_user_id}: {e}")
                 self.disconnect(target_user_id)
 
     async def handle_call_channel_created(self, user_id: str, message: dict):
