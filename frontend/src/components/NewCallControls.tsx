@@ -242,6 +242,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
       await pc.setLocalDescription(offer);
 
       if (socket) {
+        console.log('📤 CALLER: Sending call invitation with channel ID:', callChannelId);
         socket.send(JSON.stringify({
           type: 'call_incoming',
           to: targetUserId,

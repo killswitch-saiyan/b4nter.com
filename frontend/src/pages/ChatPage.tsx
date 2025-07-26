@@ -1391,6 +1391,8 @@ const ChatPage: React.FC = () => {
                         },
                       });
                       
+                      console.log('[ChatPage] 🔍 Channel fetch response status:', response.status);
+                      
                       if (response.ok) {
                         const channelData = await response.json();
                         console.log('[ChatPage] ✅ Found caller channel:', channelData);
@@ -1449,7 +1451,51 @@ const ChatPage: React.FC = () => {
                           console.error('[ChatPage] ❌ Failed to join channel in backend');
                         }
                       } else {
-                        console.error('[ChatPage] ❌ Failed to fetch call channel from backend');
+                        const errorText = await response.text();
+                        console.error('[ChatPage] ❌ Failed to fetch call channel from backend:', {
+                          status: response.status,
+                          statusText: response.statusText,
+                          error: errorText,
+                          channelId: incomingCall.channelId
+                        });
+                        
+                        // Fallback: Create channel locally using incoming call data
+                        console.log('[ChatPage] 🔄 Using fallback: Creating channel locally from incoming call data');
+                        const fallbackChannel = {
+                          id: incomingCall.channelId,
+                          name: incomingCall.channelName || `call-${Date.now()}`,
+                          is_call_channel: true,
+                          call_type: incomingCall.isVideo ? 'video' : 'voice',
+                          call_participants: [incomingCall.from, user?.id],
+                          member_count: 2,
+                          created_by: incomingCall.from,
+                          created_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString(),
+                          description: `${incomingCall.isVideo ? 'Video' : 'Voice'} call`,
+                          is_private: true
+                        };
+                        
+                        // Add to local channels and select it
+                        setChannels(prev => {
+                          const existing = prev.find(ch => ch.id === fallbackChannel.id);
+                          if (!existing) {
+                            return [...prev, fallbackChannel];
+                          }
+                          return prev;
+                        });
+                        setSelectedChannel(fallbackChannel);
+                        
+                        // Set accepted call for WebRTC
+                        setAcceptedCall({
+                          offer: incomingCall.offer,
+                          channelId: incomingCall.channelId,
+                          channelName: incomingCall.channelName,
+                          isVideo: incomingCall.isVideo,
+                          from: incomingCall.from,
+                          targetUserId: incomingCall.targetUserId
+                        });
+                        
+                        console.log('[ChatPage] ✅ RECEIVER SETUP COMPLETE (fallback) - Using local channel');
                       }
                     } catch (error) {
                       console.error('[ChatPage] ❌ Error during call acceptance:', error);
