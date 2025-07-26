@@ -3,6 +3,7 @@ import { useChannels } from '../contexts/ChannelsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import { toast } from 'react-hot-toast';
+// VERSION 3.0: Force deployment update
 
 interface CallControlsProps {
   targetUserId: string;
