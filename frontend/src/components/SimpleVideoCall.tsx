@@ -142,38 +142,25 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       console.log('📺 Remote stream active tracks:', remoteStream.getVideoTracks().length, 'video,', remoteStream.getAudioTracks().length, 'audio');
       
       remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
       
-      // Force video to load metadata
-      remoteVideoRef.current.load();
-      
-      // Multiple checks to ensure video loads
-      const checkVideoLoading = () => {
+      // Wait for loadedmetadata event before playing
+      const handleMetadataLoaded = () => {
         if (remoteVideoRef.current) {
-          const video = remoteVideoRef.current;
-          console.log('📺 Remote video element check:', {
-            srcObject: !!video.srcObject,
-            videoWidth: video.videoWidth,
-            videoHeight: video.videoHeight,
-            readyState: video.readyState,
-            paused: video.paused,
-            currentTime: video.currentTime,
-            networkState: video.networkState
-          });
-          
-          // If video dimensions are still 0, try to reload
-          if (video.videoWidth === 0 && video.videoHeight === 0) {
-            console.log('📺 Video dimensions still 0, attempting to reload...');
-            video.load();
-            video.play().catch(e => console.error('Error playing after reload:', e));
-          }
+          console.log('📺 Metadata loaded, starting playback');
+          remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
+          remoteVideoRef.current.removeEventListener('loadedmetadata', handleMetadataLoaded);
         }
       };
       
-      // Multiple timing checks
-      setTimeout(checkVideoLoading, 500);
-      setTimeout(checkVideoLoading, 1000);
-      setTimeout(checkVideoLoading, 2000);
+      remoteVideoRef.current.addEventListener('loadedmetadata', handleMetadataLoaded);
+      
+      // Fallback: if metadata doesn't load quickly, try to play anyway
+      setTimeout(() => {
+        if (remoteVideoRef.current && remoteVideoRef.current.readyState === 0) {
+          console.log('📺 Metadata not loaded after 2s, trying to play anyway');
+          remoteVideoRef.current.play().catch(e => console.error('Fallback play error:', e));
+        }
+      }, 2000);
     }
   }, [remoteStream]);
 
@@ -486,29 +473,21 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
               <>
                 <video
                   ref={remoteVideoRef}
-                  autoPlay
                   playsInline
                   muted={false}
-                  controls={false}
                   className="w-full h-full object-cover"
                   style={{ 
                     minWidth: '100%', 
                     minHeight: '100%',
-                    backgroundColor: '#1f2937' // Fallback background
+                    backgroundColor: '#1f2937'
                   }}
                   onLoadedMetadata={() => {
-                    console.log('📺 Remote video metadata loaded');
-                    if (remoteVideoRef.current) {
-                      console.log('📺 Video dimensions after metadata loaded:', {
-                        videoWidth: remoteVideoRef.current.videoWidth,
-                        videoHeight: remoteVideoRef.current.videoHeight
-                      });
-                    }
+                    console.log('📺 Remote video metadata loaded - dimensions:', {
+                      videoWidth: remoteVideoRef.current?.videoWidth,
+                      videoHeight: remoteVideoRef.current?.videoHeight
+                    });
                   }}
-                  onCanPlay={() => console.log('📺 Remote video can play')}
                   onPlaying={() => console.log('📺 Remote video started playing')}
-                  onLoadStart={() => console.log('📺 Remote video load started')}
-                  onLoadedData={() => console.log('📺 Remote video data loaded')}
                   onError={(e) => console.error('❌ Remote video error:', e)}
                 />
                 <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
