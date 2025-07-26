@@ -64,7 +64,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -180,8 +180,8 @@ const NewCallControls: React.FC<CallControlsProps> = ({
       handleAnswer(data.answer);
     }
     if (data.type === 'webrtc_ice_candidate' && data.candidate) {
-      if (peerConnection) {
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
     }
     if (data.type === 'call_rejected') {
@@ -192,10 +192,11 @@ const NewCallControls: React.FC<CallControlsProps> = ({
 
   // Handle WebRTC answer
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
-    if (peerConnection) {
+    console.log('🔍 CALLER: handleAnswer called, checking peer connection ref:', !!peerConnectionRef.current);
+    if (peerConnectionRef.current) {
       console.log('📞 CALLER: Processing WebRTC answer');
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log('✅ CALLER: Answer processed, peer connection state:', peerConnection.connectionState);
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log('✅ CALLER: Answer processed, peer connection state:', peerConnectionRef.current.connectionState);
     } else {
       console.error('❌ CALLER: No peer connection available to process answer');
     }
@@ -249,6 +250,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
       });
       
       setLocalStream(stream);
+      console.log('✅ CALLER: Local stream set, should trigger video UI render');
       setCallState(prev => {
         const newState = { 
           ...prev, 
@@ -262,7 +264,8 @@ const NewCallControls: React.FC<CallControlsProps> = ({
 
       // Create peer connection
       const pc = createPeerConnection();
-      setPeerConnection(pc);
+      peerConnectionRef.current = pc;
+      console.log('✅ CALLER: Peer connection created and stored in ref');
       
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
@@ -316,6 +319,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
       });
       
       setLocalStream(stream);
+      console.log('✅ RECEIVER: Local stream set, should trigger video UI render');
       setCallState(prev => ({ 
         ...prev, 
         isVideoEnabled: isVideoCall,
@@ -325,7 +329,8 @@ const NewCallControls: React.FC<CallControlsProps> = ({
 
       // Create peer connection
       const pc = createPeerConnection();
-      setPeerConnection(pc);
+      peerConnectionRef.current = pc;
+      console.log('✅ RECEIVER: Peer connection created and stored in ref');
       
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
@@ -359,8 +364,8 @@ const NewCallControls: React.FC<CallControlsProps> = ({
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
-    if (peerConnection) {
-      peerConnection.close();
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
     }
     
     // Delete call channel from backend if we created it
@@ -384,7 +389,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
     
     setLocalStream(null);
     setRemoteStream(null);
-    setPeerConnection(null);
+    peerConnectionRef.current = null;
     setCurrentCallChannel(null);
     setCallState({
       isIncoming: false,
