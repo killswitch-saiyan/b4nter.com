@@ -141,26 +141,73 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       console.log('📺 Setting remote video srcObject:', remoteStream);
       console.log('📺 Remote stream active tracks:', remoteStream.getVideoTracks().length, 'video,', remoteStream.getAudioTracks().length, 'audio');
       
-      remoteVideoRef.current.srcObject = remoteStream;
+      const video = remoteVideoRef.current;
       
-      // Wait for loadedmetadata event before playing
-      const handleMetadataLoaded = () => {
-        if (remoteVideoRef.current) {
-          console.log('📺 Metadata loaded, starting playback');
-          remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
-          remoteVideoRef.current.removeEventListener('loadedmetadata', handleMetadataLoaded);
-        }
-      };
+      // Force a clean slate
+      video.srcObject = null;
       
-      remoteVideoRef.current.addEventListener('loadedmetadata', handleMetadataLoaded);
-      
-      // Fallback: if metadata doesn't load quickly, try to play anyway
+      // Small delay to ensure cleanup, then set the stream
       setTimeout(() => {
-        if (remoteVideoRef.current && remoteVideoRef.current.readyState === 0) {
-          console.log('📺 Metadata not loaded after 2s, trying to play anyway');
-          remoteVideoRef.current.play().catch(e => console.error('Fallback play error:', e));
+        if (remoteVideoRef.current && remoteStream) {
+          console.log('📺 Setting srcObject after cleanup');
+          remoteVideoRef.current.srcObject = remoteStream;
+          
+          // Force autoplay
+          remoteVideoRef.current.autoplay = true;
+          remoteVideoRef.current.muted = false;
+          
+          // Multiple approaches to start playback
+          const tryPlay = () => {
+            if (remoteVideoRef.current) {
+              console.log('📺 Attempting to play video...');
+              remoteVideoRef.current.play()
+                .then(() => console.log('✅ Video playing successfully'))
+                .catch(e => {
+                  console.error('❌ Play failed:', e);
+                  // Try once more with muted (some browsers require this)
+                  if (remoteVideoRef.current) {
+                    remoteVideoRef.current.muted = true;
+                    remoteVideoRef.current.play()
+                      .then(() => {
+                        console.log('✅ Video playing muted');
+                        // Unmute after it starts playing
+                        setTimeout(() => {
+                          if (remoteVideoRef.current) {
+                            remoteVideoRef.current.muted = false;
+                          }
+                        }, 1000);
+                      })
+                      .catch(e2 => console.error('❌ Muted play also failed:', e2));
+                  }
+                });
+            }
+          };
+          
+          // Try immediately
+          tryPlay();
+          
+          // Also try when metadata loads
+          remoteVideoRef.current.addEventListener('loadedmetadata', () => {
+            console.log('📺 Metadata loaded, trying play again');
+            tryPlay();
+          }, { once: true });
+          
+          // Debug the video element state
+          setTimeout(() => {
+            if (remoteVideoRef.current) {
+              console.log('📺 Video element state:', {
+                srcObject: !!remoteVideoRef.current.srcObject,
+                videoWidth: remoteVideoRef.current.videoWidth,
+                videoHeight: remoteVideoRef.current.videoHeight,
+                readyState: remoteVideoRef.current.readyState,
+                paused: remoteVideoRef.current.paused,
+                autoplay: remoteVideoRef.current.autoplay,
+                muted: remoteVideoRef.current.muted
+              });
+            }
+          }, 1000);
         }
-      }, 2000);
+      }, 100);
     }
   }, [remoteStream]);
 
@@ -473,8 +520,10 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
               <>
                 <video
                   ref={remoteVideoRef}
+                  autoPlay
                   playsInline
                   muted={false}
+                  controls={false}
                   className="w-full h-full object-cover"
                   style={{ 
                     minWidth: '100%', 
@@ -482,13 +531,22 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
                     backgroundColor: '#1f2937'
                   }}
                   onLoadedMetadata={() => {
-                    console.log('📺 Remote video metadata loaded - dimensions:', {
+                    console.log('📺 JSX: Remote video metadata loaded - dimensions:', {
                       videoWidth: remoteVideoRef.current?.videoWidth,
                       videoHeight: remoteVideoRef.current?.videoHeight
                     });
                   }}
-                  onPlaying={() => console.log('📺 Remote video started playing')}
-                  onError={(e) => console.error('❌ Remote video error:', e)}
+                  onCanPlay={() => console.log('📺 JSX: Remote video can play')}
+                  onPlaying={() => console.log('📺 JSX: Remote video started playing')}
+                  onLoadedData={() => console.log('📺 JSX: Remote video data loaded')}
+                  onTimeUpdate={() => {
+                    // Only log once when video actually starts
+                    if (remoteVideoRef.current && remoteVideoRef.current.currentTime > 0) {
+                      console.log('📺 JSX: Video is actually playing - currentTime:', remoteVideoRef.current.currentTime);
+                      remoteVideoRef.current.ontimeupdate = null; // Remove this listener
+                    }
+                  }}
+                  onError={(e) => console.error('❌ JSX: Remote video error:', e)}
                 />
                 <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
                   Stream Active
