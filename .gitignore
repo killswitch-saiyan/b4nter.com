@@ -130,4 +130,7 @@ venv.bak/
 *.sqlite3
 
 # Supabase
-.supabase/ 
+.supabase/
+
+# Claude Code
+.claude/ 
