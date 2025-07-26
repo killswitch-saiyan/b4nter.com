@@ -68,8 +68,43 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         console.log('📺 Received remote stream:', stream);
         console.log('📺 Remote stream ID:', stream.id);
         console.log('📺 Remote stream tracks:', stream.getTracks());
-        console.log('📺 Video tracks:', stream.getVideoTracks().map(t => ({ id: t.id, kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
-        console.log('📺 Audio tracks:', stream.getAudioTracks().map(t => ({ id: t.id, kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+        
+        // Detailed track analysis
+        const videoTracks = stream.getVideoTracks();
+        const audioTracks = stream.getAudioTracks();
+        
+        console.log('📺 Video tracks detailed:', videoTracks.map(t => ({ 
+          id: t.id, 
+          kind: t.kind, 
+          enabled: t.enabled, 
+          readyState: t.readyState,
+          muted: t.muted,
+          label: t.label
+        })));
+        
+        console.log('📺 Audio tracks detailed:', audioTracks.map(t => ({ 
+          id: t.id, 
+          kind: t.kind, 
+          enabled: t.enabled, 
+          readyState: t.readyState,
+          muted: t.muted,
+          label: t.label
+        })));
+        
+        // Try to unmute tracks if they're muted
+        videoTracks.forEach(track => {
+          if (track.muted) {
+            console.log('⚠️ Video track is muted, this means no video data is flowing!');
+            console.log('📺 Track constraints:', track.getConstraints());
+            console.log('📺 Track settings:', track.getSettings());
+          }
+        });
+        
+        audioTracks.forEach(track => {
+          if (track.muted) {
+            console.log('⚠️ Audio track is muted, this means no audio data is flowing!');
+          }
+        });
         
         setRemoteStream(stream);
       } else {
@@ -234,7 +269,20 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       // Add local stream to peer connection
       console.log('➕ Adding local tracks to peer connection...');
       stream.getTracks().forEach(track => {
-        console.log('🎵 Adding track:', track.kind, track);
+        console.log('🎵 Adding track:', track.kind, {
+          id: track.id,
+          enabled: track.enabled,
+          readyState: track.readyState,
+          muted: track.muted,
+          label: track.label
+        });
+        
+        // Make sure track is enabled and not muted
+        track.enabled = true;
+        if (track.muted) {
+          console.log('⚠️ Local track is muted on creation - this might cause issues!');
+        }
+        
         pc.addTrack(track, stream);
       });
 
@@ -332,7 +380,20 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       // Add local stream - THIS IS CRITICAL
       console.log('➕ Adding receiver tracks to peer connection...');
       stream.getTracks().forEach(track => {
-        console.log('🎵 Adding receiver track:', track.kind, track);
+        console.log('🎵 Adding receiver track:', track.kind, {
+          id: track.id,
+          enabled: track.enabled,
+          readyState: track.readyState,
+          muted: track.muted,
+          label: track.label
+        });
+        
+        // Make sure track is enabled and not muted
+        track.enabled = true;
+        if (track.muted) {
+          console.log('⚠️ Local receiver track is muted on creation!');
+        }
+        
         pc.addTrack(track, stream);
       });
 
