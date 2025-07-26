@@ -41,7 +41,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
 }) => {
   // Create unique component ID for debugging
   const componentId = useRef(`NewCallControls-${Math.random().toString(36).substr(2, 9)}`);
-  console.log('🧩 NewCallControls render:', {
+  console.log('🚨 NEW COMPONENT VERSION 2.0 RENDER:', {
     componentId: componentId.current,
     targetUserId,
     targetUsername,
@@ -204,7 +204,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   // Start call (caller)
   const startCall = async (isVideo: boolean) => {
     try {
-      console.log('✅ CALLER: Starting call - isVideo:', isVideo);
+      console.log('🚨 NEW CALLER FUNCTION EXECUTING - VERSION 2.0 - isVideo:', isVideo);
       console.log('🔊 Caller ringtone ref available:', !!callerRingtoneRef.current);
       console.log('🏠 Channel context:', {
         currentChannelId,
@@ -539,7 +539,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
         src="/ringtone.mp3"
         preload="auto"
         style={{ display: 'none' }}
-        onLoadedData={() => console.log('✅ Caller ringtone loaded successfully')}
+        onLoadedData={() => console.log('🚨 NEW VERSION 2.0 - Caller ringtone loaded successfully')}
         onError={(e) => console.error('❌ Failed to load caller ringtone:', e)}
       />
     </>
