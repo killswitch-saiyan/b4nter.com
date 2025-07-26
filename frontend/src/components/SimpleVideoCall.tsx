@@ -33,6 +33,9 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  
+  // Ringtone audio
+  const ringtoneRef = useRef<HTMLAudioElement>(null);
 
   const createPeerConnection = () => {
     const pc = new RTCPeerConnection({
@@ -141,18 +144,36 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       remoteVideoRef.current.srcObject = remoteStream;
       remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
       
-      // Force a re-render check
-      setTimeout(() => {
+      // Force video to load metadata
+      remoteVideoRef.current.load();
+      
+      // Multiple checks to ensure video loads
+      const checkVideoLoading = () => {
         if (remoteVideoRef.current) {
+          const video = remoteVideoRef.current;
           console.log('📺 Remote video element check:', {
-            srcObject: !!remoteVideoRef.current.srcObject,
-            videoWidth: remoteVideoRef.current.videoWidth,
-            videoHeight: remoteVideoRef.current.videoHeight,
-            readyState: remoteVideoRef.current.readyState,
-            paused: remoteVideoRef.current.paused
+            srcObject: !!video.srcObject,
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+            readyState: video.readyState,
+            paused: video.paused,
+            currentTime: video.currentTime,
+            networkState: video.networkState
           });
+          
+          // If video dimensions are still 0, try to reload
+          if (video.videoWidth === 0 && video.videoHeight === 0) {
+            console.log('📺 Video dimensions still 0, attempting to reload...');
+            video.load();
+            video.play().catch(e => console.error('Error playing after reload:', e));
+          }
         }
-      }, 1000);
+      };
+      
+      // Multiple timing checks
+      setTimeout(checkVideoLoading, 500);
+      setTimeout(checkVideoLoading, 1000);
+      setTimeout(checkVideoLoading, 2000);
     }
   }, [remoteStream]);
 
@@ -209,6 +230,12 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     console.log('📞 Incoming call from:', targetUsername);
     setCallState({ isInCall: false, isIncoming: true, isConnecting: false });
     
+    // Play ringtone
+    if (ringtoneRef.current) {
+      ringtoneRef.current.loop = true;
+      ringtoneRef.current.play().catch(e => console.error('Error playing ringtone:', e));
+    }
+    
     // Store the offer for when user accepts
     (window as any).pendingOffer = offer;
     
@@ -244,6 +271,13 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   const acceptCall = async () => {
     try {
       console.log('✅ Accepting call from:', targetUsername);
+      
+      // Stop ringtone
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
+      
       setCallState({ isInCall: false, isIncoming: false, isConnecting: true });
 
       // Get user media
@@ -297,6 +331,13 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
   const rejectCall = () => {
     console.log('❌ Rejecting call from:', targetUsername);
+    
+    // Stop ringtone
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+    
     setCallState({ isInCall: false, isIncoming: false, isConnecting: false });
     
     sendCustomEvent({
@@ -359,6 +400,12 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   const handleCallEnded = () => {
     console.log('📴 Call ended by:', targetUsername);
     
+    // Stop ringtone if playing
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+    
     // Clean up everything
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
@@ -381,15 +428,24 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   // Don't render anything if not in a call
   if (!callState.isInCall && !callState.isConnecting) {
     return (
-      <div className="flex gap-2">
-        <button
-          onClick={startCall}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
-          disabled={callState.isConnecting}
-        >
-          📹 Video Call
-        </button>
-      </div>
+      <>
+        <div className="flex gap-2">
+          <button
+            onClick={startCall}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
+            disabled={callState.isConnecting}
+          >
+            📹 Video Call
+          </button>
+        </div>
+        {/* Hidden ringtone audio element */}
+        <audio
+          ref={ringtoneRef}
+          src="/ringtone.mp3"
+          preload="auto"
+          className="hidden"
+        />
+      </>
     );
   }
 
@@ -432,9 +488,27 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
+                  muted={false}
+                  controls={false}
                   className="w-full h-full object-cover"
-                  onLoadedMetadata={() => console.log('📺 Remote video metadata loaded')}
+                  style={{ 
+                    minWidth: '100%', 
+                    minHeight: '100%',
+                    backgroundColor: '#1f2937' // Fallback background
+                  }}
+                  onLoadedMetadata={() => {
+                    console.log('📺 Remote video metadata loaded');
+                    if (remoteVideoRef.current) {
+                      console.log('📺 Video dimensions after metadata loaded:', {
+                        videoWidth: remoteVideoRef.current.videoWidth,
+                        videoHeight: remoteVideoRef.current.videoHeight
+                      });
+                    }
+                  }}
+                  onCanPlay={() => console.log('📺 Remote video can play')}
                   onPlaying={() => console.log('📺 Remote video started playing')}
+                  onLoadStart={() => console.log('📺 Remote video load started')}
+                  onLoadedData={() => console.log('📺 Remote video data loaded')}
                   onError={(e) => console.error('❌ Remote video error:', e)}
                 />
                 <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
@@ -457,6 +531,14 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
             Connecting to {targetUsername}...
           </div>
         )}
+        
+        {/* Hidden ringtone audio element */}
+        <audio
+          ref={ringtoneRef}
+          src="/ringtone.mp3"
+          preload="auto"
+          className="hidden"
+        />
       </div>
     </div>
   );
