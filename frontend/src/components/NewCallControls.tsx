@@ -39,6 +39,16 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   currentChannelId,
   acceptedCall 
 }) => {
+  // Create unique component ID for debugging
+  const componentId = useRef(`NewCallControls-${Math.random().toString(36).substr(2, 9)}`);
+  console.log('🧩 NewCallControls render:', {
+    componentId: componentId.current,
+    targetUserId,
+    targetUsername,
+    isGlobal,
+    currentChannelId,
+    hasAcceptedCall: !!acceptedCall
+  });
   const { user } = useAuth();
   const { onWebRTCMessage } = useWebSocket();
   const { createCallChannel, setActiveCallChannelId, activeCallChannelId } = useChannels();
@@ -183,16 +193,26 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   // Handle WebRTC answer
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
     if (peerConnection) {
+      console.log('📞 CALLER: Processing WebRTC answer');
       await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log('✅ Answer processed');
+      console.log('✅ CALLER: Answer processed, peer connection state:', peerConnection.connectionState);
+    } else {
+      console.error('❌ CALLER: No peer connection available to process answer');
     }
   };
 
   // Start call (caller)
   const startCall = async (isVideo: boolean) => {
     try {
-      console.log('✅ CALLER: Starting call');
+      console.log('✅ CALLER: Starting call - isVideo:', isVideo);
       console.log('🔊 Caller ringtone ref available:', !!callerRingtoneRef.current);
+      console.log('🏠 Channel context:', {
+        currentChannelId,
+        activeCallChannelId,
+        currentCallChannel,
+        socket: !!socket,
+        targetUserId
+      });
       
       let callChannelId: string;
       
@@ -216,18 +236,29 @@ const NewCallControls: React.FC<CallControlsProps> = ({
       }
 
       // Get media
+      console.log('🎥 CALLER: Requesting media stream - video:', isVideo, 'audio: true');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: isVideo
       });
       
+      console.log('✅ CALLER: Got media stream:', {
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length,
+        streamId: stream.id
+      });
+      
       setLocalStream(stream);
-      setCallState(prev => ({ 
-        ...prev, 
-        isOutgoing: true, 
-        isVideoEnabled: isVideo,
-        isAudioEnabled: true 
-      }));
+      setCallState(prev => {
+        const newState = { 
+          ...prev, 
+          isOutgoing: true, 
+          isVideoEnabled: isVideo,
+          isAudioEnabled: true 
+        };
+        console.log('📞 CALLER: Setting call state:', newState);
+        return newState;
+      });
 
       // Create peer connection
       const pc = createPeerConnection();
@@ -260,6 +291,10 @@ const NewCallControls: React.FC<CallControlsProps> = ({
       }
     } catch (error) {
       console.error('❌ CALLER: Error starting call:', error);
+      console.error('❌ CALLER: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      
+      // Stop ringtone on error
+      stopCallerRingtone();
     }
   };
 
