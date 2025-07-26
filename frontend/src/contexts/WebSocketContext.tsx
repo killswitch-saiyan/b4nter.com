@@ -255,11 +255,15 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           case 'webrtc_offer':
           case 'webrtc_answer':
           case 'webrtc_ice_candidate':
+          case 'video_call_offer':
+          case 'video_call_answer':
             // Pass WebRTC messages to the CallControls component if handler is registered
             console.log('WebRTC message received:', data.type, data);
             if (webRTCMessageHandler.current) {
               webRTCMessageHandler.current(data);
             }
+            // Also dispatch to global event system for SimpleVideoCall
+            window.dispatchEvent(new CustomEvent('webrtc-message', { detail: data }));
             break;
           case 'call_channel_created':
             console.log('Call channel created notification:', data);

@@ -8,6 +8,7 @@ import MessageDisplay from '../components/MessageDisplay';
 import EncryptionStatus from '../components/EncryptionStatus';
 import UserProfileDropdown from '../components/UserProfileDropdown';
 import NewCallControls from '../components/NewCallControls';
+import SimpleVideoCall from '../components/SimpleVideoCall';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -1114,12 +1115,9 @@ const ChatPage: React.FC = () => {
               </div>
               <div className="flex items-center space-x-4">
                 {selectedDMUser && !isBlocked && (
-                  <NewCallControls
+                  <SimpleVideoCall
                     targetUserId={selectedDMUser.id}
                     targetUsername={selectedDMUser.username}
-                    onCallEnd={() => setIsInCall(false)}
-                    socket={socket}
-                    isGlobal={true}
                   />
                 )}
                 {selectedDMUser && (
