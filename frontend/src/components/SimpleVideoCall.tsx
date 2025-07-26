@@ -56,9 +56,22 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     };
 
     pc.ontrack = (event) => {
-      console.log('📺 Received remote stream:', event.streams[0]);
-      console.log('📺 Remote stream tracks:', event.streams[0].getTracks());
-      setRemoteStream(event.streams[0]);
+      console.log('📺 ontrack event triggered:', event);
+      console.log('📺 Event streams:', event.streams);
+      console.log('📺 Event track:', event.track);
+      
+      if (event.streams && event.streams[0]) {
+        const stream = event.streams[0];
+        console.log('📺 Received remote stream:', stream);
+        console.log('📺 Remote stream ID:', stream.id);
+        console.log('📺 Remote stream tracks:', stream.getTracks());
+        console.log('📺 Video tracks:', stream.getVideoTracks().map(t => ({ id: t.id, kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+        console.log('📺 Audio tracks:', stream.getAudioTracks().map(t => ({ id: t.id, kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+        
+        setRemoteStream(stream);
+      } else {
+        console.error('❌ No stream in ontrack event');
+      }
     };
 
     pc.onconnectionstatechange = () => {
@@ -114,13 +127,32 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   // Update video elements when streams change
   useEffect(() => {
     if (localVideoRef.current && localStream) {
+      console.log('🎬 Setting local video srcObject:', localStream);
       localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(e => console.error('Error playing local video:', e));
     }
   }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
+      console.log('📺 Setting remote video srcObject:', remoteStream);
+      console.log('📺 Remote stream active tracks:', remoteStream.getVideoTracks().length, 'video,', remoteStream.getAudioTracks().length, 'audio');
+      
       remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch(e => console.error('Error playing remote video:', e));
+      
+      // Force a re-render check
+      setTimeout(() => {
+        if (remoteVideoRef.current) {
+          console.log('📺 Remote video element check:', {
+            srcObject: !!remoteVideoRef.current.srcObject,
+            videoWidth: remoteVideoRef.current.videoWidth,
+            videoHeight: remoteVideoRef.current.videoHeight,
+            readyState: remoteVideoRef.current.readyState,
+            paused: remoteVideoRef.current.paused
+          });
+        }
+      }, 1000);
     }
   }, [remoteStream]);
 
@@ -395,12 +427,20 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
           {/* Remote video */}
           <div className="relative bg-gray-900 rounded overflow-hidden">
             {remoteStream ? (
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-              />
+              <>
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                  onLoadedMetadata={() => console.log('📺 Remote video metadata loaded')}
+                  onPlaying={() => console.log('📺 Remote video started playing')}
+                  onError={(e) => console.error('❌ Remote video error:', e)}
+                />
+                <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
+                  Stream Active
+                </div>
+              </>
             ) : (
               <div className="w-full h-full flex items-center justify-center text-white">
                 {callState.isConnecting ? 'Connecting...' : 'Waiting for video...'}
