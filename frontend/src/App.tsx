@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ChatPage from './pages/ChatPage';
 import LoadingSpinner from './components/LoadingSpinner';
+// DEPLOYMENT FORCE v3.1 - WebRTC fix
 
 const App: React.FC = () => {
   const { user, loading } = useAuth();
