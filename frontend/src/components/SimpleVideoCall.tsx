@@ -37,23 +37,40 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   const createPeerConnection = () => {
     const pc = new RTCPeerConnection({
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' }
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
       ]
     });
 
     pc.onicecandidate = (event) => {
+      console.log('🧊 ICE candidate generated:', event.candidate);
       if (event.candidate) {
         sendCustomEvent({
           type: 'webrtc_ice_candidate',
           to: targetUserId,
           candidate: event.candidate
         });
+      } else {
+        console.log('🧊 ICE gathering completed');
       }
     };
 
     pc.ontrack = (event) => {
-      console.log('📺 Received remote stream');
+      console.log('📺 Received remote stream:', event.streams[0]);
+      console.log('📺 Remote stream tracks:', event.streams[0].getTracks());
       setRemoteStream(event.streams[0]);
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log('🔗 Connection state changed:', pc.connectionState);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('🧊 ICE connection state changed:', pc.iceConnectionState);
+    };
+
+    pc.onsignalingstatechange = () => {
+      console.log('📡 Signaling state changed:', pc.signalingState);
     };
 
     return pc;
@@ -72,8 +89,11 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
             handleCallAnswer(data.answer);
             break;
           case 'webrtc_ice_candidate':
+            console.log('🧊 Received ICE candidate:', data.candidate);
             if (peerConnectionRef.current && data.candidate) {
-              peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+              peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate))
+                .then(() => console.log('✅ ICE candidate added successfully'))
+                .catch(error => console.error('❌ Error adding ICE candidate:', error));
             }
             break;
           case 'call_ended':
@@ -110,25 +130,34 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       setCallState({ isInCall: false, isIncoming: false, isConnecting: true });
 
       // Get user media
+      console.log('🎥 Requesting user media...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
       });
+      console.log('✅ Got local stream:', stream);
+      console.log('🎬 Local stream tracks:', stream.getTracks());
       setLocalStream(stream);
 
       // Create peer connection
+      console.log('🔗 Creating peer connection...');
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
       // Add local stream to peer connection
+      console.log('➕ Adding local tracks to peer connection...');
       stream.getTracks().forEach(track => {
+        console.log('🎵 Adding track:', track.kind, track);
         pc.addTrack(track, stream);
       });
 
       // Create and send offer
+      console.log('📝 Creating offer...');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      console.log('✅ Offer created and set as local description:', offer);
 
+      console.log('📡 Sending offer to:', targetUserId);
       sendCustomEvent({
         type: 'video_call_offer',
         target_user_id: targetUserId,
@@ -186,29 +215,39 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       setCallState({ isInCall: false, isIncoming: false, isConnecting: true });
 
       // Get user media
+      console.log('🎥 Requesting user media for receiver...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
       });
+      console.log('✅ Got local stream for receiver:', stream);
+      console.log('🎬 Receiver local stream tracks:', stream.getTracks());
       setLocalStream(stream);
 
       // Create peer connection
+      console.log('🔗 Creating peer connection for receiver...');
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Add local stream
+      // Add local stream - THIS IS CRITICAL
+      console.log('➕ Adding receiver tracks to peer connection...');
       stream.getTracks().forEach(track => {
+        console.log('🎵 Adding receiver track:', track.kind, track);
         pc.addTrack(track, stream);
       });
 
       // Set remote description from stored offer
       const offer = (window as any).pendingOffer;
+      console.log('📝 Setting remote description (offer):', offer);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
       // Create and send answer
+      console.log('📝 Creating answer...');
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      console.log('✅ Answer created and set as local description:', answer);
 
+      console.log('📡 Sending answer to:', targetUserId);
       sendCustomEvent({
         type: 'video_call_answer',
         target_user_id: targetUserId,
@@ -239,11 +278,16 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   const handleCallAnswer = async (answer: RTCSessionDescriptionInit) => {
     try {
       console.log('📞 Call answered by:', targetUsername);
+      console.log('📝 Received answer:', answer);
       
       if (peerConnectionRef.current) {
+        console.log('🔗 Setting remote description (answer)...');
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('✅ Remote description set successfully');
         setCallState({ isInCall: true, isIncoming: false, isConnecting: false });
         toast.success('Call connected!');
+      } else {
+        console.error('❌ No peer connection available to handle answer');
       }
     } catch (error) {
       console.error('❌ Error handling answer:', error);
