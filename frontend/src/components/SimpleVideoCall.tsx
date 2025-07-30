@@ -535,7 +535,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       console.log('➕ Adding receiver tracks to existing transceivers...');
       const transceivers = pc.getTransceivers();
       
-      stream.getTracks().forEach(track => {
+      for (const track of stream.getTracks()) {
         console.log('🎵 Processing receiver track:', track.kind, {
           id: track.id,
           enabled: track.enabled,
@@ -558,9 +558,26 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         if (transceiver) {
           console.log(`📡 Found matching transceiver for ${track.kind}`);
           console.log(`📡 Before replace - direction: ${transceiver.direction}, sender track: ${!!transceiver.sender.track}`);
-          transceiver.sender.replaceTrack(track);
-          transceiver.direction = 'sendrecv';
-          console.log(`📡 After replace - direction: ${transceiver.direction}, sender track: ${!!transceiver.sender.track}`);
+          
+          // Try replaceTrack first
+          try {
+            await transceiver.sender.replaceTrack(track);
+            transceiver.direction = 'sendrecv';
+            console.log(`📡 Successfully replaced track - direction: ${transceiver.direction}, sender track: ${!!transceiver.sender.track}`);
+          } catch (error) {
+            console.log(`📡 replaceTrack failed for ${track.kind}:`, error);
+            console.log(`📡 Will create new transceiver instead`);
+            
+            // If replaceTrack fails, create a new transceiver
+            const newTransceiver = pc.addTransceiver(track, {
+              direction: 'sendrecv',
+              streams: [stream]
+            });
+            console.log('📡 Added fallback transceiver for', track.kind, {
+              direction: newTransceiver.direction,
+              mid: newTransceiver.mid
+            });
+          }
         } else {
           console.log(`📡 No matching transceiver found for ${track.kind}, adding new one`);
           const newTransceiver = pc.addTransceiver(track, {
@@ -572,7 +589,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
             mid: newTransceiver.mid
           });
         }
-      });
+      }
 
       // Final verification of all transceivers
       console.log('📡 Final transceiver verification before answer:');
