@@ -288,9 +288,17 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
       // Create and send offer
       console.log('📝 Creating offer...');
-      const offer = await pc.createOffer();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
       await pc.setLocalDescription(offer);
-      console.log('✅ Offer created and set as local description:', offer);
+      console.log('✅ Offer created and set as local description');
+      console.log('📄 Offer SDP contains:', {
+        hasVideo: offer.sdp?.includes('m=video'),
+        hasAudio: offer.sdp?.includes('m=audio'),
+        sendRecv: offer.sdp?.includes('sendrecv')
+      });
 
       console.log('📡 Sending offer to:', targetUserId);
       sendCustomEvent({
@@ -406,7 +414,12 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       console.log('📝 Creating answer...');
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      console.log('✅ Answer created and set as local description:', answer);
+      console.log('✅ Answer created and set as local description');
+      console.log('📄 Answer SDP contains:', {
+        hasVideo: answer.sdp?.includes('m=video'),
+        hasAudio: answer.sdp?.includes('m=audio'),
+        sendRecv: answer.sdp?.includes('sendrecv')
+      });
 
       console.log('📡 Sending answer to:', targetUserId);
       sendCustomEvent({
