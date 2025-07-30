@@ -68,8 +68,18 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       console.log('📺 Event streams:', event.streams);
       console.log('📺 Event track:', event.track);
       
+      // Handle the case where there might not be a stream but we have a track
+      let stream;
       if (event.streams && event.streams[0]) {
-        const stream = event.streams[0];
+        stream = event.streams[0];
+        console.log('📺 Using stream from event.streams[0]');
+      } else {
+        // Create a new MediaStream with the track
+        console.log('📺 No stream in event, creating new MediaStream with track');
+        stream = new MediaStream([event.track]);
+      }
+      
+      if (stream) {
         console.log('📺 Received remote stream:', stream);
         console.log('📺 Remote stream ID:', stream.id);
         console.log('📺 Remote stream tracks:', stream.getTracks());
@@ -156,9 +166,20 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
           }
         });
         
-        setRemoteStream(stream);
+        // Update the remote stream, or add tracks to existing stream
+        setRemoteStream(prevStream => {
+          if (prevStream) {
+            // Add the new track to existing stream
+            console.log('📺 Adding track to existing remote stream');
+            prevStream.addTrack(event.track);
+            return new MediaStream(prevStream.getTracks()); // Create new stream to trigger re-render
+          } else {
+            console.log('📺 Setting new remote stream');
+            return stream;
+          }
+        });
       } else {
-        console.error('❌ No stream in ontrack event');
+        console.error('❌ No stream could be created from ontrack event');
       }
     };
 
@@ -232,6 +253,16 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       console.log('🎬 Setting local video srcObject:', localStream);
       localVideoRef.current.srcObject = localStream;
       localVideoRef.current.play().catch(e => console.error('Error playing local video:', e));
+      
+      // Add track event listeners for local stream
+      localStream.getTracks().forEach(track => {
+        track.addEventListener('unmute', () => {
+          console.log('🎉 Local track unmuted:', track.kind);
+        });
+        track.addEventListener('mute', () => {
+          console.log('⚠️ Local track muted:', track.kind);
+        });
+      });
     }
   }, [localStream]);
 
@@ -239,6 +270,26 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     if (remoteVideoRef.current && remoteStream) {
       console.log('📺 Setting remote video srcObject:', remoteStream);
       console.log('📺 Remote stream active tracks:', remoteStream.getVideoTracks().length, 'video,', remoteStream.getAudioTracks().length, 'audio');
+      
+      // Add track event listeners for remote stream
+      remoteStream.getTracks().forEach(track => {
+        track.addEventListener('unmute', () => {
+          console.log('🎉 Remote track unmuted:', track.kind);
+          // Force video element to refresh when track unmutes
+          if (remoteVideoRef.current && remoteStream) {
+            remoteVideoRef.current.srcObject = null;
+            setTimeout(() => {
+              if (remoteVideoRef.current) {
+                remoteVideoRef.current.srcObject = remoteStream;
+                remoteVideoRef.current.play().catch(e => console.error('Error playing after unmute:', e));
+              }
+            }, 100);
+          }
+        });
+        track.addEventListener('mute', () => {
+          console.log('⚠️ Remote track muted:', track.kind);
+        });
+      });
       
       const video = remoteVideoRef.current;
       
@@ -359,12 +410,25 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         });
       });
 
-      // Create and send offer
-      console.log('📝 Creating offer...');
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true
+      // Verify transceiver directions before creating offer
+      pc.getTransceivers().forEach((transceiver, index) => {
+        console.log(`📡 Caller transceiver ${index}:`, {
+          direction: transceiver.direction,
+          mid: transceiver.mid,
+          kind: transceiver.sender.track?.kind,
+          currentDirection: transceiver.currentDirection
+        });
+        
+        // Ensure sendrecv direction
+        if (transceiver.direction !== 'sendrecv') {
+          console.log(`📡 Fixing caller transceiver ${index} direction from ${transceiver.direction} to sendrecv`);
+          transceiver.direction = 'sendrecv';
+        }
       });
+
+      // Create and send offer with explicit constraints
+      console.log('📝 Creating offer...');
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       console.log('✅ Offer created and set as local description');
       console.log('📄 Full Offer SDP:', offer.sdp);
@@ -462,8 +526,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Add local stream with proper transceivers - THIS IS CRITICAL
-      console.log('➕ Adding receiver tracks to peer connection...');
+      // Add local stream FIRST with proper transceivers - THIS IS CRITICAL
+      console.log('➕ Adding receiver tracks to peer connection FIRST...');
       stream.getTracks().forEach(track => {
         console.log('🎵 Adding receiver track:', track.kind, {
           id: track.id,
@@ -491,10 +555,26 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         });
       });
 
-      // Set remote description from stored offer
+      // Set remote description AFTER adding local tracks
       const offer = (window as any).pendingOffer;
-      console.log('📝 Setting remote description (offer):', offer);
+      console.log('📝 Setting remote description (offer) AFTER adding tracks:', offer);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      // Verify and fix transceiver directions before creating answer
+      pc.getTransceivers().forEach((transceiver, index) => {
+        console.log(`📡 Transceiver ${index} before answer:`, {
+          direction: transceiver.direction,
+          mid: transceiver.mid,
+          kind: transceiver.receiver.track?.kind,
+          currentDirection: transceiver.currentDirection
+        });
+        
+        // Ensure sendrecv direction
+        if (transceiver.direction !== 'sendrecv') {
+          console.log(`📡 Fixing transceiver ${index} direction from ${transceiver.direction} to sendrecv`);
+          transceiver.direction = 'sendrecv';
+        }
+      });
 
       // Create and send answer
       console.log('📝 Creating answer...');
