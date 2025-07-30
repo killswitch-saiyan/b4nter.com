@@ -51,162 +51,54 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     });
 
     pc.onicecandidate = (event) => {
-      console.log('🧊 ICE candidate generated:', event.candidate);
       if (event.candidate) {
         sendCustomEvent({
           type: 'webrtc_ice_candidate',
           to: targetUserId,
           candidate: event.candidate
         });
-      } else {
-        console.log('🧊 ICE gathering completed');
       }
     };
 
     pc.ontrack = (event) => {
-      console.log('📺 ontrack event triggered:', event);
-      console.log('📺 Event streams:', event.streams);
-      console.log('📺 Event track:', event.track);
-      
       // Handle the case where there might not be a stream but we have a track
       let stream;
       if (event.streams && event.streams[0]) {
         stream = event.streams[0];
-        console.log('📺 Using stream from event.streams[0]');
       } else {
-        // Create a new MediaStream with the track
-        console.log('📺 No stream in event, creating new MediaStream with track');
         stream = new MediaStream([event.track]);
       }
       
       if (stream) {
-        console.log('📺 Received remote stream:', stream);
-        console.log('📺 Remote stream ID:', stream.id);
-        console.log('📺 Remote stream tracks:', stream.getTracks());
-        
-        // Detailed track analysis
+        // Analyze track states
         const videoTracks = stream.getVideoTracks();
         const audioTracks = stream.getAudioTracks();
         
-        console.log('📺 Video tracks detailed:', videoTracks.map(t => ({ 
-          id: t.id, 
-          kind: t.kind, 
-          enabled: t.enabled, 
-          readyState: t.readyState,
-          muted: t.muted,
-          label: t.label
-        })));
-        
-        console.log('📺 Audio tracks detailed:', audioTracks.map(t => ({ 
-          id: t.id, 
-          kind: t.kind, 
-          enabled: t.enabled, 
-          readyState: t.readyState,
-          muted: t.muted,
-          label: t.label
-        })));
-        
-        // Analyze track states and try to fix muted tracks
-        videoTracks.forEach((track, index) => {
-          console.log(`📺 Video track ${index} detailed analysis:`, {
-            id: track.id,
-            kind: track.kind,
-            enabled: track.enabled,
-            readyState: track.readyState,
-            muted: track.muted,
-            label: track.label,
-            constraints: track.getConstraints(),
-            settings: track.getSettings()
-          });
-          
+        // Listen for track unmute events
+        [...videoTracks, ...audioTracks].forEach(track => {
           if (track.muted) {
-            console.log('⚠️ Video track is muted, this means no video data is flowing!');
-            console.log('📺 Attempting to debug muted track...');
-            
-            // Try to listen for unmute event
             track.addEventListener('unmute', () => {
-              console.log('🎉 Video track unmuted!');
+              console.log('🎉 Track unmuted:', track.kind);
             }, { once: true });
-            
-            // Try to monitor track state changes
-            track.addEventListener('ended', () => {
-              console.log('❌ Video track ended');
-            });
-          } else {
-            console.log('✅ Video track is active and unmuted');
           }
         });
         
-        audioTracks.forEach((track, index) => {
-          console.log(`🎵 Audio track ${index} detailed analysis:`, {
-            id: track.id,
-            kind: track.kind,
-            enabled: track.enabled,
-            readyState: track.readyState,
-            muted: track.muted,
-            label: track.label,
-            constraints: track.getConstraints(),
-            settings: track.getSettings()
-          });
-          
-          if (track.muted) {
-            console.log('⚠️ Audio track is muted, this means no audio data is flowing!');
-            
-            // Try to listen for unmute event
-            track.addEventListener('unmute', () => {
-              console.log('🎉 Audio track unmuted!');
-            }, { once: true });
-            
-            // Try to monitor track state changes
-            track.addEventListener('ended', () => {
-              console.log('❌ Audio track ended');
-            });
-          } else {
-            console.log('✅ Audio track is active and unmuted');
-          }
-        });
-        
-        // Update the remote stream, or add tracks to existing stream
+        // Update the remote stream
         setRemoteStream(prevStream => {
           if (prevStream) {
-            // Add the new track to existing stream
-            console.log('📺 Adding track to existing remote stream');
             prevStream.addTrack(event.track);
-            return new MediaStream(prevStream.getTracks()); // Create new stream to trigger re-render
+            return new MediaStream(prevStream.getTracks());
           } else {
-            console.log('📺 Setting new remote stream');
             return stream;
           }
         });
-      } else {
-        console.error('❌ No stream could be created from ontrack event');
       }
     };
 
     pc.onconnectionstatechange = () => {
-      console.log('🔗 Connection state changed:', pc.connectionState);
       if (pc.connectionState === 'connected') {
-        console.log('🎉 Peer connection fully established!');
-        // Debug the connection further
-        pc.getStats().then(stats => {
-          stats.forEach(report => {
-            if (report.type === 'track' && report.kind === 'video') {
-              console.log('📊 Video track stats:', report);
-            }
-            if (report.type === 'track' && report.kind === 'audio') {
-              console.log('📊 Audio track stats:', report);
-            }
-          });
-        }).catch(e => console.error('Stats error:', e));
+        console.log('✅ Call connected successfully');
       }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log('🧊 ICE connection state changed:', pc.iceConnectionState);
-    };
-
-    pc.onsignalingstatechange = () => {
-      console.log('📡 Signaling state changed:', pc.signalingState);
     };
 
     return pc;
@@ -250,259 +142,121 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   // Update video elements when streams change
   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      console.log('🎬 Setting local video srcObject:', localStream);
       localVideoRef.current.srcObject = localStream;
       localVideoRef.current.play().catch(e => console.error('Error playing local video:', e));
-      
-      // Add track event listeners for local stream
-      localStream.getTracks().forEach(track => {
-        track.addEventListener('unmute', () => {
-          console.log('🎉 Local track unmuted:', track.kind);
-        });
-        track.addEventListener('mute', () => {
-          console.log('⚠️ Local track muted:', track.kind);
-        });
-      });
     }
   }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      console.log('📺 Setting remote video srcObject:', remoteStream);
-      console.log('📺 Remote stream active tracks:', remoteStream.getVideoTracks().length, 'video,', remoteStream.getAudioTracks().length, 'audio');
-      
       const video = remoteVideoRef.current;
       
-      // Clean up previous event listeners and stream
+      // Clean up previous stream
       video.srcObject = null;
-      video.load(); // Reset video element state
+      video.load();
       
-      // Set up comprehensive autoplay handling
+      // Set up autoplay handling
       const setupVideoPlayback = async () => {
         if (!remoteVideoRef.current || !remoteStream) return;
         
         const videoElement = remoteVideoRef.current;
         videoElement.srcObject = remoteStream;
-        
-        // Critical: Start muted for autoplay policy compliance
         videoElement.muted = true;
         videoElement.autoplay = true;
         videoElement.playsInline = true;
         
-        console.log('📺 Starting muted autoplay for browser policy compliance');
-        
         try {
           await videoElement.play();
-          console.log('✅ Video started playing (muted)');
           
-          // Wait for video to actually start showing content
-          const waitForVideoContent = () => {
-            return new Promise((resolve) => {
-              const checkContent = () => {
-                if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
-                  console.log('✅ Video content loaded:', {
-                    width: videoElement.videoWidth,
-                    height: videoElement.videoHeight
-                  });
-                  resolve(true);
-                } else if (videoElement.readyState >= 2) {
-                  // Try again in a bit
-                  setTimeout(checkContent, 100);
-                } else {
-                  setTimeout(checkContent, 100);
-                }
-              };
-              checkContent();
+          // Unmute after short delay
+          setTimeout(() => {
+            if (videoElement && !videoElement.paused) {
+              videoElement.muted = false;
               
-              // Timeout after 5 seconds
-              setTimeout(() => resolve(false), 5000);
-            });
-          };
-          
-          const hasContent = await waitForVideoContent();
-          
-          if (hasContent) {
-            // Now we can safely unmute the video
-            console.log('📺 Video content confirmed, unmuting...');
-            videoElement.muted = false;
-            console.log('🔊 Video unmuted successfully');
-          } else {
-            console.log('⚠️ Video content timeout - keeping muted');
-          }
+              // Reload if no video content after delay
+              setTimeout(() => {
+                if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+                  const currentSrc = videoElement.srcObject;
+                  videoElement.srcObject = null;
+                  setTimeout(() => {
+                    videoElement.srcObject = currentSrc;
+                    videoElement.play().catch(() => {});
+                  }, 100);
+                }
+              }, 1000);
+            }
+          }, 500);
           
         } catch (error) {
-          console.error('❌ Autoplay failed:', error);
-          console.log('📺 Trying alternative playback methods...');
-          
-          // Fallback: Try user interaction
+          // Fallback: User interaction
           const playOnInteraction = async () => {
             try {
-              console.log('📺 Attempting play on user interaction');
               await videoElement.play();
               videoElement.muted = false;
-              console.log('✅ Video playing after user interaction');
-              
-              // Remove the event listener after successful play
               document.removeEventListener('click', playOnInteraction);
               document.removeEventListener('touchstart', playOnInteraction);
-            } catch (e) {
-              console.error('❌ Play on interaction failed:', e);
-            }
+            } catch (e) {}
           };
           
-          // Add event listeners for user interaction
           document.addEventListener('click', playOnInteraction, { once: true });
           document.addEventListener('touchstart', playOnInteraction, { once: true });
-          
-          console.log('📺 Video will play on next user interaction');
         }
       };
       
-      // Add track event listeners for remote stream
+      // Handle track unmute events
       remoteStream.getTracks().forEach(track => {
         track.addEventListener('unmute', () => {
-          console.log('🎉 Remote track unmuted:', track.kind);
-          
-          if (track.kind === 'video') {
-            // When video track unmutes, restart playback
-            console.log('📺 Video track unmuted - restarting playback');
-            setTimeout(() => setupVideoPlayback(), 100);
+          if (track.kind === 'video' && remoteVideoRef.current) {
+            const video = remoteVideoRef.current;
+            video.pause();
+            video.srcObject = null;
+            video.load();
+            
+            setTimeout(() => {
+              if (remoteVideoRef.current && remoteStream) {
+                remoteVideoRef.current.srcObject = remoteStream;
+                remoteVideoRef.current.muted = false;
+                remoteVideoRef.current.play().catch(e => {
+                  if (remoteVideoRef.current) {
+                    remoteVideoRef.current.muted = true;
+                    remoteVideoRef.current.play().catch(() => {});
+                  }
+                });
+              }
+            }, 200);
           }
-        }, { once: true }); // Only listen once per track
-        
-        track.addEventListener('mute', () => {
-          console.log('⚠️ Remote track muted:', track.kind);
-        });
+        }, { once: true });
       });
       
-      // Start the video setup
       setupVideoPlayback();
-      
-      // Also listen for metadata load as backup
-      video.addEventListener('loadedmetadata', () => {
-        console.log('📺 Metadata loaded event');
-        if (video.videoWidth === 0 || video.videoHeight === 0) {
-          console.log('📺 No video dimensions yet, waiting...');
-          setTimeout(() => setupVideoPlayback(), 200);
-        }
-      }, { once: true });
-      
-      // Debug state periodically
-      const debugInterval = setInterval(() => {
-        if (remoteVideoRef.current) {
-          const state = {
-            srcObject: !!remoteVideoRef.current.srcObject,
-            videoWidth: remoteVideoRef.current.videoWidth,
-            videoHeight: remoteVideoRef.current.videoHeight,
-            readyState: remoteVideoRef.current.readyState,
-            paused: remoteVideoRef.current.paused,
-            muted: remoteVideoRef.current.muted,
-            tracks: remoteStream.getTracks().map(t => ({
-              kind: t.kind,
-              enabled: t.enabled,
-              muted: t.muted,
-              readyState: t.readyState
-            }))
-          };
-          console.log('📺 Video debug state:', state);
-          
-          // Stop debugging after 10 seconds
-          if (Date.now() - Date.now() > 10000) {
-            clearInterval(debugInterval);
-          }
-        } else {
-          clearInterval(debugInterval);
-        }
-      }, 2000);
-      
-      // Cleanup on unmount
-      return () => {
-        clearInterval(debugInterval);
-      };
     }
   }, [remoteStream]);
 
   const startCall = async () => {
     try {
-      console.log('🚀 Starting video call to:', targetUsername);
       setCallState({ isInCall: false, isIncoming: false, isConnecting: true });
 
-      // Get user media
-      console.log('🎥 Requesting user media...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
       });
-      console.log('✅ Got local stream:', stream);
-      console.log('🎬 Local stream tracks:', stream.getTracks());
       setLocalStream(stream);
 
-      // Create peer connection
-      console.log('🔗 Creating peer connection...');
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Add local stream to peer connection with proper transceivers
-      console.log('➕ Adding local tracks to peer connection...');
+      // Add local tracks
       stream.getTracks().forEach(track => {
-        console.log('🎵 Adding track:', track.kind, {
-          id: track.id,
-          enabled: track.enabled,
-          readyState: track.readyState,
-          muted: track.muted,
-          label: track.label
-        });
-        
-        // Make sure track is enabled and not muted
         track.enabled = true;
-        if (track.muted) {
-          console.log('⚠️ Local track is muted on creation - this might cause issues!');
-        }
-        
-        // Add track with explicit transceiver to ensure bidirectional communication
         const transceiver = pc.addTransceiver(track, {
           direction: 'sendrecv',
           streams: [stream]
         });
-        
-        console.log('📡 Added transceiver for', track.kind, {
-          direction: transceiver.direction,
-          mid: transceiver.mid
-        });
       });
 
-      // Verify transceiver directions before creating offer
-      pc.getTransceivers().forEach((transceiver, index) => {
-        console.log(`📡 Caller transceiver ${index}:`, {
-          direction: transceiver.direction,
-          mid: transceiver.mid,
-          kind: transceiver.sender.track?.kind,
-          currentDirection: transceiver.currentDirection
-        });
-        
-        // Ensure sendrecv direction
-        if (transceiver.direction !== 'sendrecv') {
-          console.log(`📡 Fixing caller transceiver ${index} direction from ${transceiver.direction} to sendrecv`);
-          transceiver.direction = 'sendrecv';
-        }
-      });
-
-      // Create and send offer with explicit constraints
-      console.log('📝 Creating offer...');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      console.log('✅ Offer created and set as local description');
-      console.log('📄 Full Offer SDP:', offer.sdp);
-      console.log('📄 Offer SDP contains:', {
-        hasVideo: offer.sdp?.includes('m=video'),
-        hasAudio: offer.sdp?.includes('m=audio'),
-        sendRecv: offer.sdp?.includes('sendrecv'),
-        sendonly: offer.sdp?.includes('sendonly'),
-        recvonly: offer.sdp?.includes('recvonly'),
-        inactive: offer.sdp?.includes('inactive')
-      });
 
-      console.log('📡 Sending offer to:', targetUserId);
       sendCustomEvent({
         type: 'video_call_offer',
         target_user_id: targetUserId,
@@ -512,20 +266,19 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
       toast.success(`Calling ${targetUsername}...`);
     } catch (error) {
-      console.error('❌ Error starting call:', error);
+      console.error('Error starting call:', error);
       toast.error('Failed to start call');
       setCallState({ isInCall: false, isIncoming: false, isConnecting: false });
     }
   };
 
   const handleIncomingCall = async (offer: RTCSessionDescriptionInit) => {
-    console.log('📞 Incoming call from:', targetUsername);
     setCallState({ isInCall: false, isIncoming: true, isConnecting: false });
     
     // Play ringtone
     if (ringtoneRef.current) {
       ringtoneRef.current.loop = true;
-      ringtoneRef.current.play().catch(e => console.error('Error playing ringtone:', e));
+      ringtoneRef.current.play().catch(() => {});
     }
     
     // Store the offer for when user accepts
@@ -562,8 +315,6 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
   const acceptCall = async () => {
     try {
-      console.log('✅ Accepting call from:', targetUsername);
-      
       // Stop ringtone
       if (ringtoneRef.current) {
         ringtoneRef.current.pause();
@@ -572,121 +323,50 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       
       setCallState({ isInCall: false, isIncoming: false, isConnecting: true });
 
-      // Get user media
-      console.log('🎥 Requesting user media for receiver...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
       });
-      console.log('✅ Got local stream for receiver:', stream);
-      console.log('🎬 Receiver local stream tracks:', stream.getTracks());
       setLocalStream(stream);
 
-      // Create peer connection
-      console.log('🔗 Creating peer connection for receiver...');
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Set remote description FIRST to get the offer transceivers
+      // Set remote description first
       const offer = (window as any).pendingOffer;
-      console.log('📝 Setting remote description (offer) FIRST:', offer);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-      // Now add our local tracks to the existing transceivers
-      console.log('➕ Adding receiver tracks to existing transceivers...');
+      // Add local tracks to existing transceivers
       const transceivers = pc.getTransceivers();
       
       for (const track of stream.getTracks()) {
-        console.log('🎵 Processing receiver track:', track.kind, {
-          id: track.id,
-          enabled: track.enabled,
-          readyState: track.readyState,
-          muted: track.muted,
-          label: track.label
-        });
-        
-        // Make sure track is enabled and not muted
         track.enabled = true;
-        if (track.muted) {
-          console.log('⚠️ Local receiver track is muted on creation!');
-        }
         
-        // Find matching transceiver for this track kind
         const transceiver = transceivers.find(t => 
           t.receiver.track?.kind === track.kind && !t.sender.track
         );
         
         if (transceiver) {
-          console.log(`📡 Found matching transceiver for ${track.kind}`);
-          console.log(`📡 Before replace - direction: ${transceiver.direction}, sender track: ${!!transceiver.sender.track}`);
-          
-          // Try replaceTrack first
           try {
             await transceiver.sender.replaceTrack(track);
             transceiver.direction = 'sendrecv';
-            console.log(`📡 Successfully replaced track - direction: ${transceiver.direction}, sender track: ${!!transceiver.sender.track}`);
           } catch (error) {
-            console.log(`📡 replaceTrack failed for ${track.kind}:`, error);
-            console.log(`📡 Will create new transceiver instead`);
-            
-            // If replaceTrack fails, create a new transceiver
-            const newTransceiver = pc.addTransceiver(track, {
+            pc.addTransceiver(track, {
               direction: 'sendrecv',
               streams: [stream]
             });
-            console.log('📡 Added fallback transceiver for', track.kind, {
-              direction: newTransceiver.direction,
-              mid: newTransceiver.mid
-            });
           }
         } else {
-          console.log(`📡 No matching transceiver found for ${track.kind}, adding new one`);
-          const newTransceiver = pc.addTransceiver(track, {
+          pc.addTransceiver(track, {
             direction: 'sendrecv',
             streams: [stream]
-          });
-          console.log('📡 Added new transceiver for', track.kind, {
-            direction: newTransceiver.direction,
-            mid: newTransceiver.mid
           });
         }
       }
 
-      // Final verification of all transceivers
-      console.log('📡 Final transceiver verification before answer:');
-      pc.getTransceivers().forEach((transceiver, index) => {
-        console.log(`📡 Transceiver ${index}:`, {
-          direction: transceiver.direction,
-          mid: transceiver.mid,
-          kind: transceiver.receiver.track?.kind,
-          currentDirection: transceiver.currentDirection,
-          hasSenderTrack: !!transceiver.sender.track,
-          hasReceiverTrack: !!transceiver.receiver.track
-        });
-        
-        // Final enforcement of sendrecv
-        if (transceiver.direction !== 'sendrecv') {
-          console.log(`📡 FINAL FIX: Setting transceiver ${index} to sendrecv`);
-          transceiver.direction = 'sendrecv';
-        }
-      });
-
-      // Create and send answer
-      console.log('📝 Creating answer...');
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      console.log('✅ Answer created and set as local description');
-      console.log('📄 Full Answer SDP:', answer.sdp);
-      console.log('📄 Answer SDP contains:', {
-        hasVideo: answer.sdp?.includes('m=video'),
-        hasAudio: answer.sdp?.includes('m=audio'),
-        sendRecv: answer.sdp?.includes('sendrecv'),
-        sendonly: answer.sdp?.includes('sendonly'),
-        recvonly: answer.sdp?.includes('recvonly'),
-        inactive: answer.sdp?.includes('inactive')
-      });
 
-      console.log('📡 Sending answer to:', targetUserId);
       sendCustomEvent({
         type: 'video_call_answer',
         target_user_id: targetUserId,
@@ -696,7 +376,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       setCallState({ isInCall: true, isIncoming: false, isConnecting: false });
       toast.success('Call connected!');
     } catch (error) {
-      console.error('❌ Error accepting call:', error);
+      console.error('Error accepting call:', error);
       toast.error('Failed to accept call');
       setCallState({ isInCall: false, isIncoming: false, isConnecting: false });
     }
