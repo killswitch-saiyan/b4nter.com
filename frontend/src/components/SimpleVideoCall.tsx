@@ -271,93 +271,154 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       console.log('📺 Setting remote video srcObject:', remoteStream);
       console.log('📺 Remote stream active tracks:', remoteStream.getVideoTracks().length, 'video,', remoteStream.getAudioTracks().length, 'audio');
       
+      const video = remoteVideoRef.current;
+      
+      // Clean up previous event listeners and stream
+      video.srcObject = null;
+      video.load(); // Reset video element state
+      
+      // Set up comprehensive autoplay handling
+      const setupVideoPlayback = async () => {
+        if (!remoteVideoRef.current || !remoteStream) return;
+        
+        const videoElement = remoteVideoRef.current;
+        videoElement.srcObject = remoteStream;
+        
+        // Critical: Start muted for autoplay policy compliance
+        videoElement.muted = true;
+        videoElement.autoplay = true;
+        videoElement.playsInline = true;
+        
+        console.log('📺 Starting muted autoplay for browser policy compliance');
+        
+        try {
+          await videoElement.play();
+          console.log('✅ Video started playing (muted)');
+          
+          // Wait for video to actually start showing content
+          const waitForVideoContent = () => {
+            return new Promise((resolve) => {
+              const checkContent = () => {
+                if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                  console.log('✅ Video content loaded:', {
+                    width: videoElement.videoWidth,
+                    height: videoElement.videoHeight
+                  });
+                  resolve(true);
+                } else if (videoElement.readyState >= 2) {
+                  // Try again in a bit
+                  setTimeout(checkContent, 100);
+                } else {
+                  setTimeout(checkContent, 100);
+                }
+              };
+              checkContent();
+              
+              // Timeout after 5 seconds
+              setTimeout(() => resolve(false), 5000);
+            });
+          };
+          
+          const hasContent = await waitForVideoContent();
+          
+          if (hasContent) {
+            // Now we can safely unmute the video
+            console.log('📺 Video content confirmed, unmuting...');
+            videoElement.muted = false;
+            console.log('🔊 Video unmuted successfully');
+          } else {
+            console.log('⚠️ Video content timeout - keeping muted');
+          }
+          
+        } catch (error) {
+          console.error('❌ Autoplay failed:', error);
+          console.log('📺 Trying alternative playback methods...');
+          
+          // Fallback: Try user interaction
+          const playOnInteraction = async () => {
+            try {
+              console.log('📺 Attempting play on user interaction');
+              await videoElement.play();
+              videoElement.muted = false;
+              console.log('✅ Video playing after user interaction');
+              
+              // Remove the event listener after successful play
+              document.removeEventListener('click', playOnInteraction);
+              document.removeEventListener('touchstart', playOnInteraction);
+            } catch (e) {
+              console.error('❌ Play on interaction failed:', e);
+            }
+          };
+          
+          // Add event listeners for user interaction
+          document.addEventListener('click', playOnInteraction, { once: true });
+          document.addEventListener('touchstart', playOnInteraction, { once: true });
+          
+          console.log('📺 Video will play on next user interaction');
+        }
+      };
+      
       // Add track event listeners for remote stream
       remoteStream.getTracks().forEach(track => {
         track.addEventListener('unmute', () => {
           console.log('🎉 Remote track unmuted:', track.kind);
-          // Force video element to refresh when track unmutes
-          if (remoteVideoRef.current && remoteStream) {
-            remoteVideoRef.current.srcObject = null;
-            setTimeout(() => {
-              if (remoteVideoRef.current) {
-                remoteVideoRef.current.srcObject = remoteStream;
-                remoteVideoRef.current.play().catch(e => console.error('Error playing after unmute:', e));
-              }
-            }, 100);
+          
+          if (track.kind === 'video') {
+            // When video track unmutes, restart playback
+            console.log('📺 Video track unmuted - restarting playback');
+            setTimeout(() => setupVideoPlayback(), 100);
           }
-        });
+        }, { once: true }); // Only listen once per track
+        
         track.addEventListener('mute', () => {
           console.log('⚠️ Remote track muted:', track.kind);
         });
       });
       
-      const video = remoteVideoRef.current;
+      // Start the video setup
+      setupVideoPlayback();
       
-      // Force a clean slate
-      video.srcObject = null;
-      
-      // Small delay to ensure cleanup, then set the stream
-      setTimeout(() => {
-        if (remoteVideoRef.current && remoteStream) {
-          console.log('📺 Setting srcObject after cleanup');
-          remoteVideoRef.current.srcObject = remoteStream;
-          
-          // Force autoplay
-          remoteVideoRef.current.autoplay = true;
-          remoteVideoRef.current.muted = false;
-          
-          // Multiple approaches to start playback
-          const tryPlay = () => {
-            if (remoteVideoRef.current) {
-              console.log('📺 Attempting to play video...');
-              remoteVideoRef.current.play()
-                .then(() => console.log('✅ Video playing successfully'))
-                .catch(e => {
-                  console.error('❌ Play failed:', e);
-                  // Try once more with muted (some browsers require this)
-                  if (remoteVideoRef.current) {
-                    remoteVideoRef.current.muted = true;
-                    remoteVideoRef.current.play()
-                      .then(() => {
-                        console.log('✅ Video playing muted');
-                        // Unmute after it starts playing
-                        setTimeout(() => {
-                          if (remoteVideoRef.current) {
-                            remoteVideoRef.current.muted = false;
-                          }
-                        }, 1000);
-                      })
-                      .catch(e2 => console.error('❌ Muted play also failed:', e2));
-                  }
-                });
-            }
-          };
-          
-          // Try immediately
-          tryPlay();
-          
-          // Also try when metadata loads
-          remoteVideoRef.current.addEventListener('loadedmetadata', () => {
-            console.log('📺 Metadata loaded, trying play again');
-            tryPlay();
-          }, { once: true });
-          
-          // Debug the video element state
-          setTimeout(() => {
-            if (remoteVideoRef.current) {
-              console.log('📺 Video element state:', {
-                srcObject: !!remoteVideoRef.current.srcObject,
-                videoWidth: remoteVideoRef.current.videoWidth,
-                videoHeight: remoteVideoRef.current.videoHeight,
-                readyState: remoteVideoRef.current.readyState,
-                paused: remoteVideoRef.current.paused,
-                autoplay: remoteVideoRef.current.autoplay,
-                muted: remoteVideoRef.current.muted
-              });
-            }
-          }, 1000);
+      // Also listen for metadata load as backup
+      video.addEventListener('loadedmetadata', () => {
+        console.log('📺 Metadata loaded event');
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+          console.log('📺 No video dimensions yet, waiting...');
+          setTimeout(() => setupVideoPlayback(), 200);
         }
-      }, 100);
+      }, { once: true });
+      
+      // Debug state periodically
+      const debugInterval = setInterval(() => {
+        if (remoteVideoRef.current) {
+          const state = {
+            srcObject: !!remoteVideoRef.current.srcObject,
+            videoWidth: remoteVideoRef.current.videoWidth,
+            videoHeight: remoteVideoRef.current.videoHeight,
+            readyState: remoteVideoRef.current.readyState,
+            paused: remoteVideoRef.current.paused,
+            muted: remoteVideoRef.current.muted,
+            tracks: remoteStream.getTracks().map(t => ({
+              kind: t.kind,
+              enabled: t.enabled,
+              muted: t.muted,
+              readyState: t.readyState
+            }))
+          };
+          console.log('📺 Video debug state:', state);
+          
+          // Stop debugging after 10 seconds
+          if (Date.now() - Date.now() > 10000) {
+            clearInterval(debugInterval);
+          }
+        } else {
+          clearInterval(debugInterval);
+        }
+      }, 2000);
+      
+      // Cleanup on unmount
+      return () => {
+        clearInterval(debugInterval);
+      };
     }
   }, [remoteStream]);
 
@@ -800,7 +861,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
-                  muted={false}
+                  muted={true}
                   controls={false}
                   className="w-full h-full object-cover"
                   style={{ 
@@ -817,6 +878,9 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
                   onCanPlay={() => console.log('📺 JSX: Remote video can play')}
                   onPlaying={() => console.log('📺 JSX: Remote video started playing')}
                   onLoadedData={() => console.log('📺 JSX: Remote video data loaded')}
+                  onPlay={() => console.log('📺 JSX: Video play event triggered')}
+                  onPause={() => console.log('📺 JSX: Video pause event triggered')}
+                  onWaiting={() => console.log('📺 JSX: Video waiting for data')}
                   onTimeUpdate={() => {
                     // Only log once when video actually starts
                     if (remoteVideoRef.current && remoteVideoRef.current.currentTime > 0) {
@@ -828,6 +892,32 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
                 />
                 <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
                   Stream Active
+                </div>
+                
+                {/* Unmute button for user interaction */}
+                <div className="absolute bottom-2 right-2">
+                  <button
+                    onClick={() => {
+                      if (remoteVideoRef.current) {
+                        const video = remoteVideoRef.current;
+                        if (video.muted) {
+                          video.muted = false;
+                          console.log('🔊 Video unmuted via user button');
+                        }
+                        if (video.paused) {
+                          video.play().then(() => {
+                            console.log('▶️ Video playing via user button');
+                          }).catch(e => {
+                            console.error('❌ Play failed via user button:', e);
+                          });
+                        }
+                      }
+                    }}
+                    className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full text-xs opacity-75 hover:opacity-100"
+                    title="Click to unmute/play video"
+                  >
+                    🔊
+                  </button>
                 </div>
               </>
             ) : (
