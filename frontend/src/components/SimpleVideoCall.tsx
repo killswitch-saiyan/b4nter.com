@@ -41,8 +41,13 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' }
+      ],
+      iceCandidatePoolSize: 10,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
     });
 
     pc.onicecandidate = (event) => {
@@ -91,18 +96,63 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
           label: t.label
         })));
         
-        // Try to unmute tracks if they're muted
-        videoTracks.forEach(track => {
+        // Analyze track states and try to fix muted tracks
+        videoTracks.forEach((track, index) => {
+          console.log(`📺 Video track ${index} detailed analysis:`, {
+            id: track.id,
+            kind: track.kind,
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted,
+            label: track.label,
+            constraints: track.getConstraints(),
+            settings: track.getSettings()
+          });
+          
           if (track.muted) {
             console.log('⚠️ Video track is muted, this means no video data is flowing!');
-            console.log('📺 Track constraints:', track.getConstraints());
-            console.log('📺 Track settings:', track.getSettings());
+            console.log('📺 Attempting to debug muted track...');
+            
+            // Try to listen for unmute event
+            track.addEventListener('unmute', () => {
+              console.log('🎉 Video track unmuted!');
+            }, { once: true });
+            
+            // Try to monitor track state changes
+            track.addEventListener('ended', () => {
+              console.log('❌ Video track ended');
+            });
+          } else {
+            console.log('✅ Video track is active and unmuted');
           }
         });
         
-        audioTracks.forEach(track => {
+        audioTracks.forEach((track, index) => {
+          console.log(`🎵 Audio track ${index} detailed analysis:`, {
+            id: track.id,
+            kind: track.kind,
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted,
+            label: track.label,
+            constraints: track.getConstraints(),
+            settings: track.getSettings()
+          });
+          
           if (track.muted) {
             console.log('⚠️ Audio track is muted, this means no audio data is flowing!');
+            
+            // Try to listen for unmute event
+            track.addEventListener('unmute', () => {
+              console.log('🎉 Audio track unmuted!');
+            }, { once: true });
+            
+            // Try to monitor track state changes
+            track.addEventListener('ended', () => {
+              console.log('❌ Audio track ended');
+            });
+          } else {
+            console.log('✅ Audio track is active and unmuted');
           }
         });
         
@@ -114,6 +164,20 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
     pc.onconnectionstatechange = () => {
       console.log('🔗 Connection state changed:', pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        console.log('🎉 Peer connection fully established!');
+        // Debug the connection further
+        pc.getStats().then(stats => {
+          stats.forEach(report => {
+            if (report.type === 'track' && report.kind === 'video') {
+              console.log('📊 Video track stats:', report);
+            }
+            if (report.type === 'track' && report.kind === 'audio') {
+              console.log('📊 Audio track stats:', report);
+            }
+          });
+        }).catch(e => console.error('Stats error:', e));
+      }
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -266,7 +330,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Add local stream to peer connection
+      // Add local stream to peer connection with proper transceivers
       console.log('➕ Adding local tracks to peer connection...');
       stream.getTracks().forEach(track => {
         console.log('🎵 Adding track:', track.kind, {
@@ -283,7 +347,16 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
           console.log('⚠️ Local track is muted on creation - this might cause issues!');
         }
         
-        pc.addTrack(track, stream);
+        // Add track with explicit transceiver to ensure bidirectional communication
+        const transceiver = pc.addTransceiver(track, {
+          direction: 'sendrecv',
+          streams: [stream]
+        });
+        
+        console.log('📡 Added transceiver for', track.kind, {
+          direction: transceiver.direction,
+          mid: transceiver.mid
+        });
       });
 
       // Create and send offer
@@ -294,10 +367,14 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       });
       await pc.setLocalDescription(offer);
       console.log('✅ Offer created and set as local description');
+      console.log('📄 Full Offer SDP:', offer.sdp);
       console.log('📄 Offer SDP contains:', {
         hasVideo: offer.sdp?.includes('m=video'),
         hasAudio: offer.sdp?.includes('m=audio'),
-        sendRecv: offer.sdp?.includes('sendrecv')
+        sendRecv: offer.sdp?.includes('sendrecv'),
+        sendonly: offer.sdp?.includes('sendonly'),
+        recvonly: offer.sdp?.includes('recvonly'),
+        inactive: offer.sdp?.includes('inactive')
       });
 
       console.log('📡 Sending offer to:', targetUserId);
@@ -385,7 +462,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Add local stream - THIS IS CRITICAL
+      // Add local stream with proper transceivers - THIS IS CRITICAL
       console.log('➕ Adding receiver tracks to peer connection...');
       stream.getTracks().forEach(track => {
         console.log('🎵 Adding receiver track:', track.kind, {
@@ -402,7 +479,16 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
           console.log('⚠️ Local receiver track is muted on creation!');
         }
         
-        pc.addTrack(track, stream);
+        // Add track with explicit transceiver to ensure bidirectional communication
+        const transceiver = pc.addTransceiver(track, {
+          direction: 'sendrecv',
+          streams: [stream]
+        });
+        
+        console.log('📡 Added receiver transceiver for', track.kind, {
+          direction: transceiver.direction,
+          mid: transceiver.mid
+        });
       });
 
       // Set remote description from stored offer
@@ -415,10 +501,14 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       console.log('✅ Answer created and set as local description');
+      console.log('📄 Full Answer SDP:', answer.sdp);
       console.log('📄 Answer SDP contains:', {
         hasVideo: answer.sdp?.includes('m=video'),
         hasAudio: answer.sdp?.includes('m=audio'),
-        sendRecv: answer.sdp?.includes('sendrecv')
+        sendRecv: answer.sdp?.includes('sendrecv'),
+        sendonly: answer.sdp?.includes('sendonly'),
+        recvonly: answer.sdp?.includes('recvonly'),
+        inactive: answer.sdp?.includes('inactive')
       });
 
       console.log('📡 Sending answer to:', targetUserId);
