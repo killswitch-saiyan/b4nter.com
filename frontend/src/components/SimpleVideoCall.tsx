@@ -61,44 +61,59 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     };
 
     pc.ontrack = (event) => {
-      // Handle the case where there might not be a stream but we have a track
+      console.log('📨 Received track:', event.track.kind, 'from stream:', event.streams[0]?.id);
+      console.log('🎥 Track details:', {
+        kind: event.track.kind,
+        enabled: event.track.enabled,
+        muted: event.track.muted,
+        readyState: event.track.readyState
+      });
+      
+      // Use the stream from the event if available, otherwise create new one
       let stream;
       if (event.streams && event.streams[0]) {
         stream = event.streams[0];
+        console.log('📺 Using existing stream:', stream.id, 'tracks:', stream.getTracks().length);
       } else {
+        // Create new stream with the track
         stream = new MediaStream([event.track]);
+        console.log('🆕 Created new stream with track:', stream.id);
       }
       
-      if (stream) {
-        // Analyze track states
-        const videoTracks = stream.getVideoTracks();
-        const audioTracks = stream.getAudioTracks();
-        
-        // Listen for track unmute events
-        [...videoTracks, ...audioTracks].forEach(track => {
-          if (track.muted) {
-            track.addEventListener('unmute', () => {
-              console.log('🎉 Track unmuted:', track.kind);
-            }, { once: true });
-          }
-        });
-        
-        // Update the remote stream
+      // Set the remote stream directly instead of merging
+      setRemoteStream(stream);
+      
+      // Listen for track events
+      event.track.addEventListener('unmute', () => {
+        console.log('🎉 Track unmuted:', event.track.kind);
+        // Refresh the stream when track unmutes
         setRemoteStream(prevStream => {
           if (prevStream) {
-            prevStream.addTrack(event.track);
             return new MediaStream(prevStream.getTracks());
-          } else {
-            return stream;
           }
+          return stream;
         });
-      }
+      }, { once: true });
+      
+      event.track.addEventListener('ended', () => {
+        console.log('🔚 Track ended:', event.track.kind);
+      });
     };
 
     pc.onconnectionstatechange = () => {
+      console.log('🔗 Connection state changed:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         console.log('✅ Call connected successfully');
+        console.log('📊 Connection stats:', {
+          connectionState: pc.connectionState,
+          iceConnectionState: pc.iceConnectionState,
+          iceGatheringState: pc.iceGatheringState
+        });
       }
+    };
+    
+    pc.oniceconnectionstatechange = () => {
+      console.log('🧊 ICE connection state:', pc.iceConnectionState);
     };
 
     return pc;
@@ -150,85 +165,47 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       const video = remoteVideoRef.current;
+      console.log('🔄 Setting up remote video with stream:', remoteStream.id);
+      console.log('📊 Stream tracks:', remoteStream.getTracks().map(t => ({
+        kind: t.kind,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState
+      })));
       
-      // Clean up previous stream
-      video.srcObject = null;
-      video.load();
+      // Set stream immediately
+      video.srcObject = remoteStream;
+      video.muted = false; // Start unmuted for better debugging
+      video.autoplay = true;
+      video.playsInline = true;
       
-      // Set up autoplay handling
-      const setupVideoPlayback = async () => {
-        if (!remoteVideoRef.current || !remoteStream) return;
-        
-        const videoElement = remoteVideoRef.current;
-        videoElement.srcObject = remoteStream;
-        videoElement.muted = true;
-        videoElement.autoplay = true;
-        videoElement.playsInline = true;
-        
-        try {
-          await videoElement.play();
-          
-          // Unmute after short delay
-          setTimeout(() => {
-            if (videoElement && !videoElement.paused) {
-              videoElement.muted = false;
-              
-              // Reload if no video content after delay
-              setTimeout(() => {
-                if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
-                  const currentSrc = videoElement.srcObject;
-                  videoElement.srcObject = null;
-                  setTimeout(() => {
-                    videoElement.srcObject = currentSrc;
-                    videoElement.play().catch(() => {});
-                  }, 100);
-                }
-              }, 1000);
-            }
-          }, 500);
-          
-        } catch (error) {
-          // Fallback: User interaction
-          const playOnInteraction = async () => {
-            try {
-              await videoElement.play();
-              videoElement.muted = false;
-              document.removeEventListener('click', playOnInteraction);
-              document.removeEventListener('touchstart', playOnInteraction);
-            } catch (e) {}
-          };
-          
-          document.addEventListener('click', playOnInteraction, { once: true });
-          document.addEventListener('touchstart', playOnInteraction, { once: true });
-        }
-      };
-      
-      // Handle track unmute events
-      remoteStream.getTracks().forEach(track => {
-        track.addEventListener('unmute', () => {
-          if (track.kind === 'video' && remoteVideoRef.current) {
-            const video = remoteVideoRef.current;
-            video.pause();
-            video.srcObject = null;
-            video.load();
-            
-            setTimeout(() => {
-              if (remoteVideoRef.current && remoteStream) {
-                remoteVideoRef.current.srcObject = remoteStream;
-                remoteVideoRef.current.muted = false;
-                remoteVideoRef.current.play().catch(e => {
-                  if (remoteVideoRef.current) {
-                    remoteVideoRef.current.muted = true;
-                    remoteVideoRef.current.play().catch(() => {});
-                  }
-                });
-              }
-            }, 200);
-          }
-        }, { once: true });
+      // Play the video
+      video.play().then(() => {
+        console.log('✅ Remote video playing successfully');
+        console.log('📺 Video dimensions:', {
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          readyState: video.readyState
+        });
+      }).catch(error => {
+        console.error('❌ Remote video play failed:', error);
+        // Try muted autoplay as fallback
+        video.muted = true;
+        video.play().catch(e => console.error('❌ Muted play also failed:', e));
       });
       
-      setupVideoPlayback();
+      // Monitor for track changes
+      remoteStream.getTracks().forEach(track => {
+        track.addEventListener('unmute', () => {
+          console.log('🎉 Track unmuted, refreshing video:', track.kind);
+          // Force video refresh
+          const currentTime = video.currentTime;
+          video.load();
+          video.srcObject = remoteStream;
+          video.currentTime = currentTime;
+          video.play().catch(e => console.error('❌ Play after unmute failed:', e));
+        });
+      });
     }
   }, [remoteStream]);
 
