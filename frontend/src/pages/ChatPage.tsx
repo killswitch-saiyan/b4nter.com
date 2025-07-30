@@ -1114,12 +1114,6 @@ const ChatPage: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center space-x-4">
-                {selectedDMUser && !isBlocked && (
-                  <SimpleVideoCall
-                    targetUserId={selectedDMUser.id}
-                    targetUsername={selectedDMUser.username}
-                  />
-                )}
                 {selectedDMUser && (
                   isBlocked ? (
                     <button
@@ -1550,6 +1544,15 @@ const ChatPage: React.FC = () => {
           acceptedCall={acceptedCall}
         />
       )}
+      
+      {/* Global SimpleVideoCall components for all users to prevent unmounting */}
+      {users.map(dmUser => (
+        <SimpleVideoCall
+          key={`videocall-${dmUser.id}`}
+          targetUserId={dmUser.id}
+          targetUsername={dmUser.username}
+        />
+      ))}
       
       {/* Hidden audio element for ringtone */}
       <audio
