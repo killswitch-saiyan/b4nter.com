@@ -556,9 +556,11 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         );
         
         if (transceiver) {
-          console.log(`📡 Replacing sender track for ${track.kind} transceiver`);
+          console.log(`📡 Found matching transceiver for ${track.kind}`);
+          console.log(`📡 Before replace - direction: ${transceiver.direction}, sender track: ${!!transceiver.sender.track}`);
           transceiver.sender.replaceTrack(track);
           transceiver.direction = 'sendrecv';
+          console.log(`📡 After replace - direction: ${transceiver.direction}, sender track: ${!!transceiver.sender.track}`);
         } else {
           console.log(`📡 No matching transceiver found for ${track.kind}, adding new one`);
           const newTransceiver = pc.addTransceiver(track, {
