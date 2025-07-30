@@ -526,10 +526,17 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Add local stream FIRST with proper transceivers - THIS IS CRITICAL
-      console.log('➕ Adding receiver tracks to peer connection FIRST...');
+      // Set remote description FIRST to get the offer transceivers
+      const offer = (window as any).pendingOffer;
+      console.log('📝 Setting remote description (offer) FIRST:', offer);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      // Now add our local tracks to the existing transceivers
+      console.log('➕ Adding receiver tracks to existing transceivers...');
+      const transceivers = pc.getTransceivers();
+      
       stream.getTracks().forEach(track => {
-        console.log('🎵 Adding receiver track:', track.kind, {
+        console.log('🎵 Processing receiver track:', track.kind, {
           id: track.id,
           enabled: track.enabled,
           readyState: track.readyState,
@@ -543,35 +550,43 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
           console.log('⚠️ Local receiver track is muted on creation!');
         }
         
-        // Add track with explicit transceiver to ensure bidirectional communication
-        const transceiver = pc.addTransceiver(track, {
-          direction: 'sendrecv',
-          streams: [stream]
-        });
+        // Find matching transceiver for this track kind
+        const transceiver = transceivers.find(t => 
+          t.receiver.track?.kind === track.kind && !t.sender.track
+        );
         
-        console.log('📡 Added receiver transceiver for', track.kind, {
-          direction: transceiver.direction,
-          mid: transceiver.mid
-        });
+        if (transceiver) {
+          console.log(`📡 Replacing sender track for ${track.kind} transceiver`);
+          transceiver.sender.replaceTrack(track);
+          transceiver.direction = 'sendrecv';
+        } else {
+          console.log(`📡 No matching transceiver found for ${track.kind}, adding new one`);
+          const newTransceiver = pc.addTransceiver(track, {
+            direction: 'sendrecv',
+            streams: [stream]
+          });
+          console.log('📡 Added new transceiver for', track.kind, {
+            direction: newTransceiver.direction,
+            mid: newTransceiver.mid
+          });
+        }
       });
 
-      // Set remote description AFTER adding local tracks
-      const offer = (window as any).pendingOffer;
-      console.log('📝 Setting remote description (offer) AFTER adding tracks:', offer);
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-      // Verify and fix transceiver directions before creating answer
+      // Final verification of all transceivers
+      console.log('📡 Final transceiver verification before answer:');
       pc.getTransceivers().forEach((transceiver, index) => {
-        console.log(`📡 Transceiver ${index} before answer:`, {
+        console.log(`📡 Transceiver ${index}:`, {
           direction: transceiver.direction,
           mid: transceiver.mid,
           kind: transceiver.receiver.track?.kind,
-          currentDirection: transceiver.currentDirection
+          currentDirection: transceiver.currentDirection,
+          hasSenderTrack: !!transceiver.sender.track,
+          hasReceiverTrack: !!transceiver.receiver.track
         });
         
-        // Ensure sendrecv direction
+        // Final enforcement of sendrecv
         if (transceiver.direction !== 'sendrecv') {
-          console.log(`📡 Fixing transceiver ${index} direction from ${transceiver.direction} to sendrecv`);
+          console.log(`📡 FINAL FIX: Setting transceiver ${index} to sendrecv`);
           transceiver.direction = 'sendrecv';
         }
       });
