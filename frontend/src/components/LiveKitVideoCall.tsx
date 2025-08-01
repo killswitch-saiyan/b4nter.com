@@ -41,11 +41,11 @@ const LiveKitVideoCall: React.FC<LiveKitVideoCallProps> = ({
       const roomName = [user.id, targetUserId].sort().join('-');
       
       // Get token from backend
-      const response = await fetch(`https://b4nter-8xzadz8e.livekit.cloud/livekit/token`, {
+      const response = await fetch(`${API_BASE}/livekit/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NTQwODY4NDIsImlzcyI6IkFQSXNFeEs0WmR3NnRaNCIsIm5iZiI6MTc1NDA4NTk0Miwic3ViIjoibWF4IiwidmlkZW8iOnsiY2FuUHVibGlzaCI6dHJ1ZSwiY2FuUHVibGlzaERhdGEiOnRydWUsImNhblN1YnNjcmliZSI6dHJ1ZSwicm9vbSI6IlRlc3QiLCJyb29tSm9pbiI6dHJ1ZX19.GgWJk0c16PvdS8YTCw3AuJKIhNyaGahTkZmuSrDCr1g`,
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
         body: JSON.stringify({
           roomName,
