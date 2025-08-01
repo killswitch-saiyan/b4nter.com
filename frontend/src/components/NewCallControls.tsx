@@ -68,6 +68,9 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
   
+  // Persistent remote stream for track accumulation
+  const persistentRemoteStreamRef = useRef<MediaStream>(new MediaStream());
+  
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const callerRingtoneRef = useRef<HTMLAudioElement>(null);
@@ -159,8 +162,58 @@ const NewCallControls: React.FC<CallControlsProps> = ({
     };
 
     pc.ontrack = (event) => {
-      console.log('✅ Received remote stream');
-      setRemoteStream(event.streams[0]);
+      console.log('📥 TRACK ADDED:', event.track.kind, 'stream:', event.streams[0]?.id);
+      console.log('🎥 Track details:', {
+        kind: event.track.kind,
+        enabled: event.track.enabled,
+        muted: event.track.muted,
+        readyState: event.track.readyState,
+        label: event.track.label,
+        id: event.track.id
+      });
+      
+      // Get the persistent remote stream
+      const persistentStream = persistentRemoteStreamRef.current;
+      const trackKind = event.track.kind;
+      
+      // Remove existing track of the same kind to avoid duplicates
+      const existingTrack = persistentStream.getTracks().find(t => t.kind === trackKind);
+      if (existingTrack) {
+        console.log('🔄 Removing existing', trackKind, 'track:', existingTrack.id);
+        persistentStream.removeTrack(existingTrack);
+        existingTrack.stop();
+      }
+      
+      // Add the new track to persistent stream
+      console.log('✅ Adding', trackKind, 'track to persistent stream:', event.track.id);
+      persistentStream.addTrack(event.track);
+      
+      // Log current stream state
+      console.log('📊 Persistent stream after track addition:', {
+        streamId: persistentStream.id,
+        active: persistentStream.active,
+        totalTracks: persistentStream.getTracks().length,
+        videoTracks: persistentStream.getVideoTracks().length,
+        audioTracks: persistentStream.getAudioTracks().length
+      });
+      
+      // Trigger React re-render by setting the persistent stream
+      setRemoteStream(persistentStream);
+      console.log('✅ Remote stream state updated - should trigger video element update');
+      
+      // Listen for track events
+      event.track.addEventListener('unmute', () => {
+        console.log('🎉 TRACK UNMUTED:', event.track.kind, event.track.id);
+      });
+      
+      event.track.addEventListener('ended', () => {
+        console.log('🔚 TRACK ENDED:', event.track.kind, event.track.id);
+        // Remove ended track from persistent stream
+        if (persistentStream.getTracks().includes(event.track)) {
+          persistentStream.removeTrack(event.track);
+          console.log('🗑️ Removed ended track from persistent stream');
+        }
+      });
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -388,6 +441,16 @@ const NewCallControls: React.FC<CallControlsProps> = ({
       }
     }
     
+    // Clean up persistent remote stream
+    if (persistentRemoteStreamRef.current) {
+      persistentRemoteStreamRef.current.getTracks().forEach(track => {
+        persistentRemoteStreamRef.current.removeTrack(track);
+        track.stop();
+      });
+      // Create a fresh persistent stream for next call
+      persistentRemoteStreamRef.current = new MediaStream();
+    }
+    
     setLocalStream(null);
     setRemoteStream(null);
     peerConnectionRef.current = null;
@@ -430,13 +493,72 @@ const NewCallControls: React.FC<CallControlsProps> = ({
   useEffect(() => {
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(e => console.error('Error playing local video:', e));
     }
   }, [localStream]);
 
   useEffect(() => {
-    if (remoteStream && remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = remoteStream;
+    console.log('🔄 Remote video useEffect triggered - remoteStream:', !!remoteStream, 'remoteVideoRef:', !!remoteVideoRef.current);
+    
+    if (!remoteVideoRef.current || !remoteStream) {
+      console.log('⚠️ Missing video ref or stream:', {
+        hasVideoRef: !!remoteVideoRef.current,
+        hasRemoteStream: !!remoteStream,
+        streamId: remoteStream?.id
+      });
+      return;
     }
+    
+    const video = remoteVideoRef.current;
+    
+    // Debug stream contents
+    console.log('🎥 Remote stream active?', remoteStream.active);
+    console.log('🎤 Audio track enabled?', remoteStream.getAudioTracks()[0]?.enabled);
+    console.log('📹 Video track enabled?', remoteStream.getVideoTracks()[0]?.enabled);
+    
+    // Clear srcObject first to force re-render
+    video.srcObject = null;
+    
+    // Set the new stream
+    video.srcObject = remoteStream;
+    video.muted = false; // Allow audio
+    video.autoplay = true;
+    video.playsInline = true;
+    
+    console.log('🔄 Setting up remote video with stream:', remoteStream.id);
+    
+    // Play the video
+    const playVideo = () => {
+      if (!remoteVideoRef.current || remoteVideoRef.current !== video) {
+        console.log('⚠️ Video element unmounted, skipping play');
+        return;
+      }
+      
+      video.play().then(() => {
+        console.log('✅ Remote video playing successfully');
+        console.log('📺 Video dimensions:', {
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          readyState: video.readyState
+        });
+      }).catch(error => {
+        console.error('❌ Remote video play failed:', error);
+        
+        // Retry once after a short delay
+        setTimeout(() => {
+          if (remoteVideoRef.current && remoteVideoRef.current === video) {
+            video.play().catch(e => console.error('❌ Retry play also failed:', e));
+          }
+        }, 100);
+      });
+    };
+    
+    // Small delay to ensure DOM is stable
+    const timeoutId = setTimeout(playVideo, 50);
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [remoteStream]);
 
   // Video call UI
