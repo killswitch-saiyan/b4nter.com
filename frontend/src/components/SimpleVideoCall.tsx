@@ -142,6 +142,15 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     
     pc.oniceconnectionstatechange = () => {
       console.log('🧊 ICE connection state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        console.log('🎉 ICE connection established successfully');
+        setCallState(prev => ({ ...prev, isConnected: true }));
+      } else if (pc.iceConnectionState === 'disconnected') {
+        console.log('⚠️ ICE connection disconnected');
+      } else if (pc.iceConnectionState === 'failed') {
+        console.error('❌ ICE connection failed');
+        toast.error('Connection failed');
+      }
     };
 
     return pc;
@@ -184,33 +193,54 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
   // Update video elements when streams change
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(e => console.error('Error playing local video:', e));
-    }
+    if (!localVideoRef.current || !localStream) return;
+    
+    const video = localVideoRef.current;
+    video.srcObject = localStream;
+    
+    // Small delay to ensure DOM is stable before playing
+    const playLocal = () => {
+      if (localVideoRef.current && localVideoRef.current === video) {
+        video.play().catch(e => console.error('Error playing local video:', e));
+      }
+    };
+    
+    const timeoutId = setTimeout(playLocal, 50);
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      const video = remoteVideoRef.current;
-      console.log('🔄 Setting up remote video with stream:', remoteStream.id);
-      console.log('📊 Stream tracks:', remoteStream.getTracks().map(t => ({
-        kind: t.kind,
-        enabled: t.enabled,
-        muted: t.muted,
-        readyState: t.readyState
-      })));
+    if (!remoteVideoRef.current || !remoteStream) return;
+    
+    const video = remoteVideoRef.current;
+    console.log('🔄 Setting up remote video with stream:', remoteStream.id);
+    console.log('📊 Stream tracks:', remoteStream.getTracks().map(t => ({
+      kind: t.kind,
+      enabled: t.enabled,
+      muted: t.muted,
+      readyState: t.readyState
+    })));
+    
+    // Set stream immediately
+    video.srcObject = remoteStream;
+    video.muted = true; // Start muted to avoid audio feedback
+    video.autoplay = true;
+    video.playsInline = true;
+    
+    // Force load the video
+    video.load();
+    
+    // Use a slight delay to ensure DOM is stable
+    const playVideo = () => {
+      // Double-check video element is still mounted
+      if (!remoteVideoRef.current || remoteVideoRef.current !== video) {
+        console.log('⚠️ Video element unmounted, skipping play');
+        return;
+      }
       
-      // Set stream immediately
-      video.srcObject = remoteStream;
-      video.muted = true; // Start muted to avoid audio feedback
-      video.autoplay = true;
-      video.playsInline = true;
-      
-      // Force load the video
-      video.load();
-      
-      // Play the video
       video.play().then(() => {
         console.log('✅ Remote video playing successfully');
         console.log('📺 Video dimensions:', {
@@ -232,25 +262,49 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         });
       }).catch(error => {
         console.error('❌ Remote video play failed:', error);
-        // Try playing again after a small delay
-        setTimeout(() => {
-          video.play().catch(e => console.error('❌ Retry play also failed:', e));
-        }, 100);
+        
+        // Only retry if element is still mounted
+        if (remoteVideoRef.current && remoteVideoRef.current === video) {
+          setTimeout(() => {
+            if (remoteVideoRef.current && remoteVideoRef.current === video) {
+              video.play().catch(e => console.error('❌ Retry play also failed:', e));
+            }
+          }, 100);
+        }
       });
-      
-      // Monitor for track changes
-      remoteStream.getTracks().forEach(track => {
-        track.addEventListener('unmute', () => {
-          console.log('🎉 Track unmuted, refreshing video:', track.kind);
-          // Force video refresh
+    };
+    
+    // Small delay to ensure DOM is stable
+    const timeoutId = setTimeout(playVideo, 50);
+    
+    // Monitor for track changes
+    const trackListeners: (() => void)[] = [];
+    remoteStream.getTracks().forEach(track => {
+      const unmutedHandler = () => {
+        console.log('🎉 Track unmuted, refreshing video:', track.kind);
+        
+        // Check if video is still mounted before refreshing
+        if (remoteVideoRef.current && remoteVideoRef.current === video) {
           const currentTime = video.currentTime;
           video.load();
           video.srcObject = remoteStream;
           video.currentTime = currentTime;
-          video.play().catch(e => console.error('❌ Play after unmute failed:', e));
-        });
-      });
-    }
+          
+          if (remoteVideoRef.current === video) {
+            video.play().catch(e => console.error('❌ Play after unmute failed:', e));
+          }
+        }
+      };
+      
+      track.addEventListener('unmute', unmutedHandler);
+      trackListeners.push(() => track.removeEventListener('unmute', unmutedHandler));
+    });
+    
+    // Cleanup function
+    return () => {
+      clearTimeout(timeoutId);
+      trackListeners.forEach(cleanup => cleanup());
+    };
   }, [remoteStream]);
 
   const startCall = async () => {
@@ -388,6 +442,35 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       console.log('📤 RECEIVER: Sending answer back to caller');
+      
+      // Check connection state and transceivers after answer
+      console.log('📊 RECEIVER: Connection state after answer:', pc.connectionState);
+      console.log('📊 RECEIVER: ICE connection state:', pc.iceConnectionState);
+      console.log('📊 RECEIVER: Signaling state:', pc.signalingState);
+      
+      const transceivers = pc.getTransceivers();
+      console.log('📡 RECEIVER: Transceivers after answer:', transceivers.length);
+      transceivers.forEach((transceiver, index) => {
+        console.log(`📡 RECEIVER: Transceiver ${index}:`, {
+          direction: transceiver.direction,
+          currentDirection: transceiver.currentDirection,
+          mid: transceiver.mid,
+          sender: {
+            track: transceiver.sender.track ? {
+              kind: transceiver.sender.track.kind,
+              enabled: transceiver.sender.track.enabled,
+              readyState: transceiver.sender.track.readyState
+            } : null
+          },
+          receiver: {
+            track: transceiver.receiver.track ? {
+              kind: transceiver.receiver.track.kind,
+              enabled: transceiver.receiver.track.enabled,
+              readyState: transceiver.receiver.track.readyState
+            } : null
+          }
+        });
+      });
 
       sendCustomEvent({
         type: 'video_call_answer',
@@ -397,6 +480,31 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
       setCallState({ isInCall: true, isIncoming: false, isConnecting: false });
       console.log('✅ RECEIVER: Call setup complete, waiting for remote stream');
+      
+      // Add a timeout to check if we receive tracks
+      setTimeout(() => {
+        if (peerConnectionRef.current) {
+          const receivers = peerConnectionRef.current.getReceivers();
+          console.log('⏰ RECEIVER: 5-second check - Receivers:', receivers.length);
+          receivers.forEach((receiver, index) => {
+            console.log(`📡 RECEIVER: Receiver ${index}:`, {
+              track: receiver.track ? {
+                kind: receiver.track.kind,
+                enabled: receiver.track.enabled,
+                muted: receiver.track.muted,
+                readyState: receiver.track.readyState
+              } : 'No track'
+            });
+          });
+          
+          if (!remoteStream) {
+            console.log('⚠️ RECEIVER: Still no remote stream after 5 seconds');
+          } else {
+            console.log('✅ RECEIVER: Remote stream received!', remoteStream.id);
+          }
+        }
+      }, 5000);
+      
       toast.success('Call connected!');
     } catch (error) {
       console.error('❌ RECEIVER: Error accepting call:', error);
@@ -426,26 +534,89 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
   const handleCallAnswer = async (answer: RTCSessionDescriptionInit) => {
     try {
-      console.log('📞 Call answered by:', targetUsername);
-      console.log('📝 Received answer:', answer);
+      console.log('📞 CALLER: Call answered by:', targetUsername);
+      console.log('📝 CALLER: Received answer:', answer);
       
       if (peerConnectionRef.current) {
-        console.log('🔗 Setting remote description (answer)...');
+        console.log('🔗 CALLER: Setting remote description (answer)...');
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('✅ Remote description set successfully');
+        console.log('✅ CALLER: Remote description set successfully');
+        
+        // Check connection state and transceivers
+        console.log('📊 CALLER: Connection state after answer:', peerConnectionRef.current.connectionState);
+        console.log('📊 CALLER: ICE connection state:', peerConnectionRef.current.iceConnectionState);
+        console.log('📊 CALLER: Signaling state:', peerConnectionRef.current.signalingState);
+        
+        const transceivers = peerConnectionRef.current.getTransceivers();
+        console.log('📡 CALLER: Transceivers after answer:', transceivers.length);
+        transceivers.forEach((transceiver, index) => {
+          console.log(`📡 CALLER: Transceiver ${index}:`, {
+            direction: transceiver.direction,
+            currentDirection: transceiver.currentDirection,
+            mid: transceiver.mid,
+            sender: {
+              track: transceiver.sender.track ? {
+                kind: transceiver.sender.track.kind,
+                enabled: transceiver.sender.track.enabled,
+                readyState: transceiver.sender.track.readyState
+              } : null
+            },
+            receiver: {
+              track: transceiver.receiver.track ? {
+                kind: transceiver.receiver.track.kind,
+                enabled: transceiver.receiver.track.enabled,
+                readyState: transceiver.receiver.track.readyState
+              } : null
+            }
+          });
+        });
+        
         setCallState({ isInCall: true, isIncoming: false, isConnecting: false });
+        
+        // Add a timeout to check if caller receives remote tracks from receiver
+        setTimeout(() => {
+          if (peerConnectionRef.current) {
+            const receivers = peerConnectionRef.current.getReceivers();
+            console.log('⏰ CALLER: 5-second check - Receivers:', receivers.length);
+            receivers.forEach((receiver, index) => {
+              console.log(`📡 CALLER: Receiver ${index}:`, {
+                track: receiver.track ? {
+                  kind: receiver.track.kind,
+                  enabled: receiver.track.enabled,
+                  muted: receiver.track.muted,
+                  readyState: receiver.track.readyState
+                } : 'No track'
+              });
+            });
+            
+            if (!remoteStream) {
+              console.log('⚠️ CALLER: Still no remote stream after 5 seconds');
+            } else {
+              console.log('✅ CALLER: Remote stream received!', remoteStream.id);
+            }
+          }
+        }, 5000);
+        
         toast.success('Call connected!');
       } else {
-        console.error('❌ No peer connection available to handle answer');
+        console.error('❌ CALLER: No peer connection available to handle answer');
       }
     } catch (error) {
-      console.error('❌ Error handling answer:', error);
+      console.error('❌ CALLER: Error handling answer:', error);
       toast.error('Call connection failed');
     }
   };
 
   const endCall = () => {
     console.log('📴 Ending call with:', targetUsername);
+    
+    // Clean up video elements first to prevent play errors
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
     
     // Clean up streams
     if (localStream) {
@@ -480,6 +651,14 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     if (ringtoneRef.current) {
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
+    }
+    
+    // Clean up video elements first to prevent play errors
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
     }
     
     // Clean up everything
