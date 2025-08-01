@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from auth import get_current_user
-from models import User
+from models import UserResponse
 from config import settings
 from livekit import api
 import logging
@@ -29,7 +29,7 @@ class TokenRequest(BaseModel):
 @router.post("/token")
 async def get_livekit_token(
     request: TokenRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """Generate a LiveKit access token for the current user"""
     
@@ -83,7 +83,7 @@ async def get_livekit_token(
         )
 
 @router.get("/rooms")
-async def list_rooms(current_user: User = Depends(get_current_user)):
+async def list_rooms(current_user: UserResponse = Depends(get_current_user)):
     """List available LiveKit rooms"""
     
     try:
