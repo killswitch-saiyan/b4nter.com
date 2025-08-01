@@ -111,16 +111,9 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       
       // Listen for track events
       event.track.addEventListener('unmute', () => {
-        console.log('🎉 TRACK UNMUTED:', event.track.kind, '- refreshing video');
-        // Force refresh the video element
-        setRemoteStream(prevStream => {
-          if (prevStream) {
-            const refreshedStream = new MediaStream(prevStream.getTracks());
-            console.log('🔄 Refreshed stream after unmute:', refreshedStream.id);
-            return refreshedStream;
-          }
-          return prevStream;
-        });
+        console.log('🎉 TRACK UNMUTED:', event.track.kind, '- NOT refreshing to preserve stream');
+        // Don't refresh the stream - this was causing the loss of remote stream
+        // The video element will automatically update when the track unmutes
       }, { once: true });
       
       event.track.addEventListener('ended', () => {
@@ -281,19 +274,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     const trackListeners: (() => void)[] = [];
     remoteStream.getTracks().forEach(track => {
       const unmutedHandler = () => {
-        console.log('🎉 Track unmuted, refreshing video:', track.kind);
-        
-        // Check if video is still mounted before refreshing
-        if (remoteVideoRef.current && remoteVideoRef.current === video) {
-          const currentTime = video.currentTime;
-          video.load();
-          video.srcObject = remoteStream;
-          video.currentTime = currentTime;
-          
-          if (remoteVideoRef.current === video) {
-            video.play().catch(e => console.error('❌ Play after unmute failed:', e));
-          }
-        }
+        console.log('🎉 Track unmuted, video should update automatically:', track.kind);
+        // Don't manually refresh - let the video element handle track unmuting naturally
       };
       
       track.addEventListener('unmute', unmutedHandler);
