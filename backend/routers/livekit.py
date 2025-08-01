@@ -2,13 +2,25 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from auth import get_current_user
 from models import User
-import os
+from config import settings
 from livekit import api
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/livekit", tags=["livekit"])
+
+@router.get("/config-check")
+async def check_livekit_config():
+    """Check if LiveKit is configured properly (for debugging)"""
+    return {
+        "livekit_configured": bool(settings.livekit_api_key and settings.livekit_api_secret),
+        "has_api_key": bool(settings.livekit_api_key),
+        "has_api_secret": bool(settings.livekit_api_secret),
+        "livekit_url": settings.livekit_url,
+        "api_key_length": len(settings.livekit_api_key) if settings.livekit_api_key else 0,
+        "secret_length": len(settings.livekit_api_secret) if settings.livekit_api_secret else 0
+    }
 
 class TokenRequest(BaseModel):
     roomName: str
@@ -22,16 +34,19 @@ async def get_livekit_token(
     """Generate a LiveKit access token for the current user"""
     
     try:
-        # LiveKit configuration - you'll need to set these environment variables
-        api_key = os.getenv("LIVEKIT_API_KEY")
-        api_secret = os.getenv("LIVEKIT_API_SECRET")
-        livekit_url = os.getenv("LIVEKIT_URL", "wss://localhost:7880")
+        # LiveKit configuration from settings
+        api_key = settings.livekit_api_key
+        api_secret = settings.livekit_api_secret
+        livekit_url = settings.livekit_url or "wss://localhost:7880"
+        
+        logger.info(f"LiveKit config check - API Key exists: {bool(api_key)}, Secret exists: {bool(api_secret)}, URL: {livekit_url}")
         
         if not api_key or not api_secret:
-            logger.error("LiveKit API key or secret not configured")
+            logger.error(f"LiveKit not configured - API Key: {bool(api_key)}, Secret: {bool(api_secret)}")
+            logger.error("Please set LIVEKIT_API_KEY and LIVEKIT_API_SECRET in your .env file")
             raise HTTPException(
                 status_code=500, 
-                detail="LiveKit not configured properly"
+                detail="LiveKit not configured properly - check environment variables"
             )
         
         # Create token with permissions
@@ -72,9 +87,9 @@ async def list_rooms(current_user: User = Depends(get_current_user)):
     """List available LiveKit rooms"""
     
     try:
-        api_key = os.getenv("LIVEKIT_API_KEY")
-        api_secret = os.getenv("LIVEKIT_API_SECRET")
-        livekit_url = os.getenv("LIVEKIT_URL", "ws://localhost:7880")
+        api_key = settings.livekit_api_key
+        api_secret = settings.livekit_api_secret
+        livekit_url = settings.livekit_url or "ws://localhost:7880"
         
         if not api_key or not api_secret:
             raise HTTPException(

@@ -28,6 +28,8 @@ LIVEKIT_API_SECRET=your_api_secret_here
 LIVEKIT_URL=wss://your-project-name.livekit.cloud
 ```
 
+**Important:** Make sure your `.env` file is in the `backend/` directory, not the root directory.
+
 ### 3. Alternative: Self-Hosted LiveKit Server
 
 If you prefer to self-host:
@@ -91,15 +93,23 @@ See LiveKit docs: https://docs.livekit.io/home/
 
 ## 🐛 Troubleshooting
 
+**Error: "Failed to get LiveKit token"**
+1. Check the config endpoint: `GET /livekit/config-check` (no auth required)
+2. Verify your `.env` file is in the `backend/` directory
+3. Restart the backend server after adding env vars
+4. Check backend logs for detailed error messages
+
 **Error: "LiveKit not configured properly"**
-- Check your `.env` file has the correct LiveKit credentials
-- Restart the backend server after adding env vars
+- Make sure `.env` variables are named exactly: `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_URL`
+- No quotes needed around the values in `.env`
+- Ensure no extra spaces in the `.env` file
 
 **Connection issues:**
-- Verify your LiveKit server URL is correct
+- Verify your LiveKit server URL is correct (starts with `wss://`)
 - Check firewall settings for WebRTC ports
 - Test with LiveKit's example app first
 
 **Token errors:**
 - Ensure user is authenticated (JWT token in localStorage)
 - Check backend logs for token generation errors
+- Verify API keys are correct in LiveKit Cloud dashboard
