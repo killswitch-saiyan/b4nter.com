@@ -45,7 +45,7 @@ const LiveKitVideoCall: React.FC<LiveKitVideoCallProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NTQwODY4NDIsImlzcyI6IkFQSXNFeEs0WmR3NnRaNCIsIm5iZiI6MTc1NDA4NTk0Miwic3ViIjoibWF4IiwidmlkZW8iOnsiY2FuUHVibGlzaCI6dHJ1ZSwiY2FuUHVibGlzaERhdGEiOnRydWUsImNhblN1YnNjcmliZSI6dHJ1ZSwicm9vbSI6IlRlc3QiLCJyb29tSm9pbiI6dHJ1ZX19.GgWJk0c16PvdS8YTCw3AuJKIhNyaGahTkZmuSrDCr1g`,
         },
         body: JSON.stringify({
           roomName,
