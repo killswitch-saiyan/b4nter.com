@@ -41,7 +41,7 @@ const LiveKitVideoCall: React.FC<LiveKitVideoCallProps> = ({
       const roomName = [user.id, targetUserId].sort().join('-');
       
       // Get token from backend
-      const response = await fetch(`${API_BASE}/livekit/token`, {
+      const response = await fetch(`https://b4nter-8xzadz8e.livekit.cloud/livekit/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
