@@ -34,8 +34,33 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   
+  // Persistent remote stream for track accumulation
+  const persistentRemoteStreamRef = useRef<MediaStream>(new MediaStream());
+  
   // Ringtone audio
   const ringtoneRef = useRef<HTMLAudioElement>(null);
+
+  // Debug effect to track remoteStream state changes
+  useEffect(() => {
+    console.log('🔄 REACT STATE: remoteStream changed:', {
+      hasStream: !!remoteStream,
+      streamId: remoteStream?.id,
+      tracksCount: remoteStream?.getTracks().length || 0,
+      timestamp: new Date().toISOString()
+    });
+    
+    if (remoteStream) {
+      remoteStream.getTracks().forEach((track, index) => {
+        console.log(`🔄 REACT STATE: Track ${index}:`, {
+          kind: track.kind,
+          enabled: track.enabled,
+          muted: track.muted,
+          readyState: track.readyState,
+          id: track.id
+        });
+      });
+    }
+  }, [remoteStream]);
 
   const createPeerConnection = () => {
     const pc = new RTCPeerConnection({
@@ -61,88 +86,99 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     };
 
     pc.ontrack = (event) => {
-      console.log('📨 RECEIVED TRACK:', event.track.kind, 'from stream:', event.streams[0]?.id);
+      console.log('📥 TRACK ADDED:', event.track.kind, 'stream:', event.streams[0]?.id);
       console.log('🎥 Track details:', {
         kind: event.track.kind,
         enabled: event.track.enabled,
         muted: event.track.muted,
         readyState: event.track.readyState,
-        label: event.track.label
+        label: event.track.label,
+        id: event.track.id
       });
       
-      // Use the stream from the event if available, otherwise accumulate tracks
-      if (event.streams && event.streams[0]) {
-        const incomingStream = event.streams[0];
-        console.log('📺 USING COMPLETE STREAM:', incomingStream.id, 'tracks:', incomingStream.getTracks().length);
-        
-        // Log all tracks in the incoming stream
-        incomingStream.getTracks().forEach((track, index) => {
-          console.log(`📹 Stream track ${index}:`, {
-            kind: track.kind,
-            enabled: track.enabled,
-            muted: track.muted,
-            readyState: track.readyState,
-            label: track.label
-          });
-        });
-        
-        setRemoteStream(incomingStream);
-        console.log('✅ REMOTE STREAM SET - should trigger video display');
-      } else {
-        console.log('🔄 ACCUMULATING INDIVIDUAL TRACKS');
-        // Accumulate tracks into a single stream
-        setRemoteStream(prevStream => {
-          let tracks = prevStream ? [...prevStream.getTracks()] : [];
-          
-          // Add the new track if it's not already in the stream
-          const existingTrack = tracks.find(t => t.kind === event.track.kind);
-          if (!existingTrack) {
-            tracks.push(event.track);
-            console.log('🔄 Added', event.track.kind, 'track to stream. Total tracks:', tracks.length);
-          } else {
-            console.log('⚠️ Track already exists in stream:', event.track.kind);
-          }
-          
-          const newStream = new MediaStream(tracks);
-          console.log('📺 UPDATED ACCUMULATED STREAM:', newStream.id, 'with', newStream.getTracks().length, 'tracks');
-          return newStream;
-        });
+      // Get the persistent remote stream
+      const persistentStream = persistentRemoteStreamRef.current;
+      const trackKind = event.track.kind;
+      
+      // Remove existing track of the same kind to avoid duplicates
+      const existingTrack = persistentStream.getTracks().find(t => t.kind === trackKind);
+      if (existingTrack) {
+        console.log('🔄 Removing existing', trackKind, 'track:', existingTrack.id);
+        persistentStream.removeTrack(existingTrack);
+        existingTrack.stop();
       }
+      
+      // Add the new track to persistent stream
+      console.log('✅ Adding', trackKind, 'track to persistent stream:', event.track.id);
+      persistentStream.addTrack(event.track);
+      
+      // Log current stream state
+      console.log('📊 Persistent stream after track addition:', {
+        streamId: persistentStream.id,
+        active: persistentStream.active,
+        totalTracks: persistentStream.getTracks().length,
+        videoTracks: persistentStream.getVideoTracks().length,
+        audioTracks: persistentStream.getAudioTracks().length
+      });
+      
+      // Debug individual tracks
+      persistentStream.getTracks().forEach((track, index) => {
+        console.log(`📹 Track ${index}:`, {
+          kind: track.kind,
+          enabled: track.enabled,
+          muted: track.muted,
+          readyState: track.readyState,
+          id: track.id
+        });
+      });
+      
+      // Trigger React re-render by setting the persistent stream
+      setRemoteStream(persistentStream);
+      console.log('✅ Remote stream state updated - should trigger video element update');
       
       // Listen for track events
       event.track.addEventListener('unmute', () => {
-        console.log('🎉 TRACK UNMUTED:', event.track.kind, '- NOT refreshing to preserve stream');
-        // Don't refresh the stream - this was causing the loss of remote stream
-        // The video element will automatically update when the track unmutes
-      }, { once: true });
+        console.log('🎉 TRACK UNMUTED:', event.track.kind, event.track.id);
+      });
       
       event.track.addEventListener('ended', () => {
-        console.log('🔚 TRACK ENDED:', event.track.kind);
+        console.log('🔚 TRACK ENDED:', event.track.kind, event.track.id);
+        // Remove ended track from persistent stream
+        if (persistentStream.getTracks().includes(event.track)) {
+          persistentStream.removeTrack(event.track);
+          console.log('🗑️ Removed ended track from persistent stream');
+        }
       });
     };
 
     pc.onconnectionstatechange = () => {
-      console.log('🔗 Connection state changed:', pc.connectionState);
+      console.log('🌐 Connection state:', pc.connectionState);
       if (pc.connectionState === 'connected') {
         console.log('✅ Call connected successfully');
         console.log('📊 Connection stats:', {
           connectionState: pc.connectionState,
           iceConnectionState: pc.iceConnectionState,
-          iceGatheringState: pc.iceGatheringState
+          iceGatheringState: pc.iceGatheringState,
+          signalingState: pc.signalingState
         });
+      } else if (pc.connectionState === 'disconnected') {
+        console.log('⚠️ Peer connection disconnected');
+      } else if (pc.connectionState === 'failed') {
+        console.error('❌ Peer connection failed');
+        toast.error('Connection failed');
       }
     };
     
     pc.oniceconnectionstatechange = () => {
-      console.log('🧊 ICE connection state:', pc.iceConnectionState);
+      console.log('🔗 ICE state:', pc.iceConnectionState);
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         console.log('🎉 ICE connection established successfully');
         setCallState(prev => ({ ...prev, isConnected: true }));
       } else if (pc.iceConnectionState === 'disconnected') {
         console.log('⚠️ ICE connection disconnected');
       } else if (pc.iceConnectionState === 'failed') {
-        console.error('❌ ICE connection failed');
-        toast.error('Connection failed');
+        console.error('❌ ICE connection failed - ICE didn\'t connect');
+        toast.error('Connection failed - ICE failure');
       }
     };
 
@@ -206,27 +242,43 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   }, [localStream]);
 
   useEffect(() => {
-    if (!remoteVideoRef.current || !remoteStream) return;
+    console.log('🔄 Remote video useEffect triggered - remoteStream:', !!remoteStream, 'remoteVideoRef:', !!remoteVideoRef.current);
+    
+    if (!remoteVideoRef.current || !remoteStream) {
+      console.log('⚠️ Missing video ref or stream:', {
+        hasVideoRef: !!remoteVideoRef.current,
+        hasRemoteStream: !!remoteStream,
+        streamId: remoteStream?.id
+      });
+      return;
+    }
     
     const video = remoteVideoRef.current;
-    console.log('🔄 Setting up remote video with stream:', remoteStream.id);
+    
+    // Debug stream contents
+    console.log('🎥 Remote stream active?', remoteStream.active);
+    console.log('🎤 Audio track enabled?', remoteStream.getAudioTracks()[0]?.enabled);
+    console.log('📹 Video track enabled?', remoteStream.getVideoTracks()[0]?.enabled);
     console.log('📊 Stream tracks:', remoteStream.getTracks().map(t => ({
       kind: t.kind,
       enabled: t.enabled,
       muted: t.muted,
-      readyState: t.readyState
+      readyState: t.readyState,
+      id: t.id
     })));
     
-    // Set stream immediately
+    // Clear srcObject first to force re-render
+    video.srcObject = null;
+    
+    // Set the new stream
     video.srcObject = remoteStream;
-    video.muted = true; // Start muted to avoid audio feedback
+    video.muted = false; // Allow audio
     video.autoplay = true;
     video.playsInline = true;
     
-    // Force load the video
-    video.load();
+    console.log('🔄 Setting up remote video with stream:', remoteStream.id);
     
-    // Use a slight delay to ensure DOM is stable
+    // Play the video
     const playVideo = () => {
       // Double-check video element is still mounted
       if (!remoteVideoRef.current || remoteVideoRef.current !== video) {
@@ -239,24 +291,14 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         console.log('📺 Video dimensions:', {
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
-          readyState: video.readyState
-        });
-        
-        // Check if we actually have video tracks
-        const videoTracks = remoteStream.getVideoTracks();
-        console.log('📹 Video tracks in stream:', videoTracks.length);
-        videoTracks.forEach((track, index) => {
-          console.log(`📹 Video track ${index}:`, {
-            enabled: track.enabled,
-            muted: track.muted,
-            readyState: track.readyState,
-            label: track.label
-          });
+          readyState: video.readyState,
+          currentTime: video.currentTime,
+          duration: video.duration
         });
       }).catch(error => {
         console.error('❌ Remote video play failed:', error);
         
-        // Only retry if element is still mounted
+        // Retry once after a short delay
         if (remoteVideoRef.current && remoteVideoRef.current === video) {
           setTimeout(() => {
             if (remoteVideoRef.current && remoteVideoRef.current === video) {
@@ -270,22 +312,9 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     // Small delay to ensure DOM is stable
     const timeoutId = setTimeout(playVideo, 50);
     
-    // Monitor for track changes
-    const trackListeners: (() => void)[] = [];
-    remoteStream.getTracks().forEach(track => {
-      const unmutedHandler = () => {
-        console.log('🎉 Track unmuted, video should update automatically:', track.kind);
-        // Don't manually refresh - let the video element handle track unmuting naturally
-      };
-      
-      track.addEventListener('unmute', unmutedHandler);
-      trackListeners.push(() => track.removeEventListener('unmute', unmutedHandler));
-    });
-    
     // Cleanup function
     return () => {
       clearTimeout(timeoutId);
-      trackListeners.forEach(cleanup => cleanup());
     };
   }, [remoteStream]);
 
@@ -310,11 +339,11 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Add local tracks - use simple addTrack method
+      // Add local tracks using addTrack (not deprecated addStream)
       console.log('📤 CALLER: Adding local tracks to peer connection');
       stream.getTracks().forEach(track => {
         track.enabled = true;
-        console.log('📤 CALLER: Adding track:', track.kind, track.enabled);
+        console.log('📤 CALLER: Adding track:', track.kind, track.enabled, track.id);
         pc.addTrack(track, stream);
       });
 
@@ -413,10 +442,10 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       console.log('📝 RECEIVER: Setting remote description with offer:', offer);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-      // Add local tracks - use simple addTrack method
+      // Add local tracks using addTrack (not deprecated addStream)
       console.log('📤 RECEIVER: Adding local tracks to peer connection');
       stream.getTracks().forEach(track => {
-        console.log('📤 RECEIVER: Adding track:', track.kind, track.enabled);
+        console.log('📤 RECEIVER: Adding track:', track.kind, track.enabled, track.id);
         pc.addTrack(track, stream);
       });
 
@@ -477,6 +506,18 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
                 readyState: receiver.track.readyState
               } : 'No track'
             });
+          });
+          
+          console.log('🔍 RECEIVER: Current remoteStream state:', {
+            hasRemoteStream: !!remoteStream,
+            streamId: remoteStream?.id,
+            tracksCount: remoteStream?.getTracks().length || 0,
+            videoElement: {
+              hasRef: !!remoteVideoRef.current,
+              srcObject: !!remoteVideoRef.current?.srcObject,
+              readyState: remoteVideoRef.current?.readyState,
+              paused: remoteVideoRef.current?.paused
+            }
           });
           
           if (!remoteStream) {
@@ -571,6 +612,18 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
               });
             });
             
+            console.log('🔍 CALLER: Current remoteStream state:', {
+              hasRemoteStream: !!remoteStream,
+              streamId: remoteStream?.id,
+              tracksCount: remoteStream?.getTracks().length || 0,
+              videoElement: {
+                hasRef: !!remoteVideoRef.current,
+                srcObject: !!remoteVideoRef.current?.srcObject,
+                readyState: remoteVideoRef.current?.readyState,
+                paused: remoteVideoRef.current?.paused
+              }
+            });
+            
             if (!remoteStream) {
               console.log('⚠️ CALLER: Still no remote stream after 5 seconds');
             } else {
@@ -606,9 +659,17 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       setLocalStream(null);
     }
     
-    if (remoteStream) {
-      setRemoteStream(null);
+    // Clean up persistent remote stream
+    if (persistentRemoteStreamRef.current) {
+      persistentRemoteStreamRef.current.getTracks().forEach(track => {
+        persistentRemoteStreamRef.current.removeTrack(track);
+        track.stop();
+      });
+      // Create a fresh persistent stream for next call
+      persistentRemoteStreamRef.current = new MediaStream();
     }
+    
+    setRemoteStream(null);
     
     // Close peer connection
     if (peerConnectionRef.current) {
@@ -649,9 +710,17 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       setLocalStream(null);
     }
     
-    if (remoteStream) {
-      setRemoteStream(null);
+    // Clean up persistent remote stream
+    if (persistentRemoteStreamRef.current) {
+      persistentRemoteStreamRef.current.getTracks().forEach(track => {
+        persistentRemoteStreamRef.current.removeTrack(track);
+        track.stop();
+      });
+      // Create a fresh persistent stream for next call
+      persistentRemoteStreamRef.current = new MediaStream();
     }
+    
+    setRemoteStream(null);
     
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -725,12 +794,12 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
-                  muted={true}
+                  muted={false}
                   controls={false}
                   className="w-full h-full object-cover"
                   style={{ 
-                    minWidth: '100%', 
-                    minHeight: '100%',
+                    width: '100%', 
+                    height: '100%',
                     backgroundColor: '#1f2937'
                   }}
                   onLoadedMetadata={() => {
