@@ -1152,15 +1152,7 @@ const ChatPage: React.FC = () => {
 
           {/* Messages Area - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">
-            {(() => {
-              console.log('🔍 Call channel UI check:', {
-                selectedChannel: selectedChannel?.name,
-                isCallChannel: selectedChannel?.is_call_channel,
-                callType: selectedChannel?.call_type,
-                participants: selectedChannel?.call_participants
-              });
-              return selectedChannel?.is_call_channel;
-            })() ? (
+            {selectedChannel?.is_call_channel ? (
               <div className="text-center py-8">
                 <div className="text-6xl mb-6">
                   {selectedChannel.call_type === 'voice' ? '🔊' : '📹'}

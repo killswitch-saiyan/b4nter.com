@@ -61,20 +61,35 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     };
 
     pc.ontrack = (event) => {
-      console.log('📨 Received track:', event.track.kind, 'from stream:', event.streams[0]?.id);
+      console.log('📨 RECEIVED TRACK:', event.track.kind, 'from stream:', event.streams[0]?.id);
       console.log('🎥 Track details:', {
         kind: event.track.kind,
         enabled: event.track.enabled,
         muted: event.track.muted,
-        readyState: event.track.readyState
+        readyState: event.track.readyState,
+        label: event.track.label
       });
       
       // Use the stream from the event if available, otherwise accumulate tracks
       if (event.streams && event.streams[0]) {
         const incomingStream = event.streams[0];
-        console.log('📺 Using complete stream:', incomingStream.id, 'tracks:', incomingStream.getTracks().length);
+        console.log('📺 USING COMPLETE STREAM:', incomingStream.id, 'tracks:', incomingStream.getTracks().length);
+        
+        // Log all tracks in the incoming stream
+        incomingStream.getTracks().forEach((track, index) => {
+          console.log(`📹 Stream track ${index}:`, {
+            kind: track.kind,
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState,
+            label: track.label
+          });
+        });
+        
         setRemoteStream(incomingStream);
+        console.log('✅ REMOTE STREAM SET - should trigger video display');
       } else {
+        console.log('🔄 ACCUMULATING INDIVIDUAL TRACKS');
         // Accumulate tracks into a single stream
         setRemoteStream(prevStream => {
           let tracks = prevStream ? [...prevStream.getTracks()] : [];
@@ -84,17 +99,19 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
           if (!existingTrack) {
             tracks.push(event.track);
             console.log('🔄 Added', event.track.kind, 'track to stream. Total tracks:', tracks.length);
+          } else {
+            console.log('⚠️ Track already exists in stream:', event.track.kind);
           }
           
           const newStream = new MediaStream(tracks);
-          console.log('📺 Updated stream:', newStream.id, 'with', newStream.getTracks().length, 'tracks');
+          console.log('📺 UPDATED ACCUMULATED STREAM:', newStream.id, 'with', newStream.getTracks().length, 'tracks');
           return newStream;
         });
       }
       
       // Listen for track events
       event.track.addEventListener('unmute', () => {
-        console.log('🎉 Track unmuted:', event.track.kind);
+        console.log('🎉 TRACK UNMUTED:', event.track.kind, '- refreshing video');
         // Force refresh the video element
         setRemoteStream(prevStream => {
           if (prevStream) {
@@ -107,7 +124,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       }, { once: true });
       
       event.track.addEventListener('ended', () => {
-        console.log('🔚 Track ended:', event.track.kind);
+        console.log('🔚 TRACK ENDED:', event.track.kind);
       });
     };
 
@@ -238,28 +255,37 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
   const startCall = async () => {
     try {
+      console.log('🔵 CALLER: Starting call to', targetUsername);
       setCallState({ isInCall: false, isIncoming: false, isConnecting: true });
 
+      console.log('🎥 CALLER: Requesting media stream');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
       });
+      console.log('✅ CALLER: Got media stream:', {
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length,
+        streamId: stream.id
+      });
       setLocalStream(stream);
 
+      console.log('🔗 CALLER: Creating peer connection');
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
-      // Add local tracks
+      // Add local tracks - use simple addTrack method
+      console.log('📤 CALLER: Adding local tracks to peer connection');
       stream.getTracks().forEach(track => {
         track.enabled = true;
-        const transceiver = pc.addTransceiver(track, {
-          direction: 'sendrecv',
-          streams: [stream]
-        });
+        console.log('📤 CALLER: Adding track:', track.kind, track.enabled);
+        pc.addTrack(track, stream);
       });
 
+      console.log('📞 CALLER: Creating offer');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      console.log('📤 CALLER: Sending offer to receiver');
 
       sendCustomEvent({
         type: 'video_call_offer',
@@ -268,9 +294,10 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         offer: offer
       });
 
+      console.log('✅ CALLER: Call initiated, waiting for answer');
       toast.success(`Calling ${targetUsername}...`);
     } catch (error) {
-      console.error('Error starting call:', error);
+      console.error('❌ CALLER: Error starting call:', error);
       toast.error('Failed to start call');
       setCallState({ isInCall: false, isIncoming: false, isConnecting: false });
     }
@@ -319,6 +346,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
 
   const acceptCall = async () => {
     try {
+      console.log('🟢 RECEIVER: Starting acceptCall process');
+      
       // Stop ringtone
       if (ringtoneRef.current) {
         ringtoneRef.current.pause();
@@ -327,49 +356,38 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       
       setCallState({ isInCall: false, isIncoming: false, isConnecting: true });
 
+      console.log('🎥 RECEIVER: Requesting media stream');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
       });
+      console.log('✅ RECEIVER: Got media stream:', {
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length,
+        streamId: stream.id
+      });
       setLocalStream(stream);
 
+      console.log('🔗 RECEIVER: Creating peer connection');
       const pc = createPeerConnection();
       peerConnectionRef.current = pc;
 
       // Set remote description first
       const offer = (window as any).pendingOffer;
+      console.log('📝 RECEIVER: Setting remote description with offer:', offer);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-      // Add local tracks to existing transceivers
-      const transceivers = pc.getTransceivers();
-      
-      for (const track of stream.getTracks()) {
-        track.enabled = true;
-        
-        const transceiver = transceivers.find(t => 
-          t.receiver.track?.kind === track.kind && !t.sender.track
-        );
-        
-        if (transceiver) {
-          try {
-            await transceiver.sender.replaceTrack(track);
-            transceiver.direction = 'sendrecv';
-          } catch (error) {
-            pc.addTransceiver(track, {
-              direction: 'sendrecv',
-              streams: [stream]
-            });
-          }
-        } else {
-          pc.addTransceiver(track, {
-            direction: 'sendrecv',
-            streams: [stream]
-          });
-        }
-      }
+      // Add local tracks - use simple addTrack method
+      console.log('📤 RECEIVER: Adding local tracks to peer connection');
+      stream.getTracks().forEach(track => {
+        console.log('📤 RECEIVER: Adding track:', track.kind, track.enabled);
+        pc.addTrack(track, stream);
+      });
 
+      console.log('📞 RECEIVER: Creating answer');
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      console.log('📤 RECEIVER: Sending answer back to caller');
 
       sendCustomEvent({
         type: 'video_call_answer',
@@ -378,9 +396,10 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       });
 
       setCallState({ isInCall: true, isIncoming: false, isConnecting: false });
+      console.log('✅ RECEIVER: Call setup complete, waiting for remote stream');
       toast.success('Call connected!');
     } catch (error) {
-      console.error('Error accepting call:', error);
+      console.error('❌ RECEIVER: Error accepting call:', error);
       toast.error('Failed to accept call');
       setCallState({ isInCall: false, isIncoming: false, isConnecting: false });
     }
