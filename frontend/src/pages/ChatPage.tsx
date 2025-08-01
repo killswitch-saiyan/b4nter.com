@@ -7,8 +7,7 @@ import MessageInput from '../components/MessageInput';
 import MessageDisplay from '../components/MessageDisplay';
 import EncryptionStatus from '../components/EncryptionStatus';
 import UserProfileDropdown from '../components/UserProfileDropdown';
-import NewCallControls from '../components/NewCallControls';
-import SimpleVideoCall from '../components/SimpleVideoCall';
+import LiveKitVideoCall from '../components/LiveKitVideoCall';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -1115,7 +1114,7 @@ const ChatPage: React.FC = () => {
               </div>
               <div className="flex items-center space-x-4">
                 {selectedDMUser && !isBlocked && (
-                  <SimpleVideoCall
+                  <LiveKitVideoCall
                     targetUserId={selectedDMUser.id}
                     targetUsername={selectedDMUser.username}
                   />
@@ -1195,14 +1194,9 @@ const ChatPage: React.FC = () => {
                     });
                     
                     return (
-                      <NewCallControls
+                      <LiveKitVideoCall
                         targetUserId={targetUserId}
                         targetUsername={targetUsername}
-                        onCallEnd={handleEndCall}
-                        socket={socket}
-                        isGlobal={false}
-                        currentChannelId={selectedChannel.id}
-                        acceptedCall={selectedChannel.id === acceptedCall?.channelId ? acceptedCall : undefined}
                       />
                     );
                   })()}
@@ -1521,27 +1515,7 @@ const ChatPage: React.FC = () => {
         </div>
       )}
       
-      {/* Global NewCallControls for WebRTC connections */}
-      {incomingCall && (
-        <NewCallControls
-          targetUserId={incomingCall.from}
-          targetUsername={incomingCall.fromName}
-          onCallEnd={() => {
-            console.log('🔚 Incoming call NewCallControls onCallEnd triggered');
-            // Don't delete channel here - let the actual NewCallControls component handle it
-            stopRingtone();
-            setIncomingCall(null);
-            // Switch back to a regular channel
-            const regularChannels = channels.filter(ch => !ch.is_call_channel);
-            if (regularChannels.length > 0) {
-              setSelectedChannel(regularChannels[0]);
-            }
-          }}
-          socket={socket}
-          isGlobal={true}
-          acceptedCall={acceptedCall}
-        />
-      )}
+      {/* LiveKit handles incoming calls automatically through room joining */}
       
       
       {/* Hidden audio element for ringtone */}
