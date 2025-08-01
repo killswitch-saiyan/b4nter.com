@@ -1115,18 +1115,9 @@ const ChatPage: React.FC = () => {
               </div>
               <div className="flex items-center space-x-4">
                 {selectedDMUser && !isBlocked && (
-                  <NewCallControls
+                  <SimpleVideoCall
                     targetUserId={selectedDMUser.id}
                     targetUsername={selectedDMUser.username}
-                    onCallEnd={() => {
-                      // Switch back to regular channel after call ends
-                      const regularChannels = channels.filter(ch => !ch.is_call_channel);
-                      if (regularChannels.length > 0) {
-                        setSelectedChannel(regularChannels[0]);
-                      }
-                    }}
-                    socket={socket}
-                    isGlobal={false}
                   />
                 )}
                 {selectedDMUser && (
@@ -1560,14 +1551,6 @@ const ChatPage: React.FC = () => {
         />
       )}
       
-      {/* Global SimpleVideoCall components for all users to prevent unmounting */}
-      {users.map(dmUser => (
-        <SimpleVideoCall
-          key={`videocall-${dmUser.id}`}
-          targetUserId={dmUser.id}
-          targetUsername={dmUser.username}
-        />
-      ))}
       
       {/* Hidden audio element for ringtone */}
       <audio
