@@ -65,6 +65,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [streamUpdateCounter, setStreamUpdateCounter] = useState(0);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const [currentCallChannel, setCurrentCallChannel] = useState<string | null>(null);
   
@@ -197,9 +198,16 @@ const NewCallControls: React.FC<CallControlsProps> = ({
         audioTracks: persistentStream.getAudioTracks().length
       });
       
-      // Trigger React re-render by setting the persistent stream
-      setRemoteStream(persistentStream);
-      console.log('✅ Remote stream state updated - should trigger video element update');
+      // Create a new MediaStream instance to trigger React re-render
+      // React won't detect changes if we use the same object reference
+      const newStream = new MediaStream(persistentStream.getTracks());
+      setRemoteStream(newStream);
+      setStreamUpdateCounter(prev => prev + 1);
+      console.log('✅ Remote stream state updated with new instance - should trigger video element update', {
+        streamId: newStream.id,
+        tracks: newStream.getTracks().length,
+        updateCounter: streamUpdateCounter + 1
+      });
       
       // Listen for track events
       event.track.addEventListener('unmute', () => {
@@ -559,7 +567,7 @@ const NewCallControls: React.FC<CallControlsProps> = ({
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [remoteStream]);
+  }, [remoteStream, streamUpdateCounter]);
 
   // Video call UI
   console.log('🎥 Video UI check:', {

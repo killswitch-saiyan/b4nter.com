@@ -28,6 +28,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
   // Media streams
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [streamUpdateCounter, setStreamUpdateCounter] = useState(0);
   
   // WebRTC
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -46,7 +47,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
       hasStream: !!remoteStream,
       streamId: remoteStream?.id,
       tracksCount: remoteStream?.getTracks().length || 0,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      streamActive: remoteStream?.active
     });
     
     if (remoteStream) {
@@ -59,6 +61,8 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
           id: track.id
         });
       });
+    } else {
+      console.log('⚠️ REACT STATE: remoteStream is null/undefined');
     }
   }, [remoteStream]);
 
@@ -132,9 +136,16 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
         });
       });
       
-      // Trigger React re-render by setting the persistent stream
-      setRemoteStream(persistentStream);
-      console.log('✅ Remote stream state updated - should trigger video element update');
+      // Create a new MediaStream instance to trigger React re-render
+      // React won't detect changes if we use the same object reference
+      const newStream = new MediaStream(persistentStream.getTracks());
+      setRemoteStream(newStream);
+      setStreamUpdateCounter(prev => prev + 1);
+      console.log('✅ Remote stream state updated with new instance - should trigger video element update', {
+        streamId: newStream.id,
+        tracks: newStream.getTracks().length,
+        updateCounter: streamUpdateCounter + 1
+      });
       
       // Listen for track events
       event.track.addEventListener('unmute', () => {
@@ -316,7 +327,7 @@ const SimpleVideoCall: React.FC<SimpleVideoCallProps> = ({ targetUserId, targetU
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [remoteStream]);
+  }, [remoteStream, streamUpdateCounter]);
 
   const startCall = async () => {
     try {
