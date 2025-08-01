@@ -8,8 +8,7 @@ import { Room, RoomOptions, VideoPresets } from 'livekit-client';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 
-// Import LiveKit styles
-import '@livekit/components-styles';
+// LiveKit styles are handled by the components automatically
 
 interface LiveKitVideoCallProps {
   targetUserId: string;

@@ -72,11 +72,13 @@ This ensures both users always join the same room regardless of who starts the c
 
 ## 🎨 Customization
 
-The `LiveKitVideoCall` component uses LiveKit's default theme. You can customize:
+The `LiveKitVideoCall` component uses LiveKit's built-in styling. You can customize:
 
-- Theme colors in CSS
 - Room options (resolution, adaptive streaming, etc.)
 - UI components (hide/show chat, controls, etc.)
+- Custom CSS overrides for styling
+
+The component automatically includes all necessary styles. No additional CSS imports needed.
 
 See LiveKit docs: https://docs.livekit.io/home/
 
