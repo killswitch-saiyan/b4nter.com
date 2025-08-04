@@ -14,24 +14,17 @@ The LiveKit components have been archived and replaced with a custom WebRTC vide
 
 ### Backend
 - WebSocket handlers for video call invitations in `websocket_manager.py`
-- SFU server for WebRTC signaling in `video-sfu-server/`
+- WebRTC signaling integrated into existing chat WebSocket
 
 ## 🚀 Setup Instructions
 
-### 1. Start the SFU Server
-```bash
-cd video-sfu-server
-npm start
-```
-The server will run on port 8080 and handle WebRTC signaling.
-
-### 2. Start Your Backend
+### 1. Start Your Backend
 ```bash
 cd backend
 python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. Start Your Frontend
+### 2. Start Your Frontend
 ```bash
 cd frontend
 npm run dev
@@ -42,12 +35,12 @@ npm run dev
 ### Call Flow:
 1. **User A clicks "📹 Video Call" button** → Sends invitation via existing WebSocket
 2. **User B gets incoming call modal** → Can Accept or Reject
-3. **If accepted** → Both users connect to the same WebRTC room via SFU server
+3. **If accepted** → Both users connect to the same WebRTC room via frontend peer-to-peer signaling
 4. **Video call begins** → Real-time video/audio communication
 
 ### Architecture:
-- **Chat WebSocket** (port 8000) - Handles call invitations/responses
-- **SFU Server** (port 8080) - Handles WebRTC signaling and peer connections
+- **Chat WebSocket** (port 8000) - Handles call invitations/responses AND WebRTC signaling
+- **Frontend SFU Logic** - Manages WebRTC rooms and participant coordination in the browser
 - **WebRTC** - Direct peer-to-peer video/audio streams
 
 ## 🔧 Features
@@ -71,7 +64,7 @@ npm run dev
 ## 🚨 Troubleshooting
 
 **Call not connecting?**
-- Check if SFU server is running on port 8080
+- Check if backend WebSocket server is running on port 8000
 - Check browser console for WebRTC errors
 - Ensure camera/microphone permissions are granted
 

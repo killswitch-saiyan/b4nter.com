@@ -7,7 +7,7 @@ interface Participant {
 }
 
 export const useSFUConnection = () => {
-  const { sendCustomEvent, socket } = useWebSocket();
+  const { sendCustomEvent } = useWebSocket();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
@@ -18,6 +18,7 @@ export const useSFUConnection = () => {
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const currentRoomId = useRef<string | null>(null);
+  const currentUserName = useRef<string | null>(null);
 
   // ICE servers configuration
   const iceServers = [
@@ -67,11 +68,12 @@ export const useSFUConnection = () => {
 
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
-      if (event.candidate && socket?.readyState === WebSocket.OPEN) {
+      if (event.candidate && currentRoomId.current) {
         sendCustomEvent({
-          type: 'ice-candidate',
+          type: 'webrtc_ice_candidate',
           candidate: event.candidate,
-          targetId: participantId,
+          roomId: currentRoomId.current,
+          targetParticipantId: participantId,
         });
       }
     };
@@ -90,171 +92,183 @@ export const useSFUConnection = () => {
     return peerConnection;
   }, []);
 
-  // Connect to SFU via existing WebSocket
+  // Connect to video room (frontend-only SFU approach)
   const connectToSFU = useCallback(async (roomId: string, userName: string, stream: MediaStream) => {
     return new Promise<void>((resolve, reject) => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
+      try {
+        currentRoomId.current = roomId;
+        currentUserName.current = userName;
+        setIsConnected(true);
+        
+        console.log(`🎥 Joining video room: ${roomId} as ${userName}`);
+        
+        // Announce joining to other participants via WebSocket
+        sendCustomEvent({
+          type: 'webrtc_join_room',
+          roomId,
+          participantId: userName, // Using userName as participantId for simplicity
+          participantName: userName
+        });
+        
+        // Start with empty participants list - will be populated as others respond
+        setParticipants([]);
+        
+        // Resolve immediately since this is a peer-to-peer approach
+        resolve();
+      } catch (error) {
+        console.error('Failed to join video room:', error);
+        reject(error);
       }
-
-      currentRoomId.current = roomId;
-      setIsConnected(true);
-      
-      // Join room via existing WebSocket
-      const joinMessage = {
-        type: 'join-room',
-        roomId,
-        userName,
-      };
-      console.log('📤 Sending join-room message via existing WebSocket:', joinMessage);
-      sendCustomEvent(joinMessage);
-      
-      // Set up a temporary resolver for the joined-room response
-      const handleJoinedRoom = (event: any) => {
-        const data = event.detail;
-        if (data.roomId === roomId) {
-          console.log('Successfully joined room:', data.roomId);
-          setParticipants(data.participants || []);
-          window.removeEventListener('sfu-joined-room', handleJoinedRoom);
-          resolve();
-        }
-      };
-      
-      const handleError = (event: any) => {
-        const data = event.detail;
-        console.error('SFU error:', data.message);
-        window.removeEventListener('sfu-error', handleError);
-        window.removeEventListener('sfu-joined-room', handleJoinedRoom);
-        reject(new Error(data.message));
-      };
-
-      window.addEventListener('sfu-joined-room', handleJoinedRoom);
-      window.addEventListener('sfu-error', handleError);
-      
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        window.removeEventListener('sfu-joined-room', handleJoinedRoom);
-        window.removeEventListener('sfu-error', handleError);
-        reject(new Error('Connection timeout'));
-      }, 10000);
     });
-  }, [socket, sendCustomEvent]);
+  }, [sendCustomEvent]);
 
-  // Event listeners for SFU messages
+  // Event listeners for WebRTC messages via existing WebSocket
   useEffect(() => {
-    const handleUserJoined = async (event: any) => {
+    const handleParticipantJoined = async (event: any) => {
       const data = event.detail;
-      console.log('User joined:', data.participant);
-      setParticipants(prev => [...prev, data.participant]);
-      
-      // Create offer for new participant
-      if (localStreamRef.current) {
-        const peerConnection = createPeerConnection(data.participant.id);
+      // Only handle if it's for our current room and not from ourselves
+      if (data.channelId === currentRoomId.current && data.participantName !== currentUserName.current) {
+        console.log('Participant joined room:', data.participantName);
+        const participant = { id: data.participantId, name: data.participantName };
+        setParticipants(prev => {
+          if (!prev.find(p => p.id === participant.id)) {
+            return [...prev, participant];
+          }
+          return prev;
+        });
+        
+        // Create offer for new participant if we have local stream
+        if (localStreamRef.current) {
+          const peerConnection = createPeerConnection(data.participantId);
+          try {
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            sendCustomEvent({
+              type: 'webrtc_offer',
+              offer: offer,
+              channelId: currentRoomId.current,
+              participantId: currentUserName.current,
+              participantName: currentUserName.current,
+              targetParticipantId: data.participantId
+            });
+          } catch (error) {
+            console.error('Failed to create offer:', error);
+          }
+        }
+      }
+    };
+
+    const handleParticipantLeft = (event: any) => {
+      const data = event.detail;
+      if (data.channelId === currentRoomId.current) {
+        console.log('Participant left room:', data.participantId);
+        setParticipants(prev => prev.filter(p => p.id !== data.participantId));
+        
+        // Close peer connection
+        const pc = peerConnections.current.get(data.participantId);
+        if (pc) {
+          pc.close();
+          peerConnections.current.delete(data.participantId);
+        }
+        
+        // Remove remote stream
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(data.participantId);
+          return newMap;
+        });
+      }
+    };
+
+    const handleWebRTCOffer = async (event: any) => {
+      const data = event.detail;
+      // Only handle offers for our room and targeted at us
+      if (data.channelId === currentRoomId.current && data.targetParticipantId === currentUserName.current) {
+        console.log('Received WebRTC offer from:', data.participantName);
+        const peerConnection = createPeerConnection(data.participantId);
+        
         try {
-          const offer = await peerConnection.createOffer();
-          await peerConnection.setLocalDescription(offer);
+          await peerConnection.setRemoteDescription(data.offer);
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
           
           sendCustomEvent({
-            type: 'offer',
-            offer: offer,
-            targetId: data.participant.id,
+            type: 'webrtc_answer',
+            answer: answer,
+            channelId: currentRoomId.current,
+            participantId: currentUserName.current,
+            targetParticipantId: data.participantId
           });
         } catch (error) {
-          console.error('Failed to create offer:', error);
+          console.error('Failed to handle WebRTC offer:', error);
         }
       }
     };
 
-    const handleUserLeft = (event: any) => {
+    const handleWebRTCAnswer = async (event: any) => {
       const data = event.detail;
-      console.log('User left:', data.participantId);
-      setParticipants(prev => prev.filter(p => p.id !== data.participantId));
-      
-      // Close peer connection
-      const pc = peerConnections.current.get(data.participantId);
-      if (pc) {
-        pc.close();
-        peerConnections.current.delete(data.participantId);
-      }
-      
-      // Remove remote stream
-      setRemoteStreams(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(data.participantId);
-        return newMap;
-      });
-    };
-
-    const handleOffer = async (event: any) => {
-      const data = event.detail;
-      console.log('Received offer from:', data.senderId);
-      const peerConnection = createPeerConnection(data.senderId);
-      
-      try {
-        await peerConnection.setRemoteDescription(data.offer);
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        
-        sendCustomEvent({
-          type: 'answer',
-          answer: answer,
-          targetId: data.senderId,
-        });
-      } catch (error) {
-        console.error('Failed to handle offer:', error);
-      }
-    };
-
-    const handleAnswer = async (event: any) => {
-      const data = event.detail;
-      console.log('Received answer from:', data.senderId);
-      const peerConnection = peerConnections.current.get(data.senderId);
-      if (peerConnection) {
-        try {
-          await peerConnection.setRemoteDescription(data.answer);
-        } catch (error) {
-          console.error('Failed to set remote description:', error);
+      if (data.channelId === currentRoomId.current && data.targetParticipantId === currentUserName.current) {
+        console.log('Received WebRTC answer from:', data.participantId);
+        const peerConnection = peerConnections.current.get(data.participantId);
+        if (peerConnection) {
+          try {
+            await peerConnection.setRemoteDescription(data.answer);
+          } catch (error) {
+            console.error('Failed to set remote description:', error);
+          }
         }
       }
     };
 
-    const handleIceCandidate = async (event: any) => {
+    const handleWebRTCIceCandidate = async (event: any) => {
       const data = event.detail;
-      console.log('Received ICE candidate from:', data.senderId);
-      const peerConnection = peerConnections.current.get(data.senderId);
-      if (peerConnection && data.candidate) {
-        try {
-          await peerConnection.addIceCandidate(data.candidate);
-        } catch (error) {
-          console.error('Failed to add ICE candidate:', error);
+      if (data.channelId === currentRoomId.current && data.targetParticipantId === currentUserName.current) {
+        console.log('Received WebRTC ICE candidate from:', data.participantId);
+        const peerConnection = peerConnections.current.get(data.participantId);
+        if (peerConnection && data.candidate) {
+          try {
+            await peerConnection.addIceCandidate(data.candidate);
+          } catch (error) {
+            console.error('Failed to add ICE candidate:', error);
+          }
         }
       }
     };
 
-    // Add event listeners
-    window.addEventListener('sfu-user-joined', handleUserJoined);
-    window.addEventListener('sfu-user-left', handleUserLeft);
-    window.addEventListener('sfu-offer', handleOffer);
-    window.addEventListener('sfu-answer', handleAnswer);
-    window.addEventListener('sfu-ice-candidate', handleIceCandidate);
+    // Add event listeners for existing WebSocket events
+    window.addEventListener('webrtc-participant-joined', handleParticipantJoined);
+    window.addEventListener('webrtc-participant-left', handleParticipantLeft);
+    window.addEventListener('webrtc-message', handleWebRTCOffer); // For offers
+    window.addEventListener('webrtc-message', handleWebRTCAnswer); // For answers  
+    window.addEventListener('webrtc-message', handleWebRTCIceCandidate); // For ICE candidates
 
     // Cleanup
     return () => {
-      window.removeEventListener('sfu-user-joined', handleUserJoined);
-      window.removeEventListener('sfu-user-left', handleUserLeft);
-      window.removeEventListener('sfu-offer', handleOffer);
-      window.removeEventListener('sfu-answer', handleAnswer);
-      window.removeEventListener('sfu-ice-candidate', handleIceCandidate);
+      window.removeEventListener('webrtc-participant-joined', handleParticipantJoined);
+      window.removeEventListener('webrtc-participant-left', handleParticipantLeft);
+      window.removeEventListener('webrtc-message', handleWebRTCOffer);
+      window.removeEventListener('webrtc-message', handleWebRTCAnswer);
+      window.removeEventListener('webrtc-message', handleWebRTCIceCandidate);
     };
   }, [createPeerConnection, sendCustomEvent]);
 
-  // Disconnect from SFU
+  // Disconnect from video room
   const disconnect = useCallback(() => {
-    console.log('Disconnecting from SFU');
+    console.log('Disconnecting from video room');
+    
+    // Notify others that we're leaving
+    if (currentRoomId.current && currentUserName.current) {
+      sendCustomEvent({
+        type: 'webrtc_leave_room',
+        channelId: currentRoomId.current,
+        participantId: currentUserName.current
+      });
+    }
     
     setIsConnected(false);
     currentRoomId.current = null;
+    currentUserName.current = null;
 
     // Close all peer connections
     peerConnections.current.forEach((pc) => {
@@ -276,7 +290,7 @@ export const useSFUConnection = () => {
     setLocalStream(null);
     setIsAudioEnabled(true);
     setIsVideoEnabled(true);
-  }, []);
+  }, [sendCustomEvent]);
 
   // Toggle audio
   const toggleAudio = useCallback(() => {
