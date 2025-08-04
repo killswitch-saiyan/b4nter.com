@@ -13,14 +13,39 @@ router = APIRouter(prefix="/livekit", tags=["livekit"])
 @router.get("/config-check")
 async def check_livekit_config():
     """Check if LiveKit is configured properly (for debugging)"""
-    return {
-        "livekit_configured": bool(settings.livekit_api_key and settings.livekit_api_secret),
-        "has_api_key": bool(settings.livekit_api_key),
-        "has_api_secret": bool(settings.livekit_api_secret),
-        "livekit_url": settings.livekit_url,
-        "api_key_length": len(settings.livekit_api_key) if settings.livekit_api_key else 0,
-        "secret_length": len(settings.livekit_api_secret) if settings.livekit_api_secret else 0
-    }
+    try:
+        # Test token generation
+        if settings.livekit_api_key and settings.livekit_api_secret:
+            token = AccessToken(settings.livekit_api_key, settings.livekit_api_secret)
+            token.identity = "test_user"
+            token.name = "test_user"
+            video_grants = VideoGrants(
+                room_join=True,
+                room="test-room",
+                can_publish=True,
+                can_subscribe=True,
+                can_publish_data=True,
+            )
+            token.video = video_grants
+            test_jwt = token.to_jwt()
+            token_works = len(test_jwt) > 0
+        else:
+            token_works = False
+            
+        return {
+            "livekit_configured": bool(settings.livekit_api_key and settings.livekit_api_secret),
+            "has_api_key": bool(settings.livekit_api_key),
+            "has_api_secret": bool(settings.livekit_api_secret),
+            "livekit_url": settings.livekit_url,
+            "api_key_length": len(settings.livekit_api_key) if settings.livekit_api_key else 0,
+            "secret_length": len(settings.livekit_api_secret) if settings.livekit_api_secret else 0,
+            "token_generation_works": token_works
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "livekit_configured": False
+        }
 
 class TokenRequest(BaseModel):
     roomName: str
@@ -62,7 +87,7 @@ async def get_livekit_token(
             can_subscribe=True,
             can_publish_data=True,
         )
-        token.add_grant(video_grants)
+        token.video = video_grants
         
         jwt_token = token.to_jwt()
         
