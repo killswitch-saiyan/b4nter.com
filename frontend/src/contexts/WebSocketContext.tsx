@@ -255,6 +255,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           case 'webrtc_offer':
           case 'webrtc_answer':
           case 'webrtc_ice_candidate':
+          case 'webrtc_room_query':
+          case 'webrtc_room_response':
+          case 'webrtc_join_room':
+          case 'webrtc_leave_room':
           case 'video_call_offer':
           case 'video_call_answer':
             // Pass WebRTC messages to the CallControls component if handler is registered
@@ -282,6 +286,68 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           // Video call messages
           case 'video_call_invite':
             console.log('Video call invitation received:', data);
+            
+            // Play ringtone sound
+            try {
+              // Create a simple ringtone using Web Audio API
+              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const oscillator = audioContext.createOscillator();
+              const gainNode = audioContext.createGain();
+              
+              oscillator.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              
+              oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+              gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+              
+              // Play ringtone pattern: beep-beep-pause-beep-beep
+              oscillator.start(audioContext.currentTime);
+              oscillator.stop(audioContext.currentTime + 0.2);
+              
+              setTimeout(() => {
+                const osc2 = audioContext.createOscillator();
+                const gain2 = audioContext.createGain();
+                osc2.connect(gain2);
+                gain2.connect(audioContext.destination);
+                osc2.frequency.setValueAtTime(800, audioContext.currentTime);
+                gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+                osc2.start(audioContext.currentTime);
+                osc2.stop(audioContext.currentTime + 0.2);
+              }, 300);
+              
+              // Repeat every 2 seconds until call is answered/rejected
+              const ringtoneInterval = setInterval(() => {
+                try {
+                  const osc = audioContext.createOscillator();
+                  const gain = audioContext.createGain();
+                  osc.connect(gain);
+                  gain.connect(audioContext.destination);
+                  osc.frequency.setValueAtTime(800, audioContext.currentTime);
+                  gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+                  osc.start(audioContext.currentTime);
+                  osc.stop(audioContext.currentTime + 0.2);
+                  
+                  setTimeout(() => {
+                    const osc2 = audioContext.createOscillator();
+                    const gain2 = audioContext.createGain();
+                    osc2.connect(gain2);
+                    gain2.connect(audioContext.destination);
+                    osc2.frequency.setValueAtTime(800, audioContext.currentTime);
+                    gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    osc2.start(audioContext.currentTime);
+                    osc2.stop(audioContext.currentTime + 0.2);
+                  }, 300);
+                } catch (e) {
+                  clearInterval(ringtoneInterval);
+                }
+              }, 2000);
+              
+              // Store interval to stop it later
+              (window as any).videoCallRingtone = ringtoneInterval;
+            } catch (error) {
+              console.warn('Could not play ringtone:', error);
+            }
+            
             // Show browser notification for incoming call
             if ('Notification' in window && Notification.permission === 'granted') {
               new Notification(`Incoming Video Call from ${data.caller_name}`, {
@@ -296,14 +362,29 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             break;
           case 'video_call_accept':
             console.log('Video call accepted:', data);
+            // Stop ringtone
+            if ((window as any).videoCallRingtone) {
+              clearInterval((window as any).videoCallRingtone);
+              (window as any).videoCallRingtone = null;
+            }
             window.dispatchEvent(new CustomEvent('video-call-accept', { detail: data }));
             break;
           case 'video_call_reject':
             console.log('Video call rejected:', data);
+            // Stop ringtone
+            if ((window as any).videoCallRingtone) {
+              clearInterval((window as any).videoCallRingtone);
+              (window as any).videoCallRingtone = null;
+            }
             window.dispatchEvent(new CustomEvent('video-call-reject', { detail: data }));
             break;
           case 'video_call_end':
             console.log('Video call ended:', data);
+            // Stop ringtone
+            if ((window as any).videoCallRingtone) {
+              clearInterval((window as any).videoCallRingtone);
+              (window as any).videoCallRingtone = null;
+            }
             window.dispatchEvent(new CustomEvent('video-call-end', { detail: data }));
             break;
           // New WebRTC multi-user signaling messages

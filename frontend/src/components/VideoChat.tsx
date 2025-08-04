@@ -21,23 +21,22 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
   const { user } = useAuth();
   const { sendCustomEvent } = useWebSocket();
   
-  const [isConnected, setIsConnected] = useState(false);
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
-  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [roomId, setRoomId] = useState<string>('');
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const {
+    participants,
+    localStream,
+    remoteStreams,
+    isAudioEnabled,
+    isVideoEnabled,
+    isConnected,
     connectToSFU,
     disconnect,
     initializeMedia,
     toggleAudio,
     toggleVideo,
-    peerConnections,
-    ws
+    peerConnections
   } = useSFUConnection();
 
   // Generate room ID from user IDs (same room for both users)
@@ -63,7 +62,6 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
           setRoomId(initialRoomId);
           try {
             await connectToSFU(initialRoomId, user.username, stream);
-            setIsConnected(true);
             console.log('Successfully auto-joined room:', initialRoomId);
           } catch (error) {
             console.error('Failed to auto-join room:', error);
@@ -96,7 +94,6 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
       console.log('Local stream tracks:', localStream.getTracks().map(t => t.kind));
       
       await connectToSFU(room, user.username, localStream);
-      setIsConnected(true);
       
       // Send invitation to target user
       sendCustomEvent({
