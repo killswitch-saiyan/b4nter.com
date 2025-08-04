@@ -8,6 +8,7 @@ import MessageDisplay from '../components/MessageDisplay';
 import EncryptionStatus from '../components/EncryptionStatus';
 import UserProfileDropdown from '../components/UserProfileDropdown';
 import VideoCallButton from '../components/VideoCallButton';
+import MultiUserVideoButton from '../components/MultiUserVideoButton';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -977,6 +978,7 @@ const ChatPage: React.FC = () => {
             <span className="text-sm text-gray-300 dark:text-dark-200" style={{fontFamily: 'Cabin, sans-serif'}}>Start talking smack!</span>
           </div>
           <div className="flex items-center space-x-4">
+            <MultiUserVideoButton />
             <UserProfileDropdown onAvatarUpdate={refreshMessages} />
             <button
               onClick={() => setIsDark((d) => !d)}

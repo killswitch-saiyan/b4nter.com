@@ -351,6 +351,11 @@ class WebSocketManager:
                     await self.handle_video_call_reject(user_id, message)
                 elif message_type == 'video_call_end':
                     await self.handle_video_call_end(user_id, message)
+                # New WebRTC multi-user video chat handlers
+                elif message_type == 'webrtc_join_room':
+                    await self.handle_webrtc_join_room(user_id, message)
+                elif message_type == 'webrtc_leave_room':
+                    await self.handle_webrtc_leave_room(user_id, message)
                 else:
                     logger.warning(f"Unknown message type: {message_type}")
         except WebSocketDisconnect:
@@ -456,49 +461,116 @@ class WebSocketManager:
                 self.disconnect(target_user_id)
 
     async def handle_webrtc_offer(self, user_id: str, message: dict):
-        """Handle WebRTC offer"""
+        """Handle WebRTC offer - support both old format and new multi-user format"""
+        # Old format (direct calling)
         target_user_id = message.get('to')
-        if target_user_id and target_user_id in self.user_connections:
-            try:
-                await self.user_connections[target_user_id].send_text(json.dumps({
-                    "type": "webrtc_offer",
-                    "from": user_id,
-                    "offer": message.get('offer')
-                }))
-                logger.info(f"WebRTC offer from {user_id} to {target_user_id}")
-            except Exception as e:
-                logger.error(f"Error sending WebRTC offer to user {target_user_id}: {e}")
-                self.disconnect(target_user_id)
+        if target_user_id:
+            if target_user_id in self.user_connections:
+                try:
+                    await self.user_connections[target_user_id].send_text(json.dumps({
+                        "type": "webrtc_offer",
+                        "from": user_id,
+                        "offer": message.get('offer')
+                    }))
+                    logger.info(f"WebRTC offer from {user_id} to {target_user_id}")
+                except Exception as e:
+                    logger.error(f"Error sending WebRTC offer to user {target_user_id}: {e}")
+                    self.disconnect(target_user_id)
+            return
+        
+        # New format (multi-user channel)
+        channel_id = message.get('channelId')
+        target_participant_id = message.get('targetParticipantId')
+        if channel_id and target_participant_id:
+            # Forward to all connected users - they'll filter by participant ID
+            for uid, websocket in self.user_connections.items():
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "webrtc_offer",
+                        "channelId": channel_id,
+                        "participantId": message.get('participantId'),
+                        "participantName": message.get('participantName'),
+                        "targetParticipantId": target_participant_id,
+                        "offer": message.get('offer')
+                    }))
+                except Exception as e:
+                    logger.error(f"Error broadcasting WebRTC offer to user {uid}: {e}")
+                    self.disconnect(uid)
+            logger.info(f"WebRTC offer broadcasted from {user_id} in channel {channel_id}")
 
     async def handle_webrtc_answer(self, user_id: str, message: dict):
-        """Handle WebRTC answer"""
+        """Handle WebRTC answer - support both old format and new multi-user format"""
+        # Old format (direct calling)
         target_user_id = message.get('to')
-        if target_user_id and target_user_id in self.user_connections:
-            try:
-                await self.user_connections[target_user_id].send_text(json.dumps({
-                    "type": "webrtc_answer",
-                    "from": user_id,
-                    "answer": message.get('answer')
-                }))
-                logger.info(f"WebRTC answer from {user_id} to {target_user_id}")
-            except Exception as e:
-                logger.error(f"Error sending WebRTC answer to user {target_user_id}: {e}")
-                self.disconnect(target_user_id)
+        if target_user_id:
+            if target_user_id in self.user_connections:
+                try:
+                    await self.user_connections[target_user_id].send_text(json.dumps({
+                        "type": "webrtc_answer",
+                        "from": user_id,
+                        "answer": message.get('answer')
+                    }))
+                    logger.info(f"WebRTC answer from {user_id} to {target_user_id}")
+                except Exception as e:
+                    logger.error(f"Error sending WebRTC answer to user {target_user_id}: {e}")
+                    self.disconnect(target_user_id)
+            return
+        
+        # New format (multi-user channel)
+        channel_id = message.get('channelId')
+        target_participant_id = message.get('targetParticipantId')
+        if channel_id and target_participant_id:
+            # Forward to all connected users - they'll filter by participant ID
+            for uid, websocket in self.user_connections.items():
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "webrtc_answer",
+                        "channelId": channel_id,
+                        "participantId": message.get('participantId'),
+                        "targetParticipantId": target_participant_id,
+                        "answer": message.get('answer')
+                    }))
+                except Exception as e:
+                    logger.error(f"Error broadcasting WebRTC answer to user {uid}: {e}")
+                    self.disconnect(uid)
+            logger.info(f"WebRTC answer broadcasted from {user_id} in channel {channel_id}")
 
     async def handle_webrtc_ice_candidate(self, user_id: str, message: dict):
-        """Handle WebRTC ICE candidate"""
+        """Handle WebRTC ICE candidate - support both old format and new multi-user format"""
+        # Old format (direct calling)
         target_user_id = message.get('to')
-        if target_user_id and target_user_id in self.user_connections:
-            try:
-                await self.user_connections[target_user_id].send_text(json.dumps({
-                    "type": "webrtc_ice_candidate",
-                    "from": user_id,
-                    "candidate": message.get('candidate')
-                }))
-                logger.info(f"WebRTC ICE candidate from {user_id} to {target_user_id}")
-            except Exception as e:
-                logger.error(f"Error sending WebRTC ICE candidate to user {target_user_id}: {e}")
-                self.disconnect(target_user_id)
+        if target_user_id:
+            if target_user_id in self.user_connections:
+                try:
+                    await self.user_connections[target_user_id].send_text(json.dumps({
+                        "type": "webrtc_ice_candidate",
+                        "from": user_id,
+                        "candidate": message.get('candidate')
+                    }))
+                    logger.info(f"WebRTC ICE candidate from {user_id} to {target_user_id}")
+                except Exception as e:
+                    logger.error(f"Error sending WebRTC ICE candidate to user {target_user_id}: {e}")
+                    self.disconnect(target_user_id)
+            return
+        
+        # New format (multi-user channel)
+        channel_id = message.get('channelId')
+        target_participant_id = message.get('targetParticipantId')
+        if channel_id and target_participant_id:
+            # Forward to all connected users - they'll filter by participant ID
+            for uid, websocket in self.user_connections.items():
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "webrtc_ice_candidate",
+                        "channelId": channel_id,
+                        "participantId": message.get('participantId'),
+                        "targetParticipantId": target_participant_id,
+                        "candidate": message.get('candidate')
+                    }))
+                except Exception as e:
+                    logger.error(f"Error broadcasting WebRTC ICE candidate to user {uid}: {e}")
+                    self.disconnect(uid)
+            logger.info(f"WebRTC ICE candidate broadcasted from {user_id} in channel {channel_id}")
 
     async def handle_video_call_offer(self, user_id: str, message: dict):
         """Handle video call offer for direct user-to-user calling"""
@@ -654,6 +726,57 @@ class WebSocketManager:
             except Exception as e:
                 logger.error(f"Error sending video call end to user {target_user_id}: {e}")
                 self.disconnect(target_user_id)
+
+    # New WebRTC multi-user video chat handlers
+    async def handle_webrtc_join_room(self, user_id: str, message: dict):
+        """Handle user joining a WebRTC video channel"""
+        channel_id = message.get('channelId')
+        participant_id = message.get('participantId')
+        participant_name = message.get('participantName')
+        
+        if not channel_id or not participant_id:
+            logger.warning(f"Missing channelId or participantId in webrtc_join_room: {message}")
+            return
+            
+        logger.info(f"User {user_id} ({participant_name}) joining WebRTC channel: {channel_id}")
+        
+        # Notify all users about the new participant
+        for uid, websocket in self.user_connections.items():
+            if uid != user_id:  # Don't send to the joining user
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "webrtc_participant_joined",
+                        "channelId": channel_id,
+                        "participantId": participant_id,
+                        "participantName": participant_name
+                    }))
+                except Exception as e:
+                    logger.error(f"Error notifying user {uid} about participant join: {e}")
+                    self.disconnect(uid)
+
+    async def handle_webrtc_leave_room(self, user_id: str, message: dict):
+        """Handle user leaving a WebRTC video channel"""
+        channel_id = message.get('channelId')
+        participant_id = message.get('participantId')
+        
+        if not channel_id or not participant_id:
+            logger.warning(f"Missing channelId or participantId in webrtc_leave_room: {message}")
+            return
+            
+        logger.info(f"User {user_id} leaving WebRTC channel: {channel_id}")
+        
+        # Notify all users about the participant leaving
+        for uid, websocket in self.user_connections.items():
+            if uid != user_id:  # Don't send to the leaving user
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "webrtc_participant_left",
+                        "channelId": channel_id,
+                        "participantId": participant_id
+                    }))
+                except Exception as e:
+                    logger.error(f"Error notifying user {uid} about participant leave: {e}")
+                    self.disconnect(uid)
 
 # Global WebSocket manager instance
 websocket_manager = WebSocketManager() 

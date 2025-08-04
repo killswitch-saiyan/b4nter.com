@@ -306,6 +306,15 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             console.log('Video call ended:', data);
             window.dispatchEvent(new CustomEvent('video-call-end', { detail: data }));
             break;
+          // New WebRTC multi-user signaling messages
+          case 'webrtc_participant_joined':
+            console.log('WebRTC participant joined:', data);
+            window.dispatchEvent(new CustomEvent('webrtc-participant-joined', { detail: data }));
+            break;
+          case 'webrtc_participant_left':
+            console.log('WebRTC participant left:', data);
+            window.dispatchEvent(new CustomEvent('webrtc-participant-left', { detail: data }));
+            break;
           default:
             console.log('Unknown message type:', data.type);
         }
