@@ -91,25 +91,28 @@ export const useSFUConnection = () => {
   const connectToSFU = useCallback(async (roomId: string, userName: string, stream: MediaStream) => {
     return new Promise<void>((resolve, reject) => {
       try {
-        // Use the same WebSocket URL pattern as your existing app
-        const wsUrl = `ws://localhost:8080/ws/${roomId}`;
+        // Connect to SFU server
+        const wsUrl = `ws://localhost:8080`;
+        console.log('Connecting to SFU server:', wsUrl);
         const websocket = new WebSocket(wsUrl);
         ws.current = websocket;
 
         websocket.onopen = () => {
-          console.log('Connected to SFU server');
+          console.log('✅ Connected to SFU server');
           
           // Join room
-          websocket.send(JSON.stringify({
+          const joinMessage = {
             type: 'join-room',
             roomId,
             userName,
-          }));
+          };
+          console.log('📤 Sending join-room message:', joinMessage);
+          websocket.send(JSON.stringify(joinMessage));
         };
 
         websocket.onmessage = async (event) => {
           const message = JSON.parse(event.data);
-          console.log('Received SFU message:', message);
+          console.log('📥 Received SFU message:', message.type, message);
 
           switch (message.type) {
             case 'joined-room':
@@ -211,12 +214,12 @@ export const useSFUConnection = () => {
         };
 
         websocket.onerror = (error) => {
-          console.error('WebSocket error:', error);
+          console.error('❌ SFU WebSocket error:', error);
           reject(error);
         };
 
-        websocket.onclose = () => {
-          console.log('WebSocket connection closed');
+        websocket.onclose = (event) => {
+          console.log('🔌 SFU WebSocket connection closed:', event.code, event.reason);
         };
 
       } catch (error) {

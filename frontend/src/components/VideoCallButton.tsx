@@ -121,6 +121,7 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
 
   // Accept incoming call
   const acceptCall = (roomId: string) => {
+    console.log('Accepting call with room ID:', roomId);
     setRoomId(roomId);
     setIsInCall(true);
     setIncomingCall(null);
@@ -160,6 +161,7 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
         <VideoChat
           targetUserId={targetUserId}
           targetUsername={targetUsername}
+          roomId={roomId}
           onClose={closeVideoCall}
         />
       )}

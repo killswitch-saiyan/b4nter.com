@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 interface VideoChatProps {
   targetUserId: string;
   targetUsername: string;
+  roomId?: string;
   onClose: () => void;
 }
 
@@ -16,7 +17,7 @@ interface Participant {
   stream?: MediaStream;
 }
 
-const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, onClose }) => {
+const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roomId: initialRoomId, onClose }) => {
   const { user } = useAuth();
   const { sendCustomEvent } = useWebSocket();
   
@@ -55,6 +56,20 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, onC
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
+
+        // If initialRoomId is provided, automatically join the room (for accepting calls)
+        if (initialRoomId && user) {
+          console.log('Auto-joining room:', initialRoomId);
+          setRoomId(initialRoomId);
+          try {
+            await connectToSFU(initialRoomId, user.username, stream);
+            setIsConnected(true);
+            console.log('Successfully auto-joined room:', initialRoomId);
+          } catch (error) {
+            console.error('Failed to auto-join room:', error);
+            toast.error('Failed to join video call: ' + error.message);
+          }
+        }
       } catch (error) {
         console.error('Failed to initialize media:', error);
         toast.error('Failed to access camera/microphone');
@@ -67,7 +82,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, onC
       // Cleanup on unmount
       disconnect();
     };
-  }, []);
+  }, [initialRoomId, user]);
 
   // Connect to video room
   const startVideoCall = async () => {
@@ -77,6 +92,9 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, onC
     setRoomId(room);
     
     try {
+      console.log('Starting video call with room:', room);
+      console.log('Local stream tracks:', localStream.getTracks().map(t => t.kind));
+      
       await connectToSFU(room, user.username, localStream);
       setIsConnected(true);
       
@@ -92,7 +110,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, onC
       toast.success(`Calling ${targetUsername}...`);
     } catch (error) {
       console.error('Failed to start video call:', error);
-      toast.error('Failed to start video call');
+      toast.error('Failed to start video call: ' + error.message);
     }
   };
 
@@ -101,12 +119,17 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, onC
     if (!user || !localStream) return;
     
     try {
+      console.log('Joining video call with room:', roomId);
+      console.log('Local stream tracks:', localStream.getTracks().map(t => t.kind));
+      
       await connectToSFU(roomId, user.username, localStream);
       setIsConnected(true);
       setRoomId(roomId);
+      
+      console.log('Successfully joined video call');
     } catch (error) {
       console.error('Failed to join video call:', error);
-      toast.error('Failed to join video call');
+      toast.error('Failed to join video call: ' + error.message);
     }
   };
 
