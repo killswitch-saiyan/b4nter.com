@@ -74,20 +74,21 @@ async def get_livekit_token(
                 detail="LiveKit not configured properly - check environment variables"
             )
         
-        # Create token with permissions
-        token = AccessToken(api_key, api_secret)
-        token.identity = current_user.username
-        token.name = current_user.username
-        
-        # Add video grants
-        video_grants = VideoGrants(
-            room_join=True,
-            room=request.roomName,
-            can_publish=True,
-            can_subscribe=True,
-            can_publish_data=True,
+        # Create token with permissions using the fluent API
+        token = (
+            AccessToken(api_key, api_secret)
+            .with_identity(current_user.username)
+            .with_name(current_user.username)
+            .with_grants(
+                VideoGrants(
+                    room_join=True,
+                    room=request.roomName,
+                    can_publish=True,
+                    can_subscribe=True,
+                    can_publish_data=True,
+                )
+            )
         )
-        token.video = video_grants
         
         jwt_token = token.to_jwt()
         
