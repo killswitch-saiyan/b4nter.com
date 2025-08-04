@@ -37,4 +37,14 @@ services:
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
       - key: VITE_GOOGLE_CLIENT_ID
-        sync: false 
+        sync: false
+      - key: VITE_SFU_SERVER_URL
+        value: https://b4nter-sfu-server.onrender.com
+
+  # Video SFU Server
+  - type: web
+    name: b4nter-sfu-server
+    env: node
+    plan: free
+    buildCommand: cd video-sfu-server && npm install
+    startCommand: cd video-sfu-server && npm start

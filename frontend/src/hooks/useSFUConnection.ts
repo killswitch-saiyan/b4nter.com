@@ -92,7 +92,12 @@ export const useSFUConnection = () => {
     return new Promise<void>((resolve, reject) => {
       try {
         // Connect to SFU server
-        const wsUrl = `ws://localhost:8080`;
+        const sfuServerUrl = import.meta.env.VITE_SFU_SERVER_URL || 'ws://localhost:8080';
+        let wsUrl = sfuServerUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+        if (!wsUrl.includes('://')) {
+          // If no protocol specified, assume it's a Render URL and use wss
+          wsUrl = `wss://${sfuServerUrl}`;
+        }
         console.log('Connecting to SFU server:', wsUrl);
         const websocket = new WebSocket(wsUrl);
         ws.current = websocket;
