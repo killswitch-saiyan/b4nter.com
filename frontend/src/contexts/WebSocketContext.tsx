@@ -279,6 +279,60 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
               toast.success(`${data.callType} call channel created! Check the sidebar.`);
             }
             break;
+          // LiveKit call messages
+          case 'livekit_call_invite':
+            console.log('LiveKit call invitation received:', data);
+            // Show browser notification for incoming call
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(`Incoming Video Call from ${data.caller_full_name || data.caller_name}`, {
+                body: 'Click to answer or reject the call',
+                icon: data.caller_avatar || '/favicon.ico',
+                requireInteraction: true,
+                tag: `livekit-call-${data.call_id}`
+              });
+            } else {
+              // Fallback to toast notification
+              toast(`📹 Incoming video call from ${data.caller_full_name || data.caller_name}`, {
+                duration: 30000, // 30 seconds
+                icon: '📹',
+                style: {
+                  background: '#059669',
+                  color: 'white',
+                  fontSize: '16px',
+                  padding: '16px'
+                }
+              });
+            }
+            // Add to notifications list for call handling UI
+            setNotifications((prev) => [
+              ...prev,
+              { 
+                id: `livekit-call-${data.call_id}`, 
+                type: 'livekit_call_invite',
+                message: `Incoming video call from ${data.caller_full_name || data.caller_name}`,
+                data: data
+              }
+            ]);
+            // Dispatch custom event for LiveKit component
+            window.dispatchEvent(new CustomEvent('livekit-call-invite', { detail: data }));
+            break;
+          case 'livekit_call_accepted':
+            console.log('LiveKit call accepted:', data);
+            // Dispatch custom event for LiveKit component
+            window.dispatchEvent(new CustomEvent('livekit-call-accepted', { detail: data }));
+            break;
+          case 'livekit_call_rejected':
+            console.log('LiveKit call rejected:', data);
+            toast.error(`${data.rejecter_name} declined your call`);
+            // Dispatch custom event for LiveKit component
+            window.dispatchEvent(new CustomEvent('livekit-call-rejected', { detail: data }));
+            break;
+          case 'livekit_call_ended':
+            console.log('LiveKit call ended:', data);
+            toast('Call ended');
+            // Dispatch custom event for LiveKit component
+            window.dispatchEvent(new CustomEvent('livekit-call-ended', { detail: data }));
+            break;
           default:
             console.log('Unknown message type:', data.type);
         }

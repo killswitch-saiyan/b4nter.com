@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Dict, List, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from models import MessageResponse, UserResponse
@@ -342,6 +343,14 @@ class WebSocketManager:
                     await self.handle_call_channel_joined(user_id, message)
                 elif message_type == 'call_channel_left':
                     await self.handle_call_channel_left(user_id, message)
+                elif message_type == 'livekit_call_invite':
+                    await self.handle_livekit_call_invite(user_id, message)
+                elif message_type == 'livekit_call_accept':
+                    await self.handle_livekit_call_accept(user_id, message)
+                elif message_type == 'livekit_call_reject':
+                    await self.handle_livekit_call_reject(user_id, message)
+                elif message_type == 'livekit_call_end':
+                    await self.handle_livekit_call_end(user_id, message)
                 else:
                     logger.warning(f"Unknown message type: {message_type}")
         except WebSocketDisconnect:
@@ -572,6 +581,91 @@ class WebSocketManager:
                 logger.info(f"Call channel leave notification from {user_id} to {target_user_id}")
             except Exception as e:
                 logger.error(f"Error sending call channel leave notification to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    # LiveKit Call handlers
+    async def handle_livekit_call_invite(self, user_id: str, message: dict):
+        """Handle LiveKit call invitation"""
+        target_user_id = message.get('target_user_id')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                # Get caller information
+                from database import db
+                caller = await db.get_user_by_id(user_id)
+                caller_name = caller.get('username') if caller else user_id
+                caller_full_name = caller.get('full_name') if caller else caller_name
+                caller_avatar = caller.get('avatar_url') if caller else None
+                
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "livekit_call_invite",
+                    "caller_id": user_id,
+                    "caller_name": caller_name,
+                    "caller_full_name": caller_full_name,
+                    "caller_avatar": caller_avatar,
+                    "room_name": message.get('room_name'),
+                    "call_id": message.get('call_id', f"call-{user_id}-{target_user_id}-{int(time.time())}")
+                }))
+                logger.info(f"LiveKit call invitation sent from {user_id} ({caller_name}) to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending LiveKit call invitation to user {target_user_id}: {e}")
+                self.disconnect(target_user_id)
+
+    async def handle_livekit_call_accept(self, user_id: str, message: dict):
+        """Handle LiveKit call acceptance"""
+        caller_id = message.get('caller_id')
+        if caller_id and caller_id in self.user_connections:
+            try:
+                # Get accepter information
+                from database import db
+                accepter = await db.get_user_by_id(user_id)
+                accepter_name = accepter.get('username') if accepter else user_id
+                
+                await self.user_connections[caller_id].send_text(json.dumps({
+                    "type": "livekit_call_accepted",
+                    "accepter_id": user_id,
+                    "accepter_name": accepter_name,
+                    "call_id": message.get('call_id'),
+                    "room_name": message.get('room_name')
+                }))
+                logger.info(f"LiveKit call accepted by {user_id} ({accepter_name}) from {caller_id}")
+            except Exception as e:
+                logger.error(f"Error sending LiveKit call acceptance to user {caller_id}: {e}")
+                self.disconnect(caller_id)
+
+    async def handle_livekit_call_reject(self, user_id: str, message: dict):
+        """Handle LiveKit call rejection"""
+        caller_id = message.get('caller_id')
+        if caller_id and caller_id in self.user_connections:
+            try:
+                # Get rejecter information
+                from database import db
+                rejecter = await db.get_user_by_id(user_id)
+                rejecter_name = rejecter.get('username') if rejecter else user_id
+                
+                await self.user_connections[caller_id].send_text(json.dumps({
+                    "type": "livekit_call_rejected",
+                    "rejecter_id": user_id,
+                    "rejecter_name": rejecter_name,
+                    "call_id": message.get('call_id')
+                }))
+                logger.info(f"LiveKit call rejected by {user_id} ({rejecter_name}) from {caller_id}")
+            except Exception as e:
+                logger.error(f"Error sending LiveKit call rejection to user {caller_id}: {e}")
+                self.disconnect(caller_id)
+
+    async def handle_livekit_call_end(self, user_id: str, message: dict):
+        """Handle LiveKit call end"""
+        target_user_id = message.get('target_user_id')
+        if target_user_id and target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    "type": "livekit_call_ended",
+                    "ender_id": user_id,
+                    "call_id": message.get('call_id')
+                }))
+                logger.info(f"LiveKit call ended by {user_id} to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending LiveKit call end to user {target_user_id}: {e}")
                 self.disconnect(target_user_id)
 
 # Global WebSocket manager instance
