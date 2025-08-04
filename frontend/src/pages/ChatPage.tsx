@@ -7,8 +7,7 @@ import MessageInput from '../components/MessageInput';
 import MessageDisplay from '../components/MessageDisplay';
 import EncryptionStatus from '../components/EncryptionStatus';
 import UserProfileDropdown from '../components/UserProfileDropdown';
-import LiveKitVideoCall from '../components/LiveKitVideoCall';
-import WebSocketDebug from '../components/WebSocketDebug';
+import VideoCallButton from '../components/VideoCallButton';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -1047,8 +1046,7 @@ const ChatPage: React.FC = () => {
                 ))}
               </div>
             )}
-            {/* Debug Component */}
-            <WebSocketDebug />
+            {/* Debug Component removed - archived */}
             
             <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-4 dark:text-white">Direct Messages</h3>
             <input
@@ -1118,7 +1116,7 @@ const ChatPage: React.FC = () => {
               </div>
               <div className="flex items-center space-x-4">
                 {selectedDMUser && !isBlocked && (
-                  <LiveKitVideoCall
+                  <VideoCallButton
                     targetUserId={selectedDMUser.id}
                     targetUsername={selectedDMUser.username}
                   />
@@ -1198,7 +1196,7 @@ const ChatPage: React.FC = () => {
                     });
                     
                     return (
-                      <LiveKitVideoCall
+                      <VideoCallButton
                         targetUserId={targetUserId}
                         targetUsername={targetUsername}
                       />

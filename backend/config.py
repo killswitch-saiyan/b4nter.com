@@ -26,10 +26,7 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = True
     
-    # LiveKit Configuration
-    livekit_api_key: Optional[str] = None
-    livekit_api_secret: Optional[str] = None
-    livekit_url: Optional[str] = "wss://localhost:7880"
+    # LiveKit Configuration - ARCHIVED
     
     class Config:
         env_file = ".env"

@@ -279,59 +279,32 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
               toast.success(`${data.callType} call channel created! Check the sidebar.`);
             }
             break;
-          // LiveKit call messages
-          case 'livekit_call_invite':
-            console.log('LiveKit call invitation received:', data);
+          // Video call messages
+          case 'video_call_invite':
+            console.log('Video call invitation received:', data);
             // Show browser notification for incoming call
             if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(`Incoming Video Call from ${data.caller_full_name || data.caller_name}`, {
+              new Notification(`Incoming Video Call from ${data.caller_name}`, {
                 body: 'Click to answer or reject the call',
-                icon: data.caller_avatar || '/favicon.ico',
+                icon: '/favicon.ico',
                 requireInteraction: true,
-                tag: `livekit-call-${data.call_id}`
-              });
-            } else {
-              // Fallback to toast notification
-              toast(`📹 Incoming video call from ${data.caller_full_name || data.caller_name}`, {
-                duration: 30000, // 30 seconds
-                icon: '📹',
-                style: {
-                  background: '#059669',
-                  color: 'white',
-                  fontSize: '16px',
-                  padding: '16px'
-                }
+                tag: `video-call-${data.room_id}`
               });
             }
-            // Add to notifications list for call handling UI
-            setNotifications((prev) => [
-              ...prev,
-              { 
-                id: `livekit-call-${data.call_id}`, 
-                type: 'livekit_call_invite',
-                message: `Incoming video call from ${data.caller_full_name || data.caller_name}`,
-                data: data
-              }
-            ]);
-            // Dispatch custom event for LiveKit component
-            window.dispatchEvent(new CustomEvent('livekit-call-invite', { detail: data }));
+            // Dispatch custom event for video call component
+            window.dispatchEvent(new CustomEvent('video-call-invite', { detail: data }));
             break;
-          case 'livekit_call_accepted':
-            console.log('LiveKit call accepted:', data);
-            // Dispatch custom event for LiveKit component
-            window.dispatchEvent(new CustomEvent('livekit-call-accepted', { detail: data }));
+          case 'video_call_accept':
+            console.log('Video call accepted:', data);
+            window.dispatchEvent(new CustomEvent('video-call-accept', { detail: data }));
             break;
-          case 'livekit_call_rejected':
-            console.log('LiveKit call rejected:', data);
-            toast.error(`${data.rejecter_name} declined your call`);
-            // Dispatch custom event for LiveKit component
-            window.dispatchEvent(new CustomEvent('livekit-call-rejected', { detail: data }));
+          case 'video_call_reject':
+            console.log('Video call rejected:', data);
+            window.dispatchEvent(new CustomEvent('video-call-reject', { detail: data }));
             break;
-          case 'livekit_call_ended':
-            console.log('LiveKit call ended:', data);
-            toast('Call ended');
-            // Dispatch custom event for LiveKit component
-            window.dispatchEvent(new CustomEvent('livekit-call-ended', { detail: data }));
+          case 'video_call_end':
+            console.log('Video call ended:', data);
+            window.dispatchEvent(new CustomEvent('video-call-end', { detail: data }));
             break;
           default:
             console.log('Unknown message type:', data.type);
@@ -425,19 +398,10 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   };
 
   const sendCustomEvent = (event: any) => {
-    console.log('sendCustomEvent called with:', event);
-    console.log('WebSocket state:', wsRef.current?.readyState);
-    console.log('WebSocket OPEN constant:', WebSocket.OPEN);
-    
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('Sending WebSocket message:', JSON.stringify(event));
       wsRef.current.send(JSON.stringify(event));
     } else {
-      console.error('WebSocket is not connected', {
-        wsExists: !!wsRef.current,
-        readyState: wsRef.current?.readyState,
-        expectedState: WebSocket.OPEN
-      });
+      console.error('WebSocket is not connected');
     }
   };
 
