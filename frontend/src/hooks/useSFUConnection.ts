@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { useWebSocket } from '../contexts/WebSocketContext';
 
 interface Participant {
   id: string;
@@ -6,15 +7,17 @@ interface Participant {
 }
 
 export const useSFUConnection = () => {
+  const { sendCustomEvent, socket } = useWebSocket();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
 
-  const ws = useRef<WebSocket | null>(null);
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
+  const currentRoomId = useRef<string | null>(null);
 
   // ICE servers configuration
   const iceServers = [
@@ -64,12 +67,12 @@ export const useSFUConnection = () => {
 
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
-      if (event.candidate && ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
+      if (event.candidate && socket?.readyState === WebSocket.OPEN) {
+        sendCustomEvent({
           type: 'ice-candidate',
           candidate: event.candidate,
           targetId: participantId,
-        }));
+        });
       }
     };
 
@@ -87,162 +90,171 @@ export const useSFUConnection = () => {
     return peerConnection;
   }, []);
 
-  // Connect to SFU server
+  // Connect to SFU via existing WebSocket
   const connectToSFU = useCallback(async (roomId: string, userName: string, stream: MediaStream) => {
     return new Promise<void>((resolve, reject) => {
-      try {
-        // Connect to SFU server
-        const sfuServerUrl = import.meta.env.VITE_SFU_SERVER_URL || 'ws://localhost:8080';
-        let wsUrl = sfuServerUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-        if (!wsUrl.includes('://')) {
-          // If no protocol specified, assume it's a Render URL and use wss
-          wsUrl = `wss://${sfuServerUrl}`;
-        }
-        console.log('Connecting to SFU server:', wsUrl);
-        const websocket = new WebSocket(wsUrl);
-        ws.current = websocket;
-
-        websocket.onopen = () => {
-          console.log('✅ Connected to SFU server');
-          
-          // Join room
-          const joinMessage = {
-            type: 'join-room',
-            roomId,
-            userName,
-          };
-          console.log('📤 Sending join-room message:', joinMessage);
-          websocket.send(JSON.stringify(joinMessage));
-        };
-
-        websocket.onmessage = async (event) => {
-          const message = JSON.parse(event.data);
-          console.log('📥 Received SFU message:', message.type, message);
-
-          switch (message.type) {
-            case 'joined-room':
-              console.log('Successfully joined room:', message.roomId);
-              setParticipants(message.participants || []);
-              resolve();
-              break;
-
-            case 'user-joined':
-              console.log('User joined:', message.participant);
-              setParticipants(prev => [...prev, message.participant]);
-              
-              // Create offer for new participant
-              const peerConnection = createPeerConnection(message.participant.id);
-              try {
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                
-                websocket.send(JSON.stringify({
-                  type: 'offer',
-                  offer: offer,
-                  targetId: message.participant.id,
-                }));
-              } catch (error) {
-                console.error('Failed to create offer:', error);
-              }
-              break;
-
-            case 'user-left':
-              console.log('User left:', message.participantId);
-              setParticipants(prev => prev.filter(p => p.id !== message.participantId));
-              
-              // Close peer connection
-              const pc = peerConnections.current.get(message.participantId);
-              if (pc) {
-                pc.close();
-                peerConnections.current.delete(message.participantId);
-              }
-              
-              // Remove remote stream
-              setRemoteStreams(prev => {
-                const newMap = new Map(prev);
-                newMap.delete(message.participantId);
-                return newMap;
-              });
-              break;
-
-            case 'offer':
-              console.log('Received offer from:', message.senderId);
-              const peerConnectionForOffer = createPeerConnection(message.senderId);
-              
-              try {
-                await peerConnectionForOffer.setRemoteDescription(message.offer);
-                const answer = await peerConnectionForOffer.createAnswer();
-                await peerConnectionForOffer.setLocalDescription(answer);
-                
-                websocket.send(JSON.stringify({
-                  type: 'answer',
-                  answer: answer,
-                  targetId: message.senderId,
-                }));
-              } catch (error) {
-                console.error('Failed to handle offer:', error);
-              }
-              break;
-
-            case 'answer':
-              console.log('Received answer from:', message.senderId);
-              const peerConnectionForAnswer = peerConnections.current.get(message.senderId);
-              if (peerConnectionForAnswer) {
-                try {
-                  await peerConnectionForAnswer.setRemoteDescription(message.answer);
-                } catch (error) {
-                  console.error('Failed to set remote description:', error);
-                }
-              }
-              break;
-
-            case 'ice-candidate':
-              console.log('Received ICE candidate from:', message.senderId);
-              const peerConnectionForCandidate = peerConnections.current.get(message.senderId);
-              if (peerConnectionForCandidate && message.candidate) {
-                try {
-                  await peerConnectionForCandidate.addIceCandidate(message.candidate);
-                } catch (error) {
-                  console.error('Failed to add ICE candidate:', error);
-                }
-              }
-              break;
-
-            case 'error':
-              console.error('SFU error:', message.message);
-              reject(new Error(message.message));
-              break;
-
-            default:
-              console.log('Unknown message type:', message.type);
-          }
-        };
-
-        websocket.onerror = (error) => {
-          console.error('❌ SFU WebSocket error:', error);
-          reject(error);
-        };
-
-        websocket.onclose = (event) => {
-          console.log('🔌 SFU WebSocket connection closed:', event.code, event.reason);
-        };
-
-      } catch (error) {
-        console.error('Failed to connect to SFU:', error);
-        reject(error);
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket not connected'));
+        return;
       }
+
+      currentRoomId.current = roomId;
+      setIsConnected(true);
+      
+      // Join room via existing WebSocket
+      const joinMessage = {
+        type: 'join-room',
+        roomId,
+        userName,
+      };
+      console.log('📤 Sending join-room message via existing WebSocket:', joinMessage);
+      sendCustomEvent(joinMessage);
+      
+      // Set up a temporary resolver for the joined-room response
+      const handleJoinedRoom = (event: any) => {
+        const data = event.detail;
+        if (data.roomId === roomId) {
+          console.log('Successfully joined room:', data.roomId);
+          setParticipants(data.participants || []);
+          window.removeEventListener('sfu-joined-room', handleJoinedRoom);
+          resolve();
+        }
+      };
+      
+      const handleError = (event: any) => {
+        const data = event.detail;
+        console.error('SFU error:', data.message);
+        window.removeEventListener('sfu-error', handleError);
+        window.removeEventListener('sfu-joined-room', handleJoinedRoom);
+        reject(new Error(data.message));
+      };
+
+      window.addEventListener('sfu-joined-room', handleJoinedRoom);
+      window.addEventListener('sfu-error', handleError);
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        window.removeEventListener('sfu-joined-room', handleJoinedRoom);
+        window.removeEventListener('sfu-error', handleError);
+        reject(new Error('Connection timeout'));
+      }, 10000);
     });
-  }, [createPeerConnection]);
+  }, [socket, sendCustomEvent]);
+
+  // Event listeners for SFU messages
+  useEffect(() => {
+    const handleUserJoined = async (event: any) => {
+      const data = event.detail;
+      console.log('User joined:', data.participant);
+      setParticipants(prev => [...prev, data.participant]);
+      
+      // Create offer for new participant
+      if (localStreamRef.current) {
+        const peerConnection = createPeerConnection(data.participant.id);
+        try {
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          
+          sendCustomEvent({
+            type: 'offer',
+            offer: offer,
+            targetId: data.participant.id,
+          });
+        } catch (error) {
+          console.error('Failed to create offer:', error);
+        }
+      }
+    };
+
+    const handleUserLeft = (event: any) => {
+      const data = event.detail;
+      console.log('User left:', data.participantId);
+      setParticipants(prev => prev.filter(p => p.id !== data.participantId));
+      
+      // Close peer connection
+      const pc = peerConnections.current.get(data.participantId);
+      if (pc) {
+        pc.close();
+        peerConnections.current.delete(data.participantId);
+      }
+      
+      // Remove remote stream
+      setRemoteStreams(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(data.participantId);
+        return newMap;
+      });
+    };
+
+    const handleOffer = async (event: any) => {
+      const data = event.detail;
+      console.log('Received offer from:', data.senderId);
+      const peerConnection = createPeerConnection(data.senderId);
+      
+      try {
+        await peerConnection.setRemoteDescription(data.offer);
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        sendCustomEvent({
+          type: 'answer',
+          answer: answer,
+          targetId: data.senderId,
+        });
+      } catch (error) {
+        console.error('Failed to handle offer:', error);
+      }
+    };
+
+    const handleAnswer = async (event: any) => {
+      const data = event.detail;
+      console.log('Received answer from:', data.senderId);
+      const peerConnection = peerConnections.current.get(data.senderId);
+      if (peerConnection) {
+        try {
+          await peerConnection.setRemoteDescription(data.answer);
+        } catch (error) {
+          console.error('Failed to set remote description:', error);
+        }
+      }
+    };
+
+    const handleIceCandidate = async (event: any) => {
+      const data = event.detail;
+      console.log('Received ICE candidate from:', data.senderId);
+      const peerConnection = peerConnections.current.get(data.senderId);
+      if (peerConnection && data.candidate) {
+        try {
+          await peerConnection.addIceCandidate(data.candidate);
+        } catch (error) {
+          console.error('Failed to add ICE candidate:', error);
+        }
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('sfu-user-joined', handleUserJoined);
+    window.addEventListener('sfu-user-left', handleUserLeft);
+    window.addEventListener('sfu-offer', handleOffer);
+    window.addEventListener('sfu-answer', handleAnswer);
+    window.addEventListener('sfu-ice-candidate', handleIceCandidate);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('sfu-user-joined', handleUserJoined);
+      window.removeEventListener('sfu-user-left', handleUserLeft);
+      window.removeEventListener('sfu-offer', handleOffer);
+      window.removeEventListener('sfu-answer', handleAnswer);
+      window.removeEventListener('sfu-ice-candidate', handleIceCandidate);
+    };
+  }, [createPeerConnection, sendCustomEvent]);
 
   // Disconnect from SFU
   const disconnect = useCallback(() => {
     console.log('Disconnecting from SFU');
     
-    // Close WebSocket
-    if (ws.current) {
-      ws.current.close();
-      ws.current = null;
-    }
+    setIsConnected(false);
+    currentRoomId.current = null;
 
     // Close all peer connections
     peerConnections.current.forEach((pc) => {
@@ -298,12 +310,12 @@ export const useSFUConnection = () => {
     remoteStreams,
     isAudioEnabled,
     isVideoEnabled,
+    isConnected,
     connectToSFU,
     disconnect,
     initializeMedia,
     toggleAudio,
     toggleVideo,
     peerConnections: peerConnections.current,
-    ws: ws.current,
   };
 };

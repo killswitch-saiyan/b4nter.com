@@ -315,6 +315,35 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             console.log('WebRTC participant left:', data);
             window.dispatchEvent(new CustomEvent('webrtc-participant-left', { detail: data }));
             break;
+          // SFU-style WebRTC messages
+          case 'joined-room':
+            console.log('SFU room joined:', data);
+            window.dispatchEvent(new CustomEvent('sfu-joined-room', { detail: data }));
+            break;
+          case 'user-joined':
+            console.log('SFU user joined:', data);
+            window.dispatchEvent(new CustomEvent('sfu-user-joined', { detail: data }));
+            break;
+          case 'user-left':
+            console.log('SFU user left:', data);
+            window.dispatchEvent(new CustomEvent('sfu-user-left', { detail: data }));
+            break;
+          case 'offer':
+            console.log('SFU offer received:', data);
+            window.dispatchEvent(new CustomEvent('sfu-offer', { detail: data }));
+            break;
+          case 'answer':
+            console.log('SFU answer received:', data);
+            window.dispatchEvent(new CustomEvent('sfu-answer', { detail: data }));
+            break;
+          case 'ice-candidate':
+            console.log('SFU ICE candidate received:', data);
+            window.dispatchEvent(new CustomEvent('sfu-ice-candidate', { detail: data }));
+            break;
+          case 'error':
+            console.error('SFU error:', data);
+            window.dispatchEvent(new CustomEvent('sfu-error', { detail: data }));
+            break;
           default:
             console.log('Unknown message type:', data.type);
         }

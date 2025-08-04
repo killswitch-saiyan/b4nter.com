@@ -356,6 +356,15 @@ class WebSocketManager:
                     await self.handle_webrtc_join_room(user_id, message)
                 elif message_type == 'webrtc_leave_room':
                     await self.handle_webrtc_leave_room(user_id, message)
+                # SFU-style WebRTC handlers
+                elif message_type == 'join-room':
+                    await self.handle_sfu_join_room(user_id, message)
+                elif message_type == 'offer':
+                    await self.handle_sfu_offer(user_id, message)
+                elif message_type == 'answer':
+                    await self.handle_sfu_answer(user_id, message)
+                elif message_type == 'ice-candidate':
+                    await self.handle_sfu_ice_candidate(user_id, message)
                 else:
                     logger.warning(f"Unknown message type: {message_type}")
         except WebSocketDisconnect:
@@ -777,6 +786,211 @@ class WebSocketManager:
                 except Exception as e:
                     logger.error(f"Error notifying user {uid} about participant leave: {e}")
                     self.disconnect(uid)
+
+    # SFU-style WebRTC handlers (integrating SFU server functionality)
+    video_rooms: Dict[str, Dict[str, dict]] = {}  # room_id -> {participant_id -> participant_info}
+    
+    async def handle_sfu_join_room(self, user_id: str, message: dict):
+        """Handle SFU-style room join"""
+        room_id = message.get('roomId')
+        user_name = message.get('userName')
+        
+        if not room_id or not user_name:
+            await self.send_to_user(user_id, {
+                'type': 'error',
+                'message': 'Room ID and user name are required'
+            })
+            return
+        
+        # Create room if it doesn't exist
+        if room_id not in self.video_rooms:
+            self.video_rooms[room_id] = {}
+            logger.info(f"Created new video room: {room_id}")
+        
+        room = self.video_rooms[room_id]
+        participant_id = user_id  # Use user_id as participant_id
+        
+        # Add participant to room
+        participant_info = {
+            'id': participant_id,
+            'name': user_name,
+            'user_id': user_id
+        }
+        room[participant_id] = participant_info
+        
+        logger.info(f"Participant {user_name} ({participant_id}) joined room {room_id}")
+        
+        # Get existing participants (excluding the new one)
+        existing_participants = [
+            {'id': p['id'], 'name': p['name']} 
+            for p_id, p in room.items() 
+            if p_id != participant_id
+        ]
+        
+        # Send room joined confirmation to new participant
+        await self.send_to_user(user_id, {
+            'type': 'joined-room',
+            'roomId': room_id,
+            'participants': existing_participants
+        })
+        
+        # Notify existing participants about new user
+        for p_id, participant in room.items():
+            if p_id != participant_id:
+                await self.send_to_user(participant['user_id'], {
+                    'type': 'user-joined',
+                    'participant': {'id': participant_id, 'name': user_name}
+                })
+    
+    async def handle_sfu_offer(self, user_id: str, message: dict):
+        """Handle SFU-style WebRTC offer"""
+        target_id = message.get('targetId')
+        offer = message.get('offer')
+        
+        if not target_id or not offer:
+            logger.warning(f"Missing targetId or offer in SFU offer from {user_id}")
+            return
+        
+        # Find the room this user is in
+        room_id = None
+        for r_id, room in self.video_rooms.items():
+            if user_id in room:
+                room_id = r_id
+                break
+        
+        if not room_id:
+            logger.warning(f"User {user_id} not found in any video room for offer")
+            return
+        
+        # Find target participant's user_id
+        target_user_id = None
+        room = self.video_rooms[room_id]
+        for p_id, participant in room.items():
+            if p_id == target_id:
+                target_user_id = participant['user_id']
+                break
+        
+        if target_user_id:
+            await self.send_to_user(target_user_id, {
+                'type': 'offer',
+                'offer': offer,
+                'senderId': user_id
+            })
+            logger.info(f"SFU offer forwarded from {user_id} to {target_user_id}")
+    
+    async def handle_sfu_answer(self, user_id: str, message: dict):
+        """Handle SFU-style WebRTC answer"""
+        target_id = message.get('targetId')
+        answer = message.get('answer')
+        
+        if not target_id or not answer:
+            logger.warning(f"Missing targetId or answer in SFU answer from {user_id}")
+            return
+        
+        # Find the room and forward answer
+        room_id = None
+        for r_id, room in self.video_rooms.items():
+            if user_id in room:
+                room_id = r_id
+                break
+        
+        if not room_id:
+            logger.warning(f"User {user_id} not found in any video room for answer")
+            return
+        
+        # Find target participant's user_id
+        target_user_id = None
+        room = self.video_rooms[room_id]
+        for p_id, participant in room.items():
+            if p_id == target_id:
+                target_user_id = participant['user_id']
+                break
+        
+        if target_user_id:
+            await self.send_to_user(target_user_id, {
+                'type': 'answer',
+                'answer': answer,
+                'senderId': user_id
+            })
+            logger.info(f"SFU answer forwarded from {user_id} to {target_user_id}")
+    
+    async def handle_sfu_ice_candidate(self, user_id: str, message: dict):
+        """Handle SFU-style ICE candidate"""
+        target_id = message.get('targetId')
+        candidate = message.get('candidate')
+        
+        if not target_id or not candidate:
+            logger.warning(f"Missing targetId or candidate in SFU ICE candidate from {user_id}")
+            return
+        
+        # Find the room and forward ICE candidate
+        room_id = None
+        for r_id, room in self.video_rooms.items():
+            if user_id in room:
+                room_id = r_id
+                break
+        
+        if not room_id:
+            logger.warning(f"User {user_id} not found in any video room for ICE candidate")
+            return
+        
+        # Find target participant's user_id
+        target_user_id = None
+        room = self.video_rooms[room_id]
+        for p_id, participant in room.items():
+            if p_id == target_id:
+                target_user_id = participant['user_id']
+                break
+        
+        if target_user_id:
+            await self.send_to_user(target_user_id, {
+                'type': 'ice-candidate',
+                'candidate': candidate,
+                'senderId': user_id
+            })
+            logger.info(f"SFU ICE candidate forwarded from {user_id} to {target_user_id}")
+    
+    def disconnect(self, user_id: str):
+        """Override disconnect to handle video room cleanup"""
+        # Clean up video rooms
+        rooms_to_remove = []
+        for room_id, room in self.video_rooms.items():
+            if user_id in room:
+                participant = room[user_id]
+                del room[user_id]
+                logger.info(f"Participant {participant['name']} ({user_id}) left room {room_id}")
+                
+                # Notify other participants
+                for p_id, p in room.items():
+                    try:
+                        import asyncio
+                        asyncio.create_task(self.send_to_user(p['user_id'], {
+                            'type': 'user-left',
+                            'participantId': user_id
+                        }))
+                    except Exception as e:
+                        logger.error(f"Error notifying participant {p_id} about user {user_id} leaving: {e}")
+                
+                # Mark room for removal if empty
+                if len(room) == 0:
+                    rooms_to_remove.append(room_id)
+        
+        # Remove empty rooms
+        for room_id in rooms_to_remove:
+            del self.video_rooms[room_id]
+            logger.info(f"Video room {room_id} deleted (empty)")
+        
+        # Call original disconnect logic
+        if user_id in self.user_connections:
+            websocket = self.user_connections[user_id]
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+            del self.user_connections[user_id]
+            if user_id in connected_users:
+                del connected_users[user_id]
+            if user_id in user_channels:
+                del user_channels[user_id]
+            logger.info(f"User {user_id} disconnected")
 
 # Global WebSocket manager instance
 websocket_manager = WebSocketManager() 
