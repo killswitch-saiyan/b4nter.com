@@ -8,6 +8,7 @@ import MessageDisplay from '../components/MessageDisplay';
 import EncryptionStatus from '../components/EncryptionStatus';
 import UserProfileDropdown from '../components/UserProfileDropdown';
 import LiveKitVideoCall from '../components/LiveKitVideoCall';
+import WebSocketDebug from '../components/WebSocketDebug';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -1046,6 +1047,9 @@ const ChatPage: React.FC = () => {
                 ))}
               </div>
             )}
+            {/* Debug Component */}
+            <WebSocketDebug />
+            
             <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-4 dark:text-white">Direct Messages</h3>
             <input
               type="text"

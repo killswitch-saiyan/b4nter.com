@@ -260,17 +260,28 @@ const LiveKitVideoCall: React.FC<LiveKitVideoCallProps> = ({
     const newCallId = generateCallId();
     const newRoomName = generateRoomName();
     
+    console.log('Initiating call:', {
+      callId: newCallId,
+      roomName: newRoomName,
+      targetUserId,
+      targetUsername,
+      currentUserId: user.id
+    });
+    
     setCallId(newCallId);
     setRoomName(newRoomName);
     setCallState('calling');
 
     // Send call invitation via WebSocket
-    sendCustomEvent({
+    const callInvitation = {
       type: 'livekit_call_invite',
       target_user_id: targetUserId,
       room_name: newRoomName,
       call_id: newCallId
-    });
+    };
+    
+    console.log('Sending call invitation via WebSocket:', callInvitation);
+    sendCustomEvent(callInvitation);
 
     toast.success(`Calling ${targetUsername}...`);
   }, [user, targetUserId, targetUsername, generateCallId, generateRoomName, sendCustomEvent]);

@@ -586,7 +586,12 @@ class WebSocketManager:
     # LiveKit Call handlers
     async def handle_livekit_call_invite(self, user_id: str, message: dict):
         """Handle LiveKit call invitation"""
+        logger.info(f"Handling LiveKit call invitation from {user_id} with message: {message}")
+        
         target_user_id = message.get('target_user_id')
+        logger.info(f"Target user ID: {target_user_id}")
+        logger.info(f"Currently connected users: {list(self.user_connections.keys())}")
+        
         if target_user_id and target_user_id in self.user_connections:
             try:
                 # Get caller information
@@ -596,7 +601,7 @@ class WebSocketManager:
                 caller_full_name = caller.get('full_name') if caller else caller_name
                 caller_avatar = caller.get('avatar_url') if caller else None
                 
-                await self.user_connections[target_user_id].send_text(json.dumps({
+                invitation_payload = {
                     "type": "livekit_call_invite",
                     "caller_id": user_id,
                     "caller_name": caller_name,
@@ -604,11 +609,16 @@ class WebSocketManager:
                     "caller_avatar": caller_avatar,
                     "room_name": message.get('room_name'),
                     "call_id": message.get('call_id', f"call-{user_id}-{target_user_id}-{int(time.time())}")
-                }))
-                logger.info(f"LiveKit call invitation sent from {user_id} ({caller_name}) to {target_user_id}")
+                }
+                
+                logger.info(f"Sending invitation payload to {target_user_id}: {invitation_payload}")
+                await self.user_connections[target_user_id].send_text(json.dumps(invitation_payload))
+                logger.info(f"LiveKit call invitation sent successfully from {user_id} ({caller_name}) to {target_user_id}")
             except Exception as e:
                 logger.error(f"Error sending LiveKit call invitation to user {target_user_id}: {e}")
                 self.disconnect(target_user_id)
+        else:
+            logger.warning(f"Target user {target_user_id} not found in connected users. Connected: {list(self.user_connections.keys())}")
 
     async def handle_livekit_call_accept(self, user_id: str, message: dict):
         """Handle LiveKit call acceptance"""

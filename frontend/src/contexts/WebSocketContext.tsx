@@ -425,10 +425,19 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   };
 
   const sendCustomEvent = (event: any) => {
+    console.log('sendCustomEvent called with:', event);
+    console.log('WebSocket state:', wsRef.current?.readyState);
+    console.log('WebSocket OPEN constant:', WebSocket.OPEN);
+    
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log('Sending WebSocket message:', JSON.stringify(event));
       wsRef.current.send(JSON.stringify(event));
     } else {
-      console.error('WebSocket is not connected');
+      console.error('WebSocket is not connected', {
+        wsExists: !!wsRef.current,
+        readyState: wsRef.current?.readyState,
+        expectedState: WebSocket.OPEN
+      });
     }
   };
 
