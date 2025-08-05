@@ -25,13 +25,127 @@ interface RemoteVideoElementProps {
 
 const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, stream, participantName }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoStatus, setVideoStatus] = useState<string>('loading');
+  const [streamInfo, setStreamInfo] = useState<string>('');
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      console.log('🎥 Setting remote video stream for:', participantId, stream);
-      videoRef.current.srcObject = stream;
+    if (!videoRef.current || !stream) {
+      setVideoStatus('no-stream');
+      setStreamInfo('No stream available');
+      return;
     }
+
+    const video = videoRef.current;
+    console.log('🎥 Setting remote video stream for:', participantId, stream);
+    console.log('🎥 Stream active:', stream.active);
+    console.log('🎥 Stream tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+    
+    // Update stream info for debugging
+    const tracks = stream.getTracks();
+    const videoTracks = tracks.filter(t => t.kind === 'video');
+    const audioTracks = tracks.filter(t => t.kind === 'audio');
+    setStreamInfo(`V:${videoTracks.length}(${videoTracks.map(t => t.enabled ? 'on' : 'off').join(',')}) A:${audioTracks.length}(${audioTracks.map(t => t.enabled ? 'on' : 'off').join(',')})`);
+    
+    // Clear any existing srcObject first
+    video.srcObject = null;
+    
+    // Small delay to ensure clean state
+    setTimeout(() => {
+      if (video && stream) {
+        console.log('🎥 Assigning stream to video element');
+        video.srcObject = stream;
+        setVideoStatus('assigned');
+        
+        // Force load the video
+        video.load();
+      }
+    }, 100);
+    
+    // Add comprehensive event listeners
+    video.onloadstart = () => {
+      console.log('🎥 Video load started for:', participantId);
+      setVideoStatus('load-started');
+    };
+    
+    video.onloadeddata = () => {
+      console.log('🎥 Video data loaded for:', participantId);
+      setVideoStatus('data-loaded');
+    };
+    
+    video.onloadedmetadata = () => {
+      console.log('🎥 Video metadata loaded for:', participantId);
+      console.log('🎥 Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+      console.log('🎥 Video duration:', video.duration);
+      setVideoStatus(`metadata-${video.videoWidth}x${video.videoHeight}`);
+    };
+    
+    video.oncanplay = () => {
+      console.log('🎥 Video can play for:', participantId);
+      setVideoStatus('can-play');
+      // Try to play as soon as we can
+      video.play().catch(e => {
+        console.warn('🎥 Could not autoplay video for:', participantId, e);
+        setVideoStatus('play-blocked');
+      });
+    };
+    
+    video.onplay = () => {
+      console.log('🎥 Video started playing for:', participantId);
+      setVideoStatus('playing');
+    };
+    
+    video.onplaying = () => {
+      console.log('🎥 Video is playing for:', participantId);
+      setVideoStatus('playing-active');
+    };
+    
+    video.onstalled = () => {
+      console.warn('🎥 Video stalled for:', participantId);
+      setVideoStatus('stalled');
+    };
+    
+    video.onsuspend = () => {
+      console.warn('🎥 Video suspended for:', participantId);
+      setVideoStatus('suspended');
+    };
+    
+    video.onwaiting = () => {
+      console.warn('🎥 Video waiting for:', participantId);
+      setVideoStatus('waiting');
+    };
+    
+    video.onerror = (e) => {
+      console.error('🎥 Video error for:', participantId, e);
+      console.error('🎥 Video error details:', video.error);
+      setVideoStatus(`error-${video.error?.code || 'unknown'}`);
+    };
+    
+    video.onabort = () => {
+      console.warn('🎥 Video aborted for:', participantId);
+      setVideoStatus('aborted');
+    };
+
+    // Cleanup function
+    return () => {
+      if (video) {
+        video.srcObject = null;
+      }
+    };
   }, [stream, participantId]);
+
+  // Manual play button for debugging
+  const handleManualPlay = () => {
+    if (videoRef.current) {
+      console.log('🎥 Manual play attempt for:', participantId);
+      videoRef.current.play().then(() => {
+        console.log('🎥 Manual play succeeded for:', participantId);
+        setVideoStatus('manual-playing');
+      }).catch(e => {
+        console.error('🎥 Manual play failed for:', participantId, e);
+        setVideoStatus('manual-failed');
+      });
+    }
+  };
 
   return (
     <div className="relative bg-gray-800 rounded-lg overflow-hidden">
@@ -39,8 +153,37 @@ const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, 
         ref={videoRef}
         autoPlay
         playsInline
+        muted
+        controls={false}
         className="w-full h-full object-cover"
+        style={{ 
+          backgroundColor: '#1f2937',
+          minHeight: '200px',
+          minWidth: '300px',
+          display: 'block',
+          visibility: 'visible',
+          opacity: 1,
+          zIndex: 1
+        }}
       />
+      
+      {/* Debug overlay */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-2 left-2 bg-black bg-opacity-75 text-white p-2 rounded text-xs">
+          <div>Status: {videoStatus}</div>
+          <div>Stream: {streamInfo}</div>
+          <div>Participant: {participantId}</div>
+        </div>
+        
+        {/* Manual play button for debugging */}
+        <button
+          onClick={handleManualPlay}
+          className="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded text-xs pointer-events-auto"
+        >
+          ▶ Play
+        </button>
+      </div>
+      
       <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
         {participantName}
       </div>
@@ -164,7 +307,6 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
       console.log('Local stream tracks:', localStream.getTracks().map(t => t.kind));
       
       await connectToSFU(roomId, user.username, localStream);
-      setIsConnected(true);
       setRoomId(roomId);
       
       console.log('Successfully joined video call');
@@ -195,13 +337,11 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
   // Handle audio toggle
   const handleToggleAudio = () => {
     const newState = toggleAudio();
-    setIsAudioEnabled(newState);
   };
 
   // Handle video toggle
   const handleToggleVideo = () => {
     const newState = toggleVideo();
-    setIsVideoEnabled(newState);
   };
 
   return (
@@ -252,35 +392,66 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
                   muted
                   playsInline
                   className="w-full h-full object-cover"
+                  style={{ 
+                    backgroundColor: '#1f2937',
+                    minHeight: '200px',
+                    minWidth: '300px',
+                    display: 'block',
+                    visibility: 'visible',
+                    opacity: 1
+                  }}
                 />
                 <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
                   You ({user?.username})
                 </div>
+                <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
+                  LOCAL: {localStream ? 'STREAM OK' : 'NO STREAM'}
+                </div>
               </div>
 
               {/* Remote Videos */}
-              {Array.from(remoteStreams.entries()).map(([participantId, stream]) => {
-                console.log('🎥 Rendering remote video for:', participantId, stream);
-                return (
-                  <RemoteVideoElement 
-                    key={participantId}
-                    participantId={participantId}
-                    stream={stream}
-                    participantName={targetUsername}
-                  />
-                );
-              })}
+              {(() => {
+                const entries = Array.from(remoteStreams.entries());
+                console.log('🎥 About to render remote videos. Map size:', remoteStreams.size);
+                console.log('🎥 Map entries:', entries);
+                console.log('🎥 Current user name for filtering:', user?.username);
+                
+                return entries.map(([participantId, stream]) => {
+                  console.log('🎥 Rendering remote video for:', participantId, stream);
+                  console.log('🎥 Stream is MediaStream?', stream instanceof MediaStream);
+                  console.log('🎥 Stream active?', stream?.active);
+                  
+                  return (
+                    <RemoteVideoElement 
+                      key={participantId}
+                      participantId={participantId}
+                      stream={stream}
+                      participantName={targetUsername}
+                    />
+                  );
+                });
+              })()}
 
               {/* Placeholder for remote user if not connected */}
               {remoteStreams.size === 0 && (
-                <div className="bg-gray-800 rounded-lg flex items-center justify-center">
+                <div className="bg-gray-800 rounded-lg flex items-center justify-center border-2 border-yellow-500">
                   <div className="text-white text-center">
                     <div className="text-4xl mb-2">👤</div>
                     <div>Waiting for {targetUsername}...</div>
                     <div className="text-xs text-gray-400 mt-2">
                       Participants: {participants.length} | Streams: {remoteStreams.size}
                     </div>
+                    <div className="text-xs text-red-400 mt-1">
+                      Connected: {isConnected ? 'YES' : 'NO'}
+                    </div>
                   </div>
+                </div>
+              )}
+              
+              {/* Debug info when we have streams */}
+              {remoteStreams.size > 0 && (
+                <div className="absolute top-4 left-4 bg-green-500 text-white p-2 rounded text-xs z-10">
+                  DEBUG: {remoteStreams.size} stream(s) detected
                 </div>
               )}
             </div>

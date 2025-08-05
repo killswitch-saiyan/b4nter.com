@@ -46,53 +46,83 @@ export const useSFUConnection = () => {
 
   // Create peer connection
   const createPeerConnection = useCallback((participantId: string) => {
+    console.log('🔗 Creating peer connection for:', participantId);
+    console.log('🔗 Local stream available:', !!localStreamRef.current);
+    
     const peerConnection = new RTCPeerConnection({ iceServers });
     
     // Add local stream to peer connection
     if (localStreamRef.current) {
+      console.log('🔗 Adding local tracks to peer connection for:', participantId);
       localStreamRef.current.getTracks().forEach(track => {
+        console.log('🔗 Adding track:', track.kind, 'enabled:', track.enabled);
         peerConnection.addTrack(track, localStreamRef.current!);
       });
+    } else {
+      console.warn('🔗 No local stream available when creating peer connection for:', participantId);
     }
 
     // Handle remote stream
     peerConnection.ontrack = (event) => {
       console.log('🎥 Received remote stream from:', participantId, event.streams);
       const [remoteStream] = event.streams;
-      console.log('🎥 Remote stream tracks:', remoteStream.getTracks().map(t => t.kind));
-      setRemoteStreams(prev => {
-        const newMap = new Map(prev);
-        newMap.set(participantId, remoteStream);
-        console.log('🎥 Updated remote streams map size:', newMap.size);
-        return newMap;
-      });
+      if (remoteStream) {
+        console.log('🎥 Remote stream tracks:', remoteStream.getTracks().map(t => ({ 
+          kind: t.kind, 
+          enabled: t.enabled, 
+          readyState: t.readyState,
+          id: t.id 
+        })));
+        console.log('🎥 Remote stream active:', remoteStream.active);
+        console.log('🎥 Remote stream id:', remoteStream.id);
+        
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.set(participantId, remoteStream);
+          console.log('🎥 Updated remote streams map size:', newMap.size);
+          console.log('🎥 Current remote streams keys:', Array.from(newMap.keys()));
+          return newMap;
+        });
+      } else {
+        console.error('🎥 No remote stream in ontrack event from:', participantId);
+      }
     };
 
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
       if (event.candidate && currentRoomId.current) {
+        console.log('🧊 Sending ICE candidate to:', participantId);
         sendCustomEvent({
           type: 'webrtc_ice_candidate',
           candidate: event.candidate,
           roomId: currentRoomId.current,
           targetParticipantId: participantId,
         });
+      } else if (!event.candidate) {
+        console.log('🧊 ICE gathering completed for:', participantId);
       }
     };
 
     // Handle connection state changes
     peerConnection.onconnectionstatechange = () => {
-      console.log(`Peer connection state with ${participantId}:`, peerConnection.connectionState);
+      console.log(`🔗 Peer connection state with ${participantId}:`, peerConnection.connectionState);
       
-      if (peerConnection.connectionState === 'failed') {
-        console.error('Peer connection failed with', participantId);
+      if (peerConnection.connectionState === 'connected') {
+        console.log('🔗 Peer connection established with:', participantId);
+      } else if (peerConnection.connectionState === 'failed') {
+        console.error('🔗 Peer connection failed with', participantId);
         peerConnection.restartIce();
       }
     };
 
+    // Handle ICE connection state changes
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log(`🧊 ICE connection state with ${participantId}:`, peerConnection.iceConnectionState);
+    };
+
     peerConnections.current.set(participantId, peerConnection);
     return peerConnection;
-  }, []);
+  }, [sendCustomEvent]);
 
   // Connect to video room (frontend-only SFU approach)
   const connectToSFU = useCallback(async (roomId: string, userName: string, stream: MediaStream) => {
@@ -155,9 +185,10 @@ export const useSFUConnection = () => {
               return prev;
             });
             
-            // Create offer for new participant if we have local stream
-            if (localStreamRef.current) {
-              console.log('🎥 Creating peer connection and offer for:', data.participantId);
+            // Only the "older" participant creates an offer to avoid conflicts
+            if (localStreamRef.current && currentUserName.current && 
+                currentUserName.current.localeCompare(data.participantId) < 0) {
+              console.log('🎥 I am the initiator, creating offer for:', data.participantId);
               const peerConnection = createPeerConnection(data.participantId);
               try {
                 const offer = await peerConnection.createOffer();
@@ -176,7 +207,7 @@ export const useSFUConnection = () => {
                 console.error('Failed to create offer:', error);
               }
             } else {
-              console.warn('🎥 No local stream available to create offer');
+              console.log('🎥 I am the receiver, waiting for offer from:', data.participantId);
             }
           }
           break;
@@ -221,8 +252,11 @@ export const useSFUConnection = () => {
               return prev;
             });
             
-            // Create offer for new participant if we have local stream
-            if (localStreamRef.current) {
+            // Only the "older" participant creates an offer to avoid conflicts
+            // Compare participant IDs to determine who should initiate
+            if (localStreamRef.current && currentUserName.current && 
+                currentUserName.current.localeCompare(data.participantId) < 0) {
+              console.log('🎥 I am the initiator, creating offer for:', data.participantId);
               const peerConnection = createPeerConnection(data.participantId);
               try {
                 const offer = await peerConnection.createOffer();
@@ -239,6 +273,8 @@ export const useSFUConnection = () => {
               } catch (error) {
                 console.error('Failed to create offer:', error);
               }
+            } else {
+              console.log('🎥 I am the receiver, waiting for offer from:', data.participantId);
             }
           }
           break;
@@ -268,14 +304,27 @@ export const useSFUConnection = () => {
         case 'webrtc_offer':
           // Only handle offers for our room and targeted at us
           if (data.channelId === currentRoomId.current && data.targetParticipantId === currentUserName.current) {
-            console.log('Received WebRTC offer from:', data.participantName);
+            console.log('🎥 Received WebRTC offer from:', data.participantName);
+            
+            // Add the participant if not already present
+            const participant = { id: data.participantId, name: data.participantName };
+            setParticipants(prev => {
+              if (!prev.find(p => p.id === participant.id)) {
+                console.log('➕ Adding participant from offer:', participant);
+                return [...prev, participant];
+              }
+              return prev;
+            });
+            
             const peerConnection = createPeerConnection(data.participantId);
             
             try {
+              console.log('🎥 Setting remote description and creating answer for:', data.participantId);
               await peerConnection.setRemoteDescription(data.offer);
               const answer = await peerConnection.createAnswer();
               await peerConnection.setLocalDescription(answer);
               
+              console.log('🎥 Sending answer to:', data.participantId);
               sendCustomEvent({
                 type: 'webrtc_answer',
                 answer: answer,
