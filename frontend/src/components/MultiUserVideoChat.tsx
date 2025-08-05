@@ -7,6 +7,126 @@ interface MultiUserVideoChatProps {
   onClose: () => void;
 }
 
+interface RemoteVideoPlayerProps {
+  participantId: string;
+  stream: MediaStream;
+  participantName: string;
+}
+
+const RemoteVideoPlayer: React.FC<RemoteVideoPlayerProps> = ({ participantId, stream, participantName }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream) return;
+
+    console.log(`🎥 Current user name: ${participantName}`);
+    console.log(`🎥 *** ABOUT TO RENDER REMOTE VIDEO ***`);
+    console.log(`🎥 Participant ID: ${participantId}`);
+    console.log(`🎥 Stream object:`, stream);
+    console.log(`🎥 Stream is MediaStream?`, stream instanceof MediaStream);
+    console.log(`🎥 Stream active?`, stream.active);
+    console.log(`🎥 Stream tracks:`, stream.getTracks().map(t => t.kind));
+
+    // Set the stream
+    video.srcObject = stream;
+    setHasError(false);
+
+    // Handle video events
+    const handleLoadedMetadata = () => {
+      console.log(`🎥 *** RENDERING REMOTE VIDEOS ***`);
+      console.log(`🎥 Video metadata loaded for ${participantId}`);
+      video.play().then(() => {
+        console.log(`🎥 Video playing successfully for ${participantId}`);
+        setIsPlaying(true);
+      }).catch(error => {
+        console.error(`🎥 Failed to play video for ${participantId}:`, error);
+        setHasError(true);
+      });
+    };
+
+    const handleError = (error: Event) => {
+      console.error(`🎥 Video error for ${participantId}:`, error);
+      setHasError(true);
+    };
+
+    const handlePlay = () => {
+      console.log(`🎥 Video started playing for ${participantId}`);
+      setIsPlaying(true);
+    };
+
+    const handlePause = () => {
+      console.log(`🎥 Video paused for ${participantId}`);
+      setIsPlaying(false);
+    };
+
+    // Add event listeners
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('error', handleError);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+
+    // Cleanup
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('error', handleError);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+    };
+  }, [stream, participantId, participantName]);
+
+  const handlePlayClick = () => {
+    const video = videoRef.current;
+    if (video) {
+      video.play().catch(error => {
+        console.error(`🎥 Manual play failed for ${participantId}:`, error);
+        setHasError(true);
+      });
+    }
+  };
+
+  return (
+    <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="w-full h-full object-cover"
+      />
+      <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-sm">
+        {participantName}
+      </div>
+      {!isPlaying && !hasError && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <button
+            onClick={handlePlayClick}
+            className="bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-full transition-colors"
+          >
+            ▶️ Play
+          </button>
+        </div>
+      )}
+      {hasError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-red-900 bg-opacity-50">
+          <div className="text-center text-white">
+            <div className="text-2xl mb-2">⚠️</div>
+            <div className="text-sm">Video Error</div>
+            <button
+              onClick={handlePlayClick}
+              className="mt-2 bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
   const { user } = useAuth();
   const [channelId, setChannelId] = useState<string>('');
@@ -239,23 +359,12 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
                 {Array.from(remoteStreams.entries()).map(([participantId, stream]) => {
                   const participant = participants.find(p => p.id === participantId);
                   return (
-                    <div key={participantId} className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
-                      <video
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover"
-                        ref={(video) => {
-                          if (video && stream) {
-                            video.srcObject = stream;
-                            console.log(`🎥 Video element srcObject set for ${participantId}:`, video.srcObject);
-                          }
-                        }}
-                      />
-                      <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-sm">
-                        {participant?.name || `User ${participantId.slice(0, 8)}`}
-                      </div>
-                    </div>
+                    <RemoteVideoPlayer
+                      key={participantId}
+                      participantId={participantId}
+                      stream={stream}
+                      participantName={participant?.name || `User ${participantId.slice(0, 8)}`}
+                    />
                   );
                 })}
 

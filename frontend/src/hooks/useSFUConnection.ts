@@ -244,44 +244,7 @@ export const useSFUConnection = () => {
               console.log('🎥 I am the initiator, creating offer for:', data.participantId);
               console.log('🎥 Using peer connection key:', data.participantId);
               
-              // Create peer connection inline to avoid dependency issues
-              const peerConnection = new RTCPeerConnection({ iceServers });
-              
-              // Add local stream to peer connection
-              if (localStreamRef.current) {
-                localStreamRef.current.getTracks().forEach(track => {
-                  peerConnection.addTrack(track, localStreamRef.current!);
-                });
-              }
-              
-              // Handle remote stream
-              peerConnection.ontrack = (event) => {
-                console.log('🎥 *** ONTRACK EVENT FIRED ***');
-                const [remoteStream] = event.streams;
-                if (remoteStream) {
-                  console.log('🎥 *** STREAM ADDED TO MAP ***');
-                  setRemoteStreams(prev => {
-                    const newMap = new Map(prev);
-                    newMap.set(data.participantId, remoteStream);
-                    console.log('🎥 Updated remote streams map size:', newMap.size);
-                    return newMap;
-                  });
-                }
-              };
-              
-              // Handle ICE candidates
-              peerConnection.onicecandidate = (event) => {
-                if (event.candidate && currentRoomId.current) {
-                  sendCustomEvent({
-                    type: 'webrtc_ice_candidate',
-                    candidate: event.candidate,
-                    roomId: currentRoomId.current,
-                    targetParticipantId: data.participantId,
-                  });
-                }
-              };
-              
-              peerConnections.current.set(data.participantId, peerConnection);
+              const peerConnection = createPeerConnection(data.participantId);
               
               try {
                 const offer = await peerConnection.createOffer();
@@ -419,44 +382,7 @@ export const useSFUConnection = () => {
             
             console.log('🎥 Creating peer connection with key:', data.participantId);
             
-            // Create peer connection inline to avoid dependency issues
-            const peerConnection = new RTCPeerConnection({ iceServers });
-            
-            // Add local stream to peer connection
-            if (localStreamRef.current) {
-              localStreamRef.current.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStreamRef.current!);
-              });
-            }
-            
-            // Handle remote stream
-            peerConnection.ontrack = (event) => {
-              console.log('🎥 *** ONTRACK EVENT FIRED ***');
-              const [remoteStream] = event.streams;
-              if (remoteStream) {
-                console.log('🎥 *** STREAM ADDED TO MAP ***');
-                setRemoteStreams(prev => {
-                  const newMap = new Map(prev);
-                  newMap.set(data.participantId, remoteStream);
-                  console.log('🎥 Updated remote streams map size:', newMap.size);
-                  return newMap;
-                });
-              }
-            };
-            
-            // Handle ICE candidates
-            peerConnection.onicecandidate = (event) => {
-              if (event.candidate && currentRoomId.current) {
-                sendCustomEvent({
-                  type: 'webrtc_ice_candidate',
-                  candidate: event.candidate,
-                  roomId: currentRoomId.current,
-                  targetParticipantId: data.participantId,
-                });
-              }
-            };
-            
-            peerConnections.current.set(data.participantId, peerConnection);
+            const peerConnection = createPeerConnection(data.participantId);
             
             try {
               console.log('🎥 Setting remote description and creating answer for:', data.participantId);
