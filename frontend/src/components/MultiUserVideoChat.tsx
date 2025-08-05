@@ -243,10 +243,12 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
                       <video
                         autoPlay
                         playsInline
+                        muted
                         className="w-full h-full object-cover"
                         ref={(video) => {
                           if (video && stream) {
                             video.srcObject = stream;
+                            console.log(`🎥 Video element srcObject set for ${participantId}:`, video.srcObject);
                           }
                         }}
                       />
