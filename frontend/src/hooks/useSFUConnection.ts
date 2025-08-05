@@ -197,9 +197,6 @@ export const useSFUConnection = () => {
         // Start with empty participants list - will be populated as others respond
         setParticipants([]);
         
-        // Log initial state
-        setTimeout(() => logDebugState(), 200);
-        
         // Resolve immediately since this is a peer-to-peer approach
         resolve();
       } catch (error) {
@@ -207,7 +204,7 @@ export const useSFUConnection = () => {
         reject(error);
       }
     });
-  }, [sendCustomEvent, logDebugState]);
+  }, [sendCustomEvent]);
 
   // Handle WebRTC messages via WebSocket context
   useEffect(() => {
@@ -218,11 +215,6 @@ export const useSFUConnection = () => {
       }
       
       console.log('🔄 Processing WebRTC message:', data.type, data);
-      
-      // Log debug state for important message types
-      if (['webrtc_offer', 'webrtc_answer', 'webrtc_join_room'].includes(data.type)) {
-        setTimeout(() => logDebugState(), 100); // Small delay to see state after processing
-      }
       
       switch (data.type) {
         case 'webrtc_participant_joined':
@@ -243,7 +235,46 @@ export const useSFUConnection = () => {
                 currentUserName.current.localeCompare(data.participantId) < 0) {
               console.log('🎥 I am the initiator, creating offer for:', data.participantId);
               console.log('🎥 Using peer connection key:', data.participantId);
-              const peerConnection = createPeerConnection(data.participantId);
+              
+              // Create peer connection inline to avoid dependency issues
+              const peerConnection = new RTCPeerConnection({ iceServers });
+              
+              // Add local stream to peer connection
+              if (localStreamRef.current) {
+                localStreamRef.current.getTracks().forEach(track => {
+                  peerConnection.addTrack(track, localStreamRef.current!);
+                });
+              }
+              
+              // Handle remote stream
+              peerConnection.ontrack = (event) => {
+                console.log('🎥 *** ONTRACK EVENT FIRED ***');
+                const [remoteStream] = event.streams;
+                if (remoteStream) {
+                  console.log('🎥 *** STREAM ADDED TO MAP ***');
+                  setRemoteStreams(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(data.participantId, remoteStream);
+                    console.log('🎥 Updated remote streams map size:', newMap.size);
+                    return newMap;
+                  });
+                }
+              };
+              
+              // Handle ICE candidates
+              peerConnection.onicecandidate = (event) => {
+                if (event.candidate && currentRoomId.current) {
+                  sendCustomEvent({
+                    type: 'webrtc_ice_candidate',
+                    candidate: event.candidate,
+                    roomId: currentRoomId.current,
+                    targetParticipantId: data.participantId,
+                  });
+                }
+              };
+              
+              peerConnections.current.set(data.participantId, peerConnection);
+              
               try {
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
@@ -379,7 +410,45 @@ export const useSFUConnection = () => {
             });
             
             console.log('🎥 Creating peer connection with key:', data.participantId);
-            const peerConnection = createPeerConnection(data.participantId);
+            
+            // Create peer connection inline to avoid dependency issues
+            const peerConnection = new RTCPeerConnection({ iceServers });
+            
+            // Add local stream to peer connection
+            if (localStreamRef.current) {
+              localStreamRef.current.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStreamRef.current!);
+              });
+            }
+            
+            // Handle remote stream
+            peerConnection.ontrack = (event) => {
+              console.log('🎥 *** ONTRACK EVENT FIRED ***');
+              const [remoteStream] = event.streams;
+              if (remoteStream) {
+                console.log('🎥 *** STREAM ADDED TO MAP ***');
+                setRemoteStreams(prev => {
+                  const newMap = new Map(prev);
+                  newMap.set(data.participantId, remoteStream);
+                  console.log('🎥 Updated remote streams map size:', newMap.size);
+                  return newMap;
+                });
+              }
+            };
+            
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+              if (event.candidate && currentRoomId.current) {
+                sendCustomEvent({
+                  type: 'webrtc_ice_candidate',
+                  candidate: event.candidate,
+                  roomId: currentRoomId.current,
+                  targetParticipantId: data.participantId,
+                });
+              }
+            };
+            
+            peerConnections.current.set(data.participantId, peerConnection);
             
             try {
               console.log('🎥 Setting remote description and creating answer for:', data.participantId);
@@ -456,7 +525,7 @@ export const useSFUConnection = () => {
         onWebRTCMessage(null);
       }
     };
-  }, [createPeerConnection, sendCustomEvent, onWebRTCMessage]);
+  }, [onWebRTCMessage]);
 
   // Disconnect from video room
   const disconnect = useCallback(() => {
