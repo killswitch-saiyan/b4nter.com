@@ -17,6 +17,37 @@ interface Participant {
   stream?: MediaStream;
 }
 
+interface RemoteVideoElementProps {
+  participantId: string;
+  stream: MediaStream;
+  participantName: string;
+}
+
+const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, stream, participantName }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      console.log('🎥 Setting remote video stream for:', participantId, stream);
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream, participantId]);
+
+  return (
+    <div className="relative bg-gray-800 rounded-lg overflow-hidden">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className="w-full h-full object-cover"
+      />
+      <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
+        {participantName}
+      </div>
+    </div>
+  );
+};
+
 const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roomId: initialRoomId, onClose }) => {
   const { user } = useAuth();
   const { sendCustomEvent } = useWebSocket();
@@ -92,6 +123,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
   // Sync remoteStreams to video elements
   useEffect(() => {
     console.log('🎥 Remote streams updated:', remoteStreams.size);
+    console.log('🎥 Remote streams entries:', Array.from(remoteStreams.entries()));
   }, [remoteStreams]);
 
   // Connect to video room
@@ -227,23 +259,17 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
               </div>
 
               {/* Remote Videos */}
-              {Array.from(remoteStreams.entries()).map(([participantId, stream]) => (
-                <div key={participantId} className="relative bg-gray-800 rounded-lg overflow-hidden">
-                  <video
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                    ref={(video) => {
-                      if (video && stream) {
-                        video.srcObject = stream;
-                      }
-                    }}
+              {Array.from(remoteStreams.entries()).map(([participantId, stream]) => {
+                console.log('🎥 Rendering remote video for:', participantId, stream);
+                return (
+                  <RemoteVideoElement 
+                    key={participantId}
+                    participantId={participantId}
+                    stream={stream}
+                    participantName={targetUsername}
                   />
-                  <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
-                    {targetUsername}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Placeholder for remote user if not connected */}
               {remoteStreams.size === 0 && (
