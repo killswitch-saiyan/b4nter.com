@@ -434,35 +434,14 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
               </div>
 
               {/* Remote Videos */}
-              {(() => {
-                const entries = Array.from(remoteStreams.entries());
-                console.log('🎥 *** RENDERING REMOTE VIDEOS ***');
-                console.log('🎥 Map size:', remoteStreams.size);
-                console.log('🎥 Map entries:', entries);
-                console.log('🎥 Current user name:', user?.username);
-                
-                if (entries.length === 0) {
-                  console.log('🎥 No remote streams to render');
-                } 
-                
-                return entries.map(([participantId, stream]) => {
-                  console.log('🎥 *** ABOUT TO RENDER REMOTE VIDEO ***');
-                  console.log('🎥 Participant ID:', participantId);
-                  console.log('🎥 Stream object:', stream);
-                  console.log('🎥 Stream is MediaStream?', stream instanceof MediaStream);
-                  console.log('🎥 Stream active?', stream?.active);
-                  console.log('🎥 Stream tracks:', stream?.getTracks()?.map(t => t.kind));
-                  
-                  return (
-                    <RemoteVideoElement 
-                      key={participantId}
-                      participantId={participantId}
-                      stream={stream}
-                      participantName={targetUsername}
-                    />
-                  );
-                });
-              })()}
+              {Array.from(remoteStreams.entries()).map(([participantId, stream]) => (
+                <RemoteVideoElement 
+                  key={participantId}
+                  participantId={participantId}
+                  stream={stream}
+                  participantName={targetUsername}
+                />
+              ))}
 
               {/* Placeholder for remote user if not connected */}
               {remoteStreams.size === 0 && (
