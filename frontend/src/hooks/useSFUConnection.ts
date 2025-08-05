@@ -62,20 +62,19 @@ export const useSFUConnection = () => {
         console.log('🎥 Could not check permissions (might be normal):', e);
       }
       
-      console.log('🎥 Requesting user media with constraints:', { video: true, audio: true });
+      console.log('🎥 Requesting user media with constraints:', { video: { width: 640, height: 480 }, audio: true });
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video: { width: 640, height: 480 },
+        audio: true
       });
       
       console.log('🎥 Got user media stream:', stream.id);
       console.log('🎥 Stream active:', stream.active);
-      console.log('🎥 Initial track states:');
+      console.log('🎥 Natural track states:');
       
-      // Explicitly enable all tracks
+      // DON'T manipulate tracks - let them be natural
       stream.getTracks().forEach(track => {
-        track.enabled = true;
-        console.log('🎥 Explicitly enabled track:', track.kind, 'enabled:', track.enabled, 'muted:', track.muted);
+        console.log('🎥 Natural track:', track.kind, 'enabled:', track.enabled, 'muted:', track.muted);
       });
       
       setLocalStream(stream);
@@ -101,10 +100,7 @@ export const useSFUConnection = () => {
       console.log('🔗 Local stream active:', localStreamRef.current.active);
       localStreamRef.current.getTracks().forEach(track => {
         console.log('🔗 Adding track:', track.kind, 'enabled:', track.enabled, 'muted:', track.muted, 'readyState:', track.readyState, 'id:', track.id);
-        // Ensure track is not muted before adding
-        if (track.muted) {
-          console.warn('🚨 WARNING: Local track is muted when adding to peer connection!', track.kind);
-        }
+        // DON'T check or manipulate - just add the track naturally
         peerConnection.addTrack(track, localStreamRef.current!);
       });
       
@@ -141,21 +137,9 @@ export const useSFUConnection = () => {
         console.log('🎥 Remote stream active:', remoteStream.active);
         console.log('🎥 Remote stream id:', remoteStream.id);
         
-        // Try to unmute remote tracks (client-side workaround)
+        // Just log remote track states - DON'T manipulate them
         remoteStream.getTracks().forEach(track => {
           console.log(`🎥 Remote track ${track.kind}: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
-          
-          if (track.muted) {
-            console.warn(`🚨 CRITICAL: Remote ${track.kind} track is muted! Attempting workaround...`);
-            
-            // Attempt to force unmute (may not work for remote tracks)
-            try {
-              track.enabled = true;
-              console.log(`🔧 Attempted to enable muted ${track.kind} track`);
-            } catch (e) {
-              console.error(`❌ Could not enable muted ${track.kind} track:`, e);
-            }
-          }
         });
         
         setRemoteStreams(prev => {
