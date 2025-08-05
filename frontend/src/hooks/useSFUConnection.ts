@@ -242,6 +242,7 @@ export const useSFUConnection = () => {
             if (localStreamRef.current && currentUserName.current && 
                 currentUserName.current.localeCompare(data.participantId) < 0) {
               console.log('🎥 I am the initiator, creating offer for:', data.participantId);
+              console.log('🎥 Using peer connection key:', data.participantId);
               const peerConnection = createPeerConnection(data.participantId);
               try {
                 const offer = await peerConnection.createOffer();
@@ -363,6 +364,9 @@ export const useSFUConnection = () => {
           // Only handle offers for our room and targeted at us
           if (data.channelId === currentRoomId.current && data.targetParticipantId === currentUserName.current) {
             console.log('🎥 Received WebRTC offer from:', data.participantName);
+            console.log('🎥 Offer participantId:', data.participantId);
+            console.log('🎥 Target participantId:', data.targetParticipantId);
+            console.log('🎥 My current userName:', currentUserName.current);
             
             // Add the participant if not already present
             const participant = { id: data.participantId, name: data.participantName };
@@ -374,6 +378,7 @@ export const useSFUConnection = () => {
               return prev;
             });
             
+            console.log('🎥 Creating peer connection with key:', data.participantId);
             const peerConnection = createPeerConnection(data.participantId);
             
             try {
@@ -451,7 +456,7 @@ export const useSFUConnection = () => {
         onWebRTCMessage(null);
       }
     };
-  }, [createPeerConnection, sendCustomEvent, onWebRTCMessage, logDebugState]);
+  }, [createPeerConnection, sendCustomEvent, onWebRTCMessage]);
 
   // Disconnect from video room
   const disconnect = useCallback(() => {

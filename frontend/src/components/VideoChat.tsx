@@ -30,36 +30,50 @@ const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, 
 
   useEffect(() => {
     if (!videoRef.current || !stream) {
+      console.log('🎥 RemoteVideoElement: Missing video ref or stream', { 
+        hasVideoRef: !!videoRef.current, 
+        hasStream: !!stream,
+        participantId 
+      });
       setVideoStatus('no-stream');
       setStreamInfo('No stream available');
       return;
     }
 
     const video = videoRef.current;
-    console.log('🎥 Setting remote video stream for:', participantId, stream);
+    console.log('🎥 *** REMOTE VIDEO ELEMENT PROCESSING ***');
+    console.log('🎥 Participant:', participantId);
+    console.log('🎥 Stream:', stream);
+    console.log('🎥 Stream ID:', stream.id);
     console.log('🎥 Stream active:', stream.active);
-    console.log('🎥 Stream tracks:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+    console.log('🎥 Video element:', video);
+    console.log('🎥 Video element dimensions:', video.offsetWidth, 'x', video.offsetHeight);
+    console.log('🎥 Video element visible:', video.offsetParent !== null);
     
-    // Update stream info for debugging
     const tracks = stream.getTracks();
+    console.log('🎥 Stream tracks:', tracks.map(t => ({ 
+      kind: t.kind, 
+      enabled: t.enabled, 
+      readyState: t.readyState,
+      id: t.id 
+    })));
+    
     const videoTracks = tracks.filter(t => t.kind === 'video');
     const audioTracks = tracks.filter(t => t.kind === 'audio');
     setStreamInfo(`V:${videoTracks.length}(${videoTracks.map(t => t.enabled ? 'on' : 'off').join(',')}) A:${audioTracks.length}(${audioTracks.map(t => t.enabled ? 'on' : 'off').join(',')})`);
     
     // Clear any existing srcObject first
     video.srcObject = null;
+    console.log('🎥 Cleared existing srcObject');
     
-    // Small delay to ensure clean state
-    setTimeout(() => {
-      if (video && stream) {
-        console.log('🎥 Assigning stream to video element');
-        video.srcObject = stream;
-        setVideoStatus('assigned');
-        
-        // Force load the video
-        video.load();
-      }
-    }, 100);
+    // Immediate assignment (no delay)
+    console.log('🎥 Assigning stream to video element immediately');
+    video.srcObject = stream;
+    setVideoStatus('assigned');
+    
+    // Force load the video
+    console.log('🎥 Calling video.load()');
+    video.load();
     
     // Add comprehensive event listeners
     video.onloadstart = () => {
@@ -265,8 +279,18 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
 
   // Sync remoteStreams to video elements
   useEffect(() => {
+    console.log('🎥 *** REMOTE STREAMS REACT EFFECT ***');
     console.log('🎥 Remote streams updated:', remoteStreams.size);
     console.log('🎥 Remote streams entries:', Array.from(remoteStreams.entries()));
+    
+    // Log each stream in detail
+    remoteStreams.forEach((stream, participantId) => {
+      console.log(`🎥 Stream for ${participantId}:`, {
+        streamId: stream.id,
+        active: stream.active,
+        tracks: stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState }))
+      });
+    });
   }, [remoteStreams]);
 
   // Connect to video room
@@ -412,14 +436,22 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
               {/* Remote Videos */}
               {(() => {
                 const entries = Array.from(remoteStreams.entries());
-                console.log('🎥 About to render remote videos. Map size:', remoteStreams.size);
+                console.log('🎥 *** RENDERING REMOTE VIDEOS ***');
+                console.log('🎥 Map size:', remoteStreams.size);
                 console.log('🎥 Map entries:', entries);
-                console.log('🎥 Current user name for filtering:', user?.username);
+                console.log('🎥 Current user name:', user?.username);
+                
+                if (entries.length === 0) {
+                  console.log('🎥 No remote streams to render');
+                } 
                 
                 return entries.map(([participantId, stream]) => {
-                  console.log('🎥 Rendering remote video for:', participantId, stream);
+                  console.log('🎥 *** ABOUT TO RENDER REMOTE VIDEO ***');
+                  console.log('🎥 Participant ID:', participantId);
+                  console.log('🎥 Stream object:', stream);
                   console.log('🎥 Stream is MediaStream?', stream instanceof MediaStream);
                   console.log('🎥 Stream active?', stream?.active);
+                  console.log('🎥 Stream tracks:', stream?.getTracks()?.map(t => t.kind));
                   
                   return (
                     <RemoteVideoElement 
