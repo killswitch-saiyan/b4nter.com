@@ -19,6 +19,12 @@ export const useSFUConnection = () => {
   const localStreamRef = useRef<MediaStream | null>(null);
   const currentRoomId = useRef<string | null>(null);
   const currentUserName = useRef<string | null>(null);
+  const onWebRTCMessageRef = useRef(onWebRTCMessage);
+  
+  // Update ref when onWebRTCMessage changes
+  useEffect(() => {
+    onWebRTCMessageRef.current = onWebRTCMessage;
+  }, [onWebRTCMessage]);
 
   // Debug function to log current state
   const logDebugState = useCallback(() => {
@@ -177,6 +183,7 @@ export const useSFUConnection = () => {
         console.log(`🎥 Joining video room: ${roomId} as ${userName}`);
         
         // First, ask existing participants to identify themselves
+        console.log('🔥 Sending webrtc_room_query');
         sendCustomEvent({
           type: 'webrtc_room_query',
           channelId: roomId,
@@ -186,6 +193,7 @@ export const useSFUConnection = () => {
         
         // Wait a moment, then announce our joining
         setTimeout(() => {
+          console.log('🔥 Sending webrtc_join_room');
           sendCustomEvent({
             type: 'webrtc_join_room', 
             channelId: roomId,
@@ -507,25 +515,31 @@ export const useSFUConnection = () => {
       }
     };
 
+    // Test function to verify handler is working
+    const testHandler = (data: any) => {
+      console.log('🔥 TEST HANDLER CALLED:', data.type, data);
+      return handleWebRTCMessage(data);
+    };
+    
     // Register the handler with WebSocket context
     console.log('🔄 Attempting to register WebRTC message handler');
-    console.log('🔄 onWebRTCMessage available:', !!onWebRTCMessage);
+    console.log('🔄 onWebRTCMessage available:', !!onWebRTCMessageRef.current);
     
-    if (onWebRTCMessage) {
+    if (onWebRTCMessageRef.current) {
       console.log('🔄 Registering WebRTC message handler');
-      onWebRTCMessage(handleWebRTCMessage);
+      onWebRTCMessageRef.current(testHandler);
     } else {
       console.error('🔄 onWebRTCMessage not available - WebRTC messages will not be handled!');
     }
 
     // Cleanup
     return () => {
-      if (onWebRTCMessage) {
+      if (onWebRTCMessageRef.current) {
         console.log('🔄 Unregistering WebRTC message handler');
-        onWebRTCMessage(null);
+        onWebRTCMessageRef.current(null);
       }
     };
-  }, [onWebRTCMessage]);
+  }, []); // Empty dependencies to prevent re-registration loop
 
   // Disconnect from video room
   const disconnect = useCallback(() => {

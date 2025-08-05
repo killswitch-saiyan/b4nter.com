@@ -474,10 +474,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   };
 
   const sendCustomEvent = (event: any) => {
+    console.log('📤 Sending custom event:', event.type, event);
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(event));
+      console.log('📤 Event sent successfully');
     } else {
-      console.error('WebSocket is not connected');
+      console.error('📤 WebSocket is not connected, readyState:', wsRef.current?.readyState);
     }
   };
 
