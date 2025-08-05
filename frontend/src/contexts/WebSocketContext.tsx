@@ -255,6 +255,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           case 'webrtc_offer':
           case 'webrtc_answer':
           case 'webrtc_ice_candidate':
+          case 'webrtc_participant_joined':
+          case 'webrtc_participant_left':
           case 'webrtc_room_query':
           case 'webrtc_room_response':
           case 'webrtc_join_room':
@@ -287,63 +289,15 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           case 'video_call_invite':
             console.log('Video call invitation received:', data);
             
-            // Play ringtone sound
+            // Play ringtone sound using MP3 file
             try {
-              // Create a simple ringtone using Web Audio API
-              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioContext.createOscillator();
-              const gainNode = audioContext.createGain();
+              const audio = new Audio('/ringtone.mp3');
+              audio.loop = true;
+              audio.volume = 0.7;
+              audio.play().catch(e => console.warn('Could not play ringtone:', e));
               
-              oscillator.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              
-              oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-              gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-              
-              // Play ringtone pattern: beep-beep-pause-beep-beep
-              oscillator.start(audioContext.currentTime);
-              oscillator.stop(audioContext.currentTime + 0.2);
-              
-              setTimeout(() => {
-                const osc2 = audioContext.createOscillator();
-                const gain2 = audioContext.createGain();
-                osc2.connect(gain2);
-                gain2.connect(audioContext.destination);
-                osc2.frequency.setValueAtTime(800, audioContext.currentTime);
-                gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-                osc2.start(audioContext.currentTime);
-                osc2.stop(audioContext.currentTime + 0.2);
-              }, 300);
-              
-              // Repeat every 2 seconds until call is answered/rejected
-              const ringtoneInterval = setInterval(() => {
-                try {
-                  const osc = audioContext.createOscillator();
-                  const gain = audioContext.createGain();
-                  osc.connect(gain);
-                  gain.connect(audioContext.destination);
-                  osc.frequency.setValueAtTime(800, audioContext.currentTime);
-                  gain.gain.setValueAtTime(0.3, audioContext.currentTime);
-                  osc.start(audioContext.currentTime);
-                  osc.stop(audioContext.currentTime + 0.2);
-                  
-                  setTimeout(() => {
-                    const osc2 = audioContext.createOscillator();
-                    const gain2 = audioContext.createGain();
-                    osc2.connect(gain2);
-                    gain2.connect(audioContext.destination);
-                    osc2.frequency.setValueAtTime(800, audioContext.currentTime);
-                    gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-                    osc2.start(audioContext.currentTime);
-                    osc2.stop(audioContext.currentTime + 0.2);
-                  }, 300);
-                } catch (e) {
-                  clearInterval(ringtoneInterval);
-                }
-              }, 2000);
-              
-              // Store interval to stop it later
-              (window as any).videoCallRingtone = ringtoneInterval;
+              // Store audio reference to stop it later
+              (window as any).videoCallRingtone = audio;
             } catch (error) {
               console.warn('Could not play ringtone:', error);
             }
@@ -364,7 +318,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             console.log('Video call accepted:', data);
             // Stop ringtone
             if ((window as any).videoCallRingtone) {
-              clearInterval((window as any).videoCallRingtone);
+              (window as any).videoCallRingtone.pause();
+              (window as any).videoCallRingtone.currentTime = 0;
               (window as any).videoCallRingtone = null;
             }
             window.dispatchEvent(new CustomEvent('video-call-accept', { detail: data }));
@@ -373,7 +328,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             console.log('Video call rejected:', data);
             // Stop ringtone
             if ((window as any).videoCallRingtone) {
-              clearInterval((window as any).videoCallRingtone);
+              (window as any).videoCallRingtone.pause();
+              (window as any).videoCallRingtone.currentTime = 0;
               (window as any).videoCallRingtone = null;
             }
             window.dispatchEvent(new CustomEvent('video-call-reject', { detail: data }));
@@ -382,7 +338,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             console.log('Video call ended:', data);
             // Stop ringtone
             if ((window as any).videoCallRingtone) {
-              clearInterval((window as any).videoCallRingtone);
+              (window as any).videoCallRingtone.pause();
+              (window as any).videoCallRingtone.currentTime = 0;
               (window as any).videoCallRingtone = null;
             }
             window.dispatchEvent(new CustomEvent('video-call-end', { detail: data }));

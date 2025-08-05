@@ -140,6 +140,41 @@ export const useSFUConnection = () => {
       console.log('🔄 Processing WebRTC message:', data.type, data);
       
       switch (data.type) {
+        case 'webrtc_participant_joined':
+          // Handle messages from existing backend handlers
+          if (data.channelId === currentRoomId.current && data.participantName !== currentUserName.current) {
+            console.log('🔄 Processing participant joined:', data.participantName);
+            const participant = { id: data.participantId, name: data.participantName };
+            setParticipants(prev => {
+              if (!prev.find(p => p.id === participant.id)) {
+                console.log('➕ Adding participant:', participant);
+                return [...prev, participant];
+              }
+              return prev;
+            });
+            
+            // Create offer for new participant if we have local stream
+            if (localStreamRef.current) {
+              const peerConnection = createPeerConnection(data.participantId);
+              try {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                sendCustomEvent({
+                  type: 'webrtc_offer',
+                  offer: offer,
+                  channelId: currentRoomId.current,
+                  participantId: currentUserName.current,
+                  participantName: currentUserName.current,
+                  targetParticipantId: data.participantId
+                });
+              } catch (error) {
+                console.error('Failed to create offer:', error);
+              }
+            }
+          }
+          break;
+
         case 'webrtc_room_query':
           // If someone is asking about our room and we're in it, respond
           if (data.channelId === currentRoomId.current && data.participantName !== currentUserName.current) {
@@ -202,6 +237,7 @@ export const useSFUConnection = () => {
           }
           break;
 
+        case 'webrtc_participant_left':
         case 'webrtc_leave_room':
           if (data.channelId === currentRoomId.current) {
             console.log('Participant left room:', data.participantId);
