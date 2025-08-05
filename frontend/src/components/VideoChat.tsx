@@ -71,9 +71,17 @@ const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, 
     video.srcObject = stream;
     setVideoStatus('assigned');
     
-    // Force load the video
+    // Force load and play the video
     console.log('🎥 Calling video.load()');
     video.load();
+    
+    // Immediate play attempt
+    setTimeout(() => {
+      video.play().catch(e => {
+        console.warn('🎥 Immediate play failed for:', participantId, e);
+        setVideoStatus('immediate-play-failed');
+      });
+    }, 100);
     
     // Add comprehensive event listeners
     video.onloadstart = () => {

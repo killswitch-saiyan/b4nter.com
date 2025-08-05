@@ -51,9 +51,20 @@ export const useSFUConnection = () => {
   // Initialize media (camera/microphone)
   const initializeMedia = useCallback(async (): Promise<MediaStream> => {
     try {
+      console.log('🎥 Requesting user media with constraints:', { video: true, audio: true });
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
+      });
+      
+      console.log('🎥 Got user media stream:', stream.id);
+      console.log('🎥 Stream active:', stream.active);
+      console.log('🎥 Initial track states:');
+      
+      // Explicitly enable all tracks
+      stream.getTracks().forEach(track => {
+        track.enabled = true;
+        console.log('🎥 Explicitly enabled track:', track.kind, 'enabled:', track.enabled, 'muted:', track.muted);
       });
       
       setLocalStream(stream);
@@ -109,10 +120,16 @@ export const useSFUConnection = () => {
           kind: t.kind, 
           enabled: t.enabled, 
           readyState: t.readyState,
-          id: t.id 
+          id: t.id,
+          muted: t.muted
         })));
         console.log('🎥 Remote stream active:', remoteStream.active);
         console.log('🎥 Remote stream id:', remoteStream.id);
+        
+        // Explicitly enable remote tracks (though this might not work for remote tracks)
+        remoteStream.getTracks().forEach(track => {
+          console.log(`🎥 Remote track ${track.kind}: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+        });
         
         setRemoteStreams(prev => {
           const newMap = new Map(prev);
