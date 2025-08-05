@@ -20,6 +20,21 @@ export const useSFUConnection = () => {
   const currentRoomId = useRef<string | null>(null);
   const currentUserName = useRef<string | null>(null);
 
+  // Debug function to log current state
+  const logDebugState = useCallback(() => {
+    console.log('=== SFU CONNECTION DEBUG STATE ===');
+    console.log('🏠 Current room:', currentRoomId.current);
+    console.log('👤 Current user:', currentUserName.current);
+    console.log('📺 Local stream:', !!localStreamRef.current);
+    console.log('👥 Participants:', participants.length, participants.map(p => p.id));
+    console.log('🎥 Remote streams:', remoteStreams.size, Array.from(remoteStreams.keys()));
+    console.log('🔗 Peer connections:', peerConnections.current.size, Array.from(peerConnections.current.keys()));
+    peerConnections.current.forEach((pc, id) => {
+      console.log(`🔗 PC ${id}: connection=${pc.connectionState}, ice=${pc.iceConnectionState}`);
+    });
+    console.log('=====================================');
+  }, [participants, remoteStreams]);
+
   // ICE servers configuration
   const iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -54,9 +69,18 @@ export const useSFUConnection = () => {
     // Add local stream to peer connection
     if (localStreamRef.current) {
       console.log('🔗 Adding local tracks to peer connection for:', participantId);
+      console.log('🔗 Local stream id:', localStreamRef.current.id);
+      console.log('🔗 Local stream active:', localStreamRef.current.active);
       localStreamRef.current.getTracks().forEach(track => {
-        console.log('🔗 Adding track:', track.kind, 'enabled:', track.enabled);
+        console.log('🔗 Adding track:', track.kind, 'enabled:', track.enabled, 'id:', track.id);
         peerConnection.addTrack(track, localStreamRef.current!);
+      });
+      
+      // Verify tracks were added
+      const senders = peerConnection.getSenders();
+      console.log('🔗 Peer connection senders after adding tracks:', senders.length);
+      senders.forEach((sender, index) => {
+        console.log(`🔗 Sender ${index}:`, sender.track?.kind, sender.track?.enabled);
       });
     } else {
       console.warn('🔗 No local stream available when creating peer connection for:', participantId);
@@ -64,9 +88,17 @@ export const useSFUConnection = () => {
 
     // Handle remote stream
     peerConnection.ontrack = (event) => {
-      console.log('🎥 Received remote stream from:', participantId, event.streams);
+      console.log('🎥 *** ONTRACK EVENT FIRED ***');
+      console.log('🎥 Received remote stream from:', participantId);
+      console.log('🎥 Event streams:', event.streams);
+      console.log('🎥 Event track:', event.track);
+      console.log('🎥 Track kind:', event.track.kind);
+      console.log('🎥 Track enabled:', event.track.enabled);
+      console.log('🎥 Track readyState:', event.track.readyState);
+      
       const [remoteStream] = event.streams;
       if (remoteStream) {
+        console.log('🎥 Remote stream found:', remoteStream);
         console.log('🎥 Remote stream tracks:', remoteStream.getTracks().map(t => ({ 
           kind: t.kind, 
           enabled: t.enabled, 
@@ -79,12 +111,15 @@ export const useSFUConnection = () => {
         setRemoteStreams(prev => {
           const newMap = new Map(prev);
           newMap.set(participantId, remoteStream);
+          console.log('🎥 *** STREAM ADDED TO MAP ***');
           console.log('🎥 Updated remote streams map size:', newMap.size);
           console.log('🎥 Current remote streams keys:', Array.from(newMap.keys()));
           return newMap;
         });
       } else {
-        console.error('🎥 No remote stream in ontrack event from:', participantId);
+        console.error('🎥 *** NO REMOTE STREAM IN ONTRACK EVENT ***');
+        console.error('🎥 Event streams length:', event.streams.length);
+        console.error('🎥 Event streams:', event.streams);
       }
     };
 
@@ -128,8 +163,15 @@ export const useSFUConnection = () => {
   const connectToSFU = useCallback(async (roomId: string, userName: string, stream: MediaStream) => {
     return new Promise<void>((resolve, reject) => {
       try {
+        console.log(`🎥 === CONNECTING TO SFU ===`);
+        console.log(`🎥 Room ID: ${roomId}`);
+        console.log(`🎥 User Name: ${userName}`);
+        console.log(`🎥 Stream provided:`, !!stream);
+        console.log(`🎥 Stream tracks:`, stream?.getTracks().map(t => t.kind));
+        
         currentRoomId.current = roomId;
         currentUserName.current = userName;
+        localStreamRef.current = stream; // Make sure we store the stream reference
         setIsConnected(true);
         
         console.log(`🎥 Joining video room: ${roomId} as ${userName}`);
@@ -155,6 +197,9 @@ export const useSFUConnection = () => {
         // Start with empty participants list - will be populated as others respond
         setParticipants([]);
         
+        // Log initial state
+        setTimeout(() => logDebugState(), 200);
+        
         // Resolve immediately since this is a peer-to-peer approach
         resolve();
       } catch (error) {
@@ -162,14 +207,22 @@ export const useSFUConnection = () => {
         reject(error);
       }
     });
-  }, [sendCustomEvent]);
+  }, [sendCustomEvent, logDebugState]);
 
   // Handle WebRTC messages via WebSocket context
   useEffect(() => {
     const handleWebRTCMessage = async (data: any) => {
-      if (!currentRoomId.current || !currentUserName.current) return;
+      if (!currentRoomId.current || !currentUserName.current) {
+        console.warn('🔄 Ignoring WebRTC message - not in room or no user:', data.type);
+        return;
+      }
       
       console.log('🔄 Processing WebRTC message:', data.type, data);
+      
+      // Log debug state for important message types
+      if (['webrtc_offer', 'webrtc_answer', 'webrtc_join_room'].includes(data.type)) {
+        setTimeout(() => logDebugState(), 100); // Small delay to see state after processing
+      }
       
       switch (data.type) {
         case 'webrtc_participant_joined':
@@ -254,6 +307,11 @@ export const useSFUConnection = () => {
             
             // Only the "older" participant creates an offer to avoid conflicts
             // Compare participant IDs to determine who should initiate
+            console.log('🔄 Comparing participants for offer creation:');
+            console.log('🔄 My ID:', currentUserName.current);
+            console.log('🔄 Other ID:', data.participantId);
+            console.log('🔄 Comparison result:', currentUserName.current?.localeCompare(data.participantId));
+            
             if (localStreamRef.current && currentUserName.current && 
                 currentUserName.current.localeCompare(data.participantId) < 0) {
               console.log('🎥 I am the initiator, creating offer for:', data.participantId);
@@ -340,14 +398,21 @@ export const useSFUConnection = () => {
 
         case 'webrtc_answer':
           if (data.channelId === currentRoomId.current && data.targetParticipantId === currentUserName.current) {
-            console.log('Received WebRTC answer from:', data.participantId);
+            console.log('🎥 Received WebRTC answer from:', data.participantId);
             const peerConnection = peerConnections.current.get(data.participantId);
             if (peerConnection) {
               try {
+                console.log('🎥 Setting remote description (answer) for:', data.participantId);
                 await peerConnection.setRemoteDescription(data.answer);
+                console.log('🎥 Remote description set successfully for:', data.participantId);
+                console.log('🎥 Peer connection state after answer:', peerConnection.connectionState);
+                console.log('🎥 ICE connection state after answer:', peerConnection.iceConnectionState);
               } catch (error) {
-                console.error('Failed to set remote description:', error);
+                console.error('🎥 Failed to set remote description:', error);
               }
+            } else {
+              console.error('🎥 No peer connection found for participant:', data.participantId);
+              console.log('🎥 Available peer connections:', Array.from(peerConnections.current.keys()));
             }
           }
           break;
