@@ -63,25 +63,30 @@ const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, 
     setStreamInfo(`V:${videoTracks.length}(${videoTracks.map(t => t.enabled ? 'on' : 'off').join(',')}) A:${audioTracks.length}(${audioTracks.map(t => t.enabled ? 'on' : 'off').join(',')})`);
     
     // Clear any existing srcObject first
-    video.srcObject = null;
-    console.log('🎥 Cleared existing srcObject');
+    if (video.srcObject) {
+      video.srcObject = null;
+      console.log('🎥 Cleared existing srcObject');
+    }
     
     // Immediate assignment (no delay)
     console.log('🎥 Assigning stream to video element immediately');
     video.srcObject = stream;
     setVideoStatus('assigned');
     
-    // Force load and play the video
-    console.log('🎥 Calling video.load()');
-    video.load();
+    // Ensure video element is ready
+    video.muted = false; // Explicitly set for remote video
+    video.volume = 1.0;  // Ensure volume is up
     
-    // Immediate play attempt
+    // For live streams, don't call load() - just let it play
+    console.log('🎥 Stream assigned, attempting to play automatically');
+    
+    // Small delay to let the stream settle
     setTimeout(() => {
       video.play().catch(e => {
-        console.warn('🎥 Immediate play failed for:', participantId, e);
-        setVideoStatus('immediate-play-failed');
+        console.warn('🎥 Auto-play failed for:', participantId, e);
+        setVideoStatus('autoplay-failed');
       });
-    }, 100);
+    }, 50);
     
     // Add comprehensive event listeners
     video.onloadstart = () => {
@@ -175,7 +180,7 @@ const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, 
         ref={videoRef}
         autoPlay
         playsInline
-        muted
+        muted={false}
         controls={false}
         className="w-full h-full object-cover"
         style={{ 
