@@ -141,9 +141,21 @@ export const useSFUConnection = () => {
         console.log('🎥 Remote stream active:', remoteStream.active);
         console.log('🎥 Remote stream id:', remoteStream.id);
         
-        // Explicitly enable remote tracks (though this might not work for remote tracks)
+        // Try to unmute remote tracks (client-side workaround)
         remoteStream.getTracks().forEach(track => {
           console.log(`🎥 Remote track ${track.kind}: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+          
+          if (track.muted) {
+            console.warn(`🚨 CRITICAL: Remote ${track.kind} track is muted! Attempting workaround...`);
+            
+            // Attempt to force unmute (may not work for remote tracks)
+            try {
+              track.enabled = true;
+              console.log(`🔧 Attempted to enable muted ${track.kind} track`);
+            } catch (e) {
+              console.error(`❌ Could not enable muted ${track.kind} track:`, e);
+            }
+          }
         });
         
         setRemoteStreams(prev => {
