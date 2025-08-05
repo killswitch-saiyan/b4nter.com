@@ -68,25 +68,19 @@ const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, 
       console.log('🎥 Cleared existing srcObject');
     }
     
-    // Immediate assignment (no delay)
-    console.log('🎥 Assigning stream to video element immediately');
-    video.srcObject = stream;
-    setVideoStatus('assigned');
-    
-    // Ensure video element is ready
-    video.muted = false; // Explicitly set for remote video
-    video.volume = 1.0;  // Ensure volume is up
-    
-    // For live streams, don't call load() - just let it play
-    console.log('🎥 Stream assigned, attempting to play automatically');
-    
-    // Small delay to let the stream settle
+    // CRITICAL: Use delayed assignment like the working implementation
+    console.log('🎥 Scheduling delayed stream assignment (matching working implementation)');
     setTimeout(() => {
-      video.play().catch(e => {
-        console.warn('🎥 Auto-play failed for:', participantId, e);
-        setVideoStatus('autoplay-failed');
-      });
-    }, 50);
+      if (video && stream) {
+        console.log('🎥 Assigning stream to video element (delayed)');
+        video.srcObject = stream;
+        video.muted = false; // Explicitly set for remote video
+        video.volume = 1.0;  // Ensure volume is up
+        setVideoStatus('stream-assigned');
+        
+        console.log('🎥 Stream assigned, video should auto-play');
+      }
+    }, 100); // Match the working implementation's 100ms delay
     
     // Add comprehensive event listeners
     video.onloadstart = () => {
