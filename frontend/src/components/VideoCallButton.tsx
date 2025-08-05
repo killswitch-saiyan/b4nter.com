@@ -122,6 +122,14 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
   // Accept incoming call
   const acceptCall = (roomId: string) => {
     console.log('Accepting call with room ID:', roomId);
+    
+    // Stop ringtone immediately
+    if ((window as any).videoCallRingtone) {
+      (window as any).videoCallRingtone.pause();
+      (window as any).videoCallRingtone.currentTime = 0;
+      (window as any).videoCallRingtone = null;
+    }
+    
     setRoomId(roomId);
     setIsInCall(true);
     setIncomingCall(null);
@@ -129,6 +137,13 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
 
   // Reject incoming call
   const rejectCall = () => {
+    // Stop ringtone
+    if ((window as any).videoCallRingtone) {
+      (window as any).videoCallRingtone.pause();
+      (window as any).videoCallRingtone.currentTime = 0;
+      (window as any).videoCallRingtone = null;
+    }
+    
     setIncomingCall(null);
   };
 

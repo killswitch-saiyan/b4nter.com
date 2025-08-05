@@ -57,11 +57,13 @@ export const useSFUConnection = () => {
 
     // Handle remote stream
     peerConnection.ontrack = (event) => {
-      console.log('Received remote stream from:', participantId);
+      console.log('🎥 Received remote stream from:', participantId, event.streams);
       const [remoteStream] = event.streams;
+      console.log('🎥 Remote stream tracks:', remoteStream.getTracks().map(t => t.kind));
       setRemoteStreams(prev => {
         const newMap = new Map(prev);
         newMap.set(participantId, remoteStream);
+        console.log('🎥 Updated remote streams map size:', newMap.size);
         return newMap;
       });
     };
@@ -155,10 +157,12 @@ export const useSFUConnection = () => {
             
             // Create offer for new participant if we have local stream
             if (localStreamRef.current) {
+              console.log('🎥 Creating peer connection and offer for:', data.participantId);
               const peerConnection = createPeerConnection(data.participantId);
               try {
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
+                console.log('🎥 Created offer for:', data.participantId);
                 
                 sendCustomEvent({
                   type: 'webrtc_offer',
@@ -171,6 +175,8 @@ export const useSFUConnection = () => {
               } catch (error) {
                 console.error('Failed to create offer:', error);
               }
+            } else {
+              console.warn('🎥 No local stream available to create offer');
             }
           }
           break;

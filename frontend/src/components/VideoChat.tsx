@@ -81,6 +81,19 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
     };
   }, [initialRoomId, user]);
 
+  // Sync localStream to video element whenever it changes
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      console.log('🎥 Setting local video stream:', localStream);
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  // Sync remoteStreams to video elements
+  useEffect(() => {
+    console.log('🎥 Remote streams updated:', remoteStreams.size);
+  }, [remoteStreams]);
+
   // Connect to video room
   const startVideoCall = async () => {
     if (!user || !localStream) return;
@@ -238,6 +251,9 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
                   <div className="text-white text-center">
                     <div className="text-4xl mb-2">👤</div>
                     <div>Waiting for {targetUsername}...</div>
+                    <div className="text-xs text-gray-400 mt-2">
+                      Participants: {participants.length} | Streams: {remoteStreams.size}
+                    </div>
                   </div>
                 </div>
               )}

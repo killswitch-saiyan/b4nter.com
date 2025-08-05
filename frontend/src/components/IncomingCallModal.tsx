@@ -30,6 +30,12 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
       // Auto-reject after 30 seconds
       const timeout = setTimeout(() => {
         if (isVisible) {
+          // Stop ringtone on timeout
+          if ((window as any).videoCallRingtone) {
+            (window as any).videoCallRingtone.pause();
+            (window as any).videoCallRingtone.currentTime = 0;
+            (window as any).videoCallRingtone = null;
+          }
           handleReject();
         }
       }, 30000);
@@ -40,6 +46,13 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
 
   const handleAccept = () => {
     if (!callData) return;
+    
+    // Stop ringtone immediately
+    if ((window as any).videoCallRingtone) {
+      (window as any).videoCallRingtone.pause();
+      (window as any).videoCallRingtone.currentTime = 0;
+      (window as any).videoCallRingtone = null;
+    }
     
     // Send acceptance via WebSocket
     sendCustomEvent({
@@ -54,6 +67,13 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
 
   const handleReject = () => {
     if (!callData) return;
+    
+    // Stop ringtone
+    if ((window as any).videoCallRingtone) {
+      (window as any).videoCallRingtone.pause();
+      (window as any).videoCallRingtone.currentTime = 0;
+      (window as any).videoCallRingtone = null;
+    }
     
     // Send rejection via WebSocket
     sendCustomEvent({
