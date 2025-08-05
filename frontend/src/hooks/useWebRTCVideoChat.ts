@@ -105,58 +105,21 @@ export const useWebRTCVideoChat = () => {
     // Handle remote stream
     peerConnection.ontrack = (event) => {
       console.log(`📥 Received remote track from: ${targetParticipantId}. Event:`, event);
-      console.log(`📥 Track details:`, {
-        kind: event.track.kind,
-        enabled: event.track.enabled,
-        muted: event.track.muted,
-        readyState: event.track.readyState,
-        id: event.track.id,
-        label: event.track.label
-      });
-      
       // Check if event.streams is not empty and contains a MediaStream
       if (event.streams && event.streams.length > 0) {
         const remoteStream = event.streams[0]; // Access the first stream
         console.log(`📺 Remote stream received:`, remoteStream);
-        console.log(`📺 Remote stream details:`, {
-          id: remoteStream.id,
-          active: remoteStream.active,
-          tracks: remoteStream.getTracks().map(t => ({
-            kind: t.kind,
-            enabled: t.enabled,
-            muted: t.muted,
-            readyState: t.readyState,
-            id: t.id
-          }))
-        });
-        
-        // Check specifically for video tracks
-        const videoTracks = remoteStream.getVideoTracks();
-        const audioTracks = remoteStream.getAudioTracks();
-        console.log(`📺 Remote stream has ${videoTracks.length} video tracks and ${audioTracks.length} audio tracks`);
-        
-        if (videoTracks.length === 0) {
-          console.error(`❌ CRITICAL: Remote stream has NO VIDEO TRACKS for ${targetParticipantId}`);
-        }
-        
         setRemoteStreams(prev => {
           const newMap = new Map(prev);
           newMap.set(targetParticipantId, remoteStream);
           console.log(`📺 Added remote stream for participant: ${targetParticipantId}. Current remoteStreams size: ${newMap.size}`);
-          console.log(`📺 Map size: ${newMap.size}`);
-          console.log(`📺 Map entries:`, Array.from(newMap.entries()).map(([id, stream]) => [id, {
-            streamId: stream.id,
-            active: stream.active,
-            videoTracks: stream.getVideoTracks().length,
-            audioTracks: stream.getAudioTracks().length
-          }]));
           return newMap;
         });
       } else {
         console.warn(`⚠️ ontrack event received but no streams found for ${targetParticipantId}`, event);
-        console.log(`⚠️ Creating manual stream from track...`);
+        console.log(`🔧 Creating manual stream from individual track...`);
         
-        // Try to create a stream from the track
+        // Create a new MediaStream from the received track
         const manualStream = new MediaStream([event.track]);
         console.log(`📺 Manual stream created:`, manualStream);
         

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useSFUConnection } from '../hooks/useSFUConnection';
+import { useWebRTCVideoChat } from '../hooks/useWebRTCVideoChat';
 import { toast } from 'react-hot-toast';
 
 interface MultiUserVideoChatProps {
@@ -29,53 +29,40 @@ const RemoteVideoPlayer: React.FC<RemoteVideoPlayerProps> = ({ participantId, st
     console.log(`🎥 Stream is MediaStream?`, stream instanceof MediaStream);
     console.log(`🎥 Stream active?`, stream.active);
     console.log(`🎥 Stream tracks:`, stream.getTracks().map(t => t.kind));
-    
-    // Detailed track analysis
-    const tracks = stream.getTracks();
-    console.log(`🎥 *** DETAILED TRACK ANALYSIS ***`);
-    tracks.forEach((track, index) => {
-      console.log(`🎥 Track ${index}:`, {
-        kind: track.kind,
-        enabled: track.enabled,
-        muted: track.muted,
-        readyState: track.readyState,
-        id: track.id,
-        label: track.label
-      });
-    });
-    
-    const videoTracks = stream.getVideoTracks();
-    const audioTracks = stream.getAudioTracks();
-    console.log(`🎥 Video tracks count: ${videoTracks.length}`);
-    console.log(`🎥 Audio tracks count: ${audioTracks.length}`);
-    
-    if (videoTracks.length > 0) {
-      const videoTrack = videoTracks[0];
-      console.log(`🎥 Video track details:`, {
-        enabled: videoTrack.enabled,
-        muted: videoTrack.muted,
-        readyState: videoTrack.readyState,
-        settings: videoTrack.getSettings ? videoTrack.getSettings() : 'getSettings not available'
-      });
-    } else {
-      console.error(`🎥 ❌ NO VIDEO TRACKS FOUND in stream for ${participantId}`);
-    }
 
     // Set the stream
     video.srcObject = stream;
     setHasError(false);
+    
+    // Force a play attempt after a short delay
+    setTimeout(() => {
+      if (video.paused) {
+        video.play().catch(error => {
+          console.log(`🎥 Delayed play attempt failed for ${participantId}:`, error.name);
+        });
+      }
+    }, 100);
 
     // Handle video events
     const handleLoadedMetadata = () => {
       console.log(`🎥 *** RENDERING REMOTE VIDEOS ***`);
       console.log(`🎥 Video metadata loaded for ${participantId}`);
-      video.play().then(() => {
-        console.log(`🎥 Video playing successfully for ${participantId}`);
-        setIsPlaying(true);
-      }).catch(error => {
-        console.error(`🎥 Failed to play video for ${participantId}:`, error);
-        setHasError(true);
-      });
+      
+      // Try to play immediately
+      const playPromise = video.play();
+      
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          console.log(`🎥 Video playing successfully for ${participantId}`);
+          setIsPlaying(true);
+          setHasError(false);
+        }).catch(error => {
+          console.warn(`🎥 Autoplay failed for ${participantId}, user interaction required:`, error);
+          // Don't set error for autoplay issues - this is normal
+          setIsPlaying(false);
+          setHasError(false);
+        });
+      }
     };
 
     const handleError = (error: Event) => {
@@ -125,7 +112,10 @@ const RemoteVideoPlayer: React.FC<RemoteVideoPlayerProps> = ({ participantId, st
         autoPlay
         playsInline
         muted
+        controls={false}
+        preload="none"
         className="w-full h-full object-cover"
+        style={{ backgroundColor: '#000' }}
       />
       <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-sm">
         {participantName}
@@ -154,29 +144,6 @@ const RemoteVideoPlayer: React.FC<RemoteVideoPlayerProps> = ({ participantId, st
           </div>
         </div>
       )}
-      {/* Debug info overlay */}
-      <div className="absolute top-2 left-2 bg-black bg-opacity-70 text-white p-2 rounded text-xs max-w-xs">
-        <div>Stream Active: {stream?.active ? '✅' : '❌'}</div>
-        <div>Video Tracks: {stream?.getVideoTracks().length || 0}</div>
-        <div>Audio Tracks: {stream?.getAudioTracks().length || 0}</div>
-        <div>Playing: {isPlaying ? '✅' : '❌'}</div>
-        <div>Error: {hasError ? '❌' : '✅'}</div>
-        <button
-          onClick={() => {
-            console.log('🔍 MANUAL DEBUG - Stream details:', {
-              stream,
-              active: stream?.active,
-              videoTracks: stream?.getVideoTracks(),
-              audioTracks: stream?.getAudioTracks(),
-              videoElement: videoRef.current,
-              videoSrcObject: videoRef.current?.srcObject
-            });
-          }}
-          className="mt-1 bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded text-xs"
-        >
-          Debug Log
-        </button>
-      </div>
     </div>
   );
 };
@@ -196,12 +163,12 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
     isConnected,
     isAudioEnabled,
     isVideoEnabled,
-    connectToSFU,
+    connectToChannel,
     disconnect,
-    initializeMedia,
     toggleAudio,
     toggleVideo,
-  } = useSFUConnection();
+    participantId
+  } = useWebRTCVideoChat();
 
   // Set up local video when stream is available
   useEffect(() => {
@@ -248,9 +215,7 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
     }
 
     try {
-      // Initialize media first, then connect to SFU
-      const stream = await initializeMedia();
-      await connectToSFU(channelId.trim(), user.username, stream);
+      await connectToChannel(channelId.trim());
       setShowChannelInput(false);
       toast.success(`Connected to ${channelId}`);
     } catch (error) {
@@ -291,7 +256,7 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
             </h3>
             {isConnected && (
               <div className="text-sm text-gray-300">
-                Connected to SFU
+                Participant ID: {participantId.slice(0, 8)}...
               </div>
             )}
           </div>
@@ -419,7 +384,7 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
                       key={participantId}
                       participantId={participantId}
                       stream={stream}
-                      participantName={participant?.name || `User ${participantId}`}
+                      participantName={participant?.name || `User ${participantId.slice(0, 8)}`}
                     />
                   );
                 })}
