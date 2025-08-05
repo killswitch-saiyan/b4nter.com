@@ -50,7 +50,6 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
     const setupVideo = async () => {
       try {
         const stream = await initializeMedia();
-        setLocalStream(stream);
         
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
@@ -132,12 +131,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
 
   // End video call
   const endCall = () => {
-    disconnect();
-    setIsConnected(false);
-    setParticipants([]);
-    setRemoteStreams(new Map());
-    
-    // Notify other user
+    // Notify other user before disconnecting
     if (roomId) {
       sendCustomEvent({
         type: 'video_call_end',
@@ -145,6 +139,9 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
         room_id: roomId
       });
     }
+    
+    // Disconnect from SFU (this will handle all cleanup)
+    disconnect();
     
     onClose();
     toast('Call ended');
