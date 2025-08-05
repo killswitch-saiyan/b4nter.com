@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useWebRTCVideoChat } from '../hooks/useWebRTCVideoChat';
+import { useSFUConnection } from '../hooks/useSFUConnection';
 import { toast } from 'react-hot-toast';
 
 interface MultiUserVideoChatProps {
@@ -196,12 +196,12 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
     isConnected,
     isAudioEnabled,
     isVideoEnabled,
-    connectToChannel,
+    connectToSFU,
     disconnect,
+    initializeMedia,
     toggleAudio,
     toggleVideo,
-    participantId
-  } = useWebRTCVideoChat();
+  } = useSFUConnection();
 
   // Set up local video when stream is available
   useEffect(() => {
@@ -248,7 +248,9 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
     }
 
     try {
-      await connectToChannel(channelId.trim());
+      // Initialize media first, then connect to SFU
+      const stream = await initializeMedia();
+      await connectToSFU(channelId.trim(), user.username, stream);
       setShowChannelInput(false);
       toast.success(`Connected to ${channelId}`);
     } catch (error) {
@@ -289,7 +291,7 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
             </h3>
             {isConnected && (
               <div className="text-sm text-gray-300">
-                Participant ID: {participantId.slice(0, 8)}...
+                Connected to SFU
               </div>
             )}
           </div>
@@ -417,7 +419,7 @@ const MultiUserVideoChat: React.FC<MultiUserVideoChatProps> = ({ onClose }) => {
                       key={participantId}
                       participantId={participantId}
                       stream={stream}
-                      participantName={participant?.name || `User ${participantId.slice(0, 8)}`}
+                      participantName={participant?.name || `User ${participantId}`}
                     />
                   );
                 })}
