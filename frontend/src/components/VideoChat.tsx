@@ -193,7 +193,7 @@ const RemoteVideoElement: React.FC<RemoteVideoElementProps> = ({ participantId, 
 
 const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roomId: initialRoomId, onClose }) => {
   const { user } = useAuth();
-  const { sendCustomEvent } = useWebSocket();
+  const { sendCustomEvent, onWebRTCMessage } = useWebSocket();
   
   const [roomId, setRoomId] = useState<string>('');
   

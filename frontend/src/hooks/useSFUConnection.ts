@@ -434,17 +434,24 @@ export const useSFUConnection = () => {
     };
 
     // Register the handler with WebSocket context
+    console.log('🔄 Attempting to register WebRTC message handler');
+    console.log('🔄 onWebRTCMessage available:', !!onWebRTCMessage);
+    
     if (onWebRTCMessage) {
+      console.log('🔄 Registering WebRTC message handler');
       onWebRTCMessage(handleWebRTCMessage);
+    } else {
+      console.error('🔄 onWebRTCMessage not available - WebRTC messages will not be handled!');
     }
 
     // Cleanup
     return () => {
       if (onWebRTCMessage) {
+        console.log('🔄 Unregistering WebRTC message handler');
         onWebRTCMessage(null);
       }
     };
-  }, [createPeerConnection, sendCustomEvent, onWebRTCMessage]);
+  }, [createPeerConnection, sendCustomEvent, onWebRTCMessage, logDebugState]);
 
   // Disconnect from video room
   const disconnect = useCallback(() => {
