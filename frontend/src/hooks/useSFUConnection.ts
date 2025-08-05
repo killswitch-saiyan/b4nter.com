@@ -51,6 +51,17 @@ export const useSFUConnection = () => {
   // Initialize media (camera/microphone)
   const initializeMedia = useCallback(async (): Promise<MediaStream> => {
     try {
+      // Check permissions first
+      console.log('🎥 Checking media permissions...');
+      try {
+        const permissions = await navigator.permissions.query({name: 'camera' as PermissionName});
+        console.log('🎥 Camera permission:', permissions.state);
+        const audioPermissions = await navigator.permissions.query({name: 'microphone' as PermissionName});
+        console.log('🎥 Microphone permission:', audioPermissions.state);
+      } catch (e) {
+        console.log('🎥 Could not check permissions (might be normal):', e);
+      }
+      
       console.log('🎥 Requesting user media with constraints:', { video: true, audio: true });
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
@@ -89,7 +100,11 @@ export const useSFUConnection = () => {
       console.log('🔗 Local stream id:', localStreamRef.current.id);
       console.log('🔗 Local stream active:', localStreamRef.current.active);
       localStreamRef.current.getTracks().forEach(track => {
-        console.log('🔗 Adding track:', track.kind, 'enabled:', track.enabled, 'id:', track.id);
+        console.log('🔗 Adding track:', track.kind, 'enabled:', track.enabled, 'muted:', track.muted, 'readyState:', track.readyState, 'id:', track.id);
+        // Ensure track is not muted before adding
+        if (track.muted) {
+          console.warn('🚨 WARNING: Local track is muted when adding to peer connection!', track.kind);
+        }
         peerConnection.addTrack(track, localStreamRef.current!);
       });
       
