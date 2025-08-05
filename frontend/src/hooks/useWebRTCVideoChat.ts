@@ -95,22 +95,29 @@ export const useWebRTCVideoChat = () => {
     // Add local stream tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
-        console.log(`📤 Adding local track: ${track.kind}`);
+        console.log(`📤 Adding local track: ${track.kind} to peer connection for ${targetParticipantId}`);
         peerConnection.addTrack(track, localStreamRef.current!);
       });
+    } else {
+      console.warn(`⚠️ localStreamRef.current is null when creating peer connection for ${targetParticipantId}. No local tracks added.`);
     }
 
     // Handle remote stream
     peerConnection.ontrack = (event) => {
-      console.log(`📥 Received remote stream from: ${targetParticipantId}`);
-      const [remoteStream] = event.streams;
-      
-      setRemoteStreams(prev => {
-        const newMap = new Map(prev);
-        newMap.set(targetParticipantId, remoteStream);
-        console.log(`📺 Added remote stream for participant: ${targetParticipantId}`);
-        return newMap;
-      });
+      console.log(`📥 Received remote track from: ${targetParticipantId}. Event:`, event);
+      // Check if event.streams is not empty and contains a MediaStream
+      if (event.streams && event.streams.length > 0) {
+        const remoteStream = event.streams[0]; // Access the first stream
+        console.log(`📺 Remote stream received:`, remoteStream);
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.set(targetParticipantId, remoteStream);
+          console.log(`📺 Added remote stream for participant: ${targetParticipantId}. Current remoteStreams size: ${newMap.size}`);
+          return newMap;
+        });
+      } else {
+        console.warn(`⚠️ ontrack event received but no streams found for ${targetParticipantId}`, event);
+      }
     };
 
     // Handle ICE candidates
@@ -165,7 +172,7 @@ export const useWebRTCVideoChat = () => {
         participantId: participantId.current,
         participantName: user?.username,
         targetParticipantId,
-        offer: offer.toJSON()
+        offer: (offer as RTCSessionDescription).toJSON()
       });
       
       console.log(`✅ Offer sent to: ${targetParticipantId}`);
@@ -229,7 +236,7 @@ export const useWebRTCVideoChat = () => {
               channelId,
               participantId: participantId.current,
               targetParticipantId: message.participantId,
-              answer: answer.toJSON()
+              answer: (answer as RTCSessionDescription).toJSON()
             });
             
             console.log(`✅ Answer sent to: ${message.participantId}`);
