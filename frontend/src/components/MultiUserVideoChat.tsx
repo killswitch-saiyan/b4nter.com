@@ -29,6 +29,37 @@ const RemoteVideoPlayer: React.FC<RemoteVideoPlayerProps> = ({ participantId, st
     console.log(`🎥 Stream is MediaStream?`, stream instanceof MediaStream);
     console.log(`🎥 Stream active?`, stream.active);
     console.log(`🎥 Stream tracks:`, stream.getTracks().map(t => t.kind));
+    
+    // Detailed track analysis
+    const tracks = stream.getTracks();
+    console.log(`🎥 *** DETAILED TRACK ANALYSIS ***`);
+    tracks.forEach((track, index) => {
+      console.log(`🎥 Track ${index}:`, {
+        kind: track.kind,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState,
+        id: track.id,
+        label: track.label
+      });
+    });
+    
+    const videoTracks = stream.getVideoTracks();
+    const audioTracks = stream.getAudioTracks();
+    console.log(`🎥 Video tracks count: ${videoTracks.length}`);
+    console.log(`🎥 Audio tracks count: ${audioTracks.length}`);
+    
+    if (videoTracks.length > 0) {
+      const videoTrack = videoTracks[0];
+      console.log(`🎥 Video track details:`, {
+        enabled: videoTrack.enabled,
+        muted: videoTrack.muted,
+        readyState: videoTrack.readyState,
+        settings: videoTrack.getSettings ? videoTrack.getSettings() : 'getSettings not available'
+      });
+    } else {
+      console.error(`🎥 ❌ NO VIDEO TRACKS FOUND in stream for ${participantId}`);
+    }
 
     // Set the stream
     video.srcObject = stream;
@@ -123,6 +154,29 @@ const RemoteVideoPlayer: React.FC<RemoteVideoPlayerProps> = ({ participantId, st
           </div>
         </div>
       )}
+      {/* Debug info overlay */}
+      <div className="absolute top-2 left-2 bg-black bg-opacity-70 text-white p-2 rounded text-xs max-w-xs">
+        <div>Stream Active: {stream?.active ? '✅' : '❌'}</div>
+        <div>Video Tracks: {stream?.getVideoTracks().length || 0}</div>
+        <div>Audio Tracks: {stream?.getAudioTracks().length || 0}</div>
+        <div>Playing: {isPlaying ? '✅' : '❌'}</div>
+        <div>Error: {hasError ? '❌' : '✅'}</div>
+        <button
+          onClick={() => {
+            console.log('🔍 MANUAL DEBUG - Stream details:', {
+              stream,
+              active: stream?.active,
+              videoTracks: stream?.getVideoTracks(),
+              audioTracks: stream?.getAudioTracks(),
+              videoElement: videoRef.current,
+              videoSrcObject: videoRef.current?.srcObject
+            });
+          }}
+          className="mt-1 bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded text-xs"
+        >
+          Debug Log
+        </button>
+      </div>
     </div>
   );
 };
