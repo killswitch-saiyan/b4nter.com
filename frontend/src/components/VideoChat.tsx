@@ -74,7 +74,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
   };
 
   // Create peer connection
-  const createPeerConnection = () => {
+  const createPeerConnection = (currentRoomId: string) => {
     console.log('🔗 Creating new peer connection...');
     const pc = new RTCPeerConnection({
       iceServers: [
@@ -87,8 +87,8 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
     pc.onicecandidate = (event) => {
       console.log('🧊 ICE candidate generated:', event.candidate);
       if (event.candidate) {
-        console.log(`🧊 [ICE] Storing ICE candidate for room ${roomId}`);
-        storeSignalingData(roomId, 'ice_candidate', event.candidate);
+        console.log(`🧊 [ICE] Storing ICE candidate for room ${currentRoomId}`);
+        storeSignalingData(currentRoomId, 'ice_candidate', event.candidate);
       } else {
         console.log('🧊 [ICE] ICE gathering complete');
       }
@@ -171,7 +171,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
     setIsConnected(true);
 
     // Create peer connection
-    const pc = createPeerConnection();
+    const pc = createPeerConnection(currentRoomId);
     peerConnectionRef.current = pc;
 
     // Add local stream to peer connection
@@ -229,7 +229,7 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
     setIsConnected(true);
 
     // Create peer connection
-    const pc = createPeerConnection();
+    const pc = createPeerConnection(currentRoomId);
     peerConnectionRef.current = pc;
 
     // Add local stream
