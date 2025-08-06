@@ -45,37 +45,39 @@ const WorkingVideoChat: React.FC<WorkingVideoChatProps> = ({ onClose }) => {
     }
   };
 
-  // Initialize media stream
-  const initializeMedia = async () => {
+  // Get user media
+  const getUserMedia = async () => {
+    console.log('🎥 Requesting media access...');
     try {
-      console.log('🎥 Requesting media access...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: true, 
+        audio: true 
       });
-
       console.log('🎥 Media stream obtained:', stream);
+      console.log('🎥 Local stream tracks:', {
+        audioTracks: stream.getAudioTracks().length,
+        videoTracks: stream.getVideoTracks().length,
+        active: stream.active
+      });
+      
       setLocalStream(stream);
-
-      // Set local video immediately
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-        console.log('🎥 Local video element updated');
-      }
-
+      
+      // Use setTimeout to ensure the video element is rendered
+      setTimeout(() => {
+        if (localVideoRef.current) {
+          console.log('🎥 Setting srcObject on local video element');
+          localVideoRef.current.srcObject = stream;
+          console.log('🎥 Local video element updated successfully');
+        } else {
+          console.error('❌ Local video ref is null!');
+        }
+      }, 100);
+      
       return stream;
     } catch (error) {
-      console.error('❌ Error accessing media devices:', error);
-      toast.error('Please allow access to camera and microphone');
-      return null;
+      console.error('❌ Failed to get user media:', error);
+      toast.error('Failed to access camera/microphone');
+      throw error;
     }
   };
 
@@ -102,17 +104,41 @@ const WorkingVideoChat: React.FC<WorkingVideoChatProps> = ({ onClose }) => {
 
     pc.ontrack = (event) => {
       console.log('🎥 Remote track received:', event.streams);
+      console.log('🎥 Remote track details:', {
+        streamCount: event.streams.length,
+        trackKind: event.track.kind,
+        trackEnabled: event.track.enabled,
+        trackReadyState: event.track.readyState
+      });
+      
       const stream = event.streams[0];
-      setRemoteStream(stream);
-
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
-        console.log('🎥 Remote video element updated successfully');
-        
-        // Force play the remote video
-        remoteVideoRef.current.play().catch(error => {
-          console.log('🎥 Autoplay failed, user interaction required:', error);
+      if (stream) {
+        console.log('🎥 Stream tracks:', {
+          audioTracks: stream.getAudioTracks().length,
+          videoTracks: stream.getVideoTracks().length,
+          active: stream.active
         });
+        
+        setRemoteStream(stream);
+        
+        // Use setTimeout to ensure the video element is rendered
+        setTimeout(() => {
+          if (remoteVideoRef.current) {
+            console.log('🎥 Setting srcObject on remote video element');
+            remoteVideoRef.current.srcObject = stream;
+            
+            // Force play the remote video
+            remoteVideoRef.current.play().catch(error => {
+              console.log('🎥 Autoplay failed, user interaction required:', error);
+            });
+            
+            console.log('🎥 Remote video element updated successfully');
+          } else {
+            console.error('❌ Remote video ref is null!');
+          }
+        }, 100);
+      } else {
+        console.error('❌ No stream received in ontrack event!');
       }
     };
 
@@ -145,7 +171,7 @@ const WorkingVideoChat: React.FC<WorkingVideoChatProps> = ({ onClose }) => {
       console.log(`🆔 Generated new room ID: ${currentRoomId}`);
     }
 
-    const stream = await initializeMedia();
+    const stream = await getUserMedia();
     if (!stream) {
       console.error('❌ Failed to get media stream');
       return;
@@ -210,7 +236,7 @@ const WorkingVideoChat: React.FC<WorkingVideoChatProps> = ({ onClose }) => {
 
     console.log('🔗 Joining call in room:', roomId);
 
-    const stream = await initializeMedia();
+    const stream = await getUserMedia();
     if (!stream) return;
 
     setIsConnected(true);
