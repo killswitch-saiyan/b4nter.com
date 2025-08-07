@@ -49,11 +49,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.log('Parsed user data:', userData);
           setUser(userData);
           
-          // Verify token is still valid
-          await authAPI.getCurrentUser();
+          // Try to verify token, but don't clear auth if it fails
+          // This prevents losing authentication on page refresh due to network issues
+          try {
+            await authAPI.getCurrentUser();
+            console.log('Token verification successful');
+          } catch (verifyError) {
+            console.warn('Token verification failed, but keeping user logged in:', verifyError);
+            // Don't clear auth data - user can still use the app
+            // Token will be validated on actual API calls
+          }
         } catch (error) {
-          console.error('Error initializing auth:', error);
-          // Token is invalid, clear storage
+          console.error('Error parsing saved user data:', error);
+          // Only clear storage if we can't parse the saved data
           localStorage.removeItem('access_token');
           localStorage.removeItem('user');
           setUser(null);
