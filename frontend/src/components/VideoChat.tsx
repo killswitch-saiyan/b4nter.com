@@ -189,28 +189,25 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isI
     await storeSignalingData(currentRoomId, 'offer', offer);
     console.log('📞 Offer created and stored for room:', currentRoomId);
 
-    // Set up real-time subscription for signaling
+    // Set up real-time subscription for signaling (caller waits for receiver's answer)
     const subscription = subscribeToSignaling(currentRoomId, async (type, data) => {
+      console.log(`📨 Caller received signaling:`, type);
+      
       if (type === 'answer' && peerConnectionRef.current) {
-        await peerConnectionRef.current.setRemoteDescription(data as unknown as RTCSessionDescriptionInit);
-        console.log('📞 Answer received via real-time');
-
-        // After setting remote description, get all existing ICE candidates from joiner
-        const existingCandidates = await getAllIceCandidates(currentRoomId);
-        const joinersCandidate = existingCandidates.filter((_, index) => index > 0); // Skip initiator's candidates
-        console.log(`Found ${joinersCandidate.length} joiner ICE candidates`);
-
-        for (const candidate of joinersCandidate) {
-          try {
-            await peerConnectionRef.current.addIceCandidate(candidate as unknown as RTCIceCandidateInit);
-            console.log('Added joiner ICE candidate');
-          } catch (error) {
-            console.error('Error adding joiner ICE candidate:', error);
-          }
+        console.log('📞 Processing receiver\'s answer...');
+        try {
+          await peerConnectionRef.current.setRemoteDescription(data as unknown as RTCSessionDescriptionInit);
+          console.log('✅ Remote description set from receiver\'s answer');
+        } catch (error) {
+          console.error('❌ Error processing answer:', error);
         }
       } else if (type === 'ice_candidate' && peerConnectionRef.current) {
-        await peerConnectionRef.current.addIceCandidate(data as unknown as RTCIceCandidateInit);
-        console.log('🧊 ICE candidate received via real-time');
+        try {
+          await peerConnectionRef.current.addIceCandidate(data as unknown as RTCIceCandidateInit);
+          console.log('🧊 Caller added ICE candidate from receiver');
+        } catch (error) {
+          console.error('❌ Error adding ICE candidate:', error);
+        }
       }
     });
     subscriptionRef.current = subscription;
@@ -218,11 +215,11 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isI
     toast.success(`Call started with ${targetUsername}!`);
   };
 
-  // Join existing call
+  // Join existing call (receiver - waits for caller's offer and responds with answer)
   const joinCall = async () => {
     const currentRoomId = generateRoomId();
     setRoomId(currentRoomId);
-    console.log('🔗 Joining call in room:', currentRoomId);
+    console.log('🔗 Receiver joining call in room:', currentRoomId);
 
     const stream = await getUserMedia();
     if (!stream) return;
@@ -236,47 +233,56 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isI
     // Add local stream
     stream.getTracks().forEach(track => {
       pc.addTrack(track, stream);
-      console.log(`📤 Added ${track.kind} track to peer connection`);
+      console.log(`📤 Receiver added ${track.kind} track to peer connection`);
     });
 
-    // Get stored offer from Supabase
-    const storedOffer = await getSignalingData(currentRoomId, 'offer');
-    if (!storedOffer) {
-      toast.error('No incoming call found');
-      setIsConnected(false);
-      return;
-    }
-
-    // Set remote description and create answer
-    await pc.setRemoteDescription(storedOffer as unknown as RTCSessionDescriptionInit);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    // Store answer using Supabase
-    await storeSignalingData(currentRoomId, 'answer', answer);
-    console.log('📞 Answer created and stored for room:', currentRoomId);
-
-    // Get and add all existing ICE candidates from the initiator
-    const existingCandidates = await getAllIceCandidates(currentRoomId);
-    console.log(`Found ${existingCandidates.length} existing ICE candidates`);
-
-    for (const candidate of existingCandidates) {
-      try {
-        await pc.addIceCandidate(candidate as unknown as RTCIceCandidateInit);
-        console.log('Added existing ICE candidate');
-      } catch (error) {
-        console.error('Error adding existing ICE candidate:', error);
-      }
-    }
-
-    // Set up real-time subscription for new ICE candidates
+    // Set up subscription to wait for caller's offer
     const subscription = subscribeToSignaling(currentRoomId, async (type, data) => {
-      if (type === 'ice_candidate' && peerConnectionRef.current) {
-        await peerConnectionRef.current.addIceCandidate(data as unknown as RTCIceCandidateInit);
-        console.log('🧊 ICE candidate received via real-time');
+      console.log(`📨 Receiver received signaling:`, type);
+      
+      if (type === 'offer' && peerConnectionRef.current) {
+        console.log('📞 Processing caller\'s offer...');
+        try {
+          // Set the caller's offer as remote description
+          await peerConnectionRef.current.setRemoteDescription(data as unknown as RTCSessionDescriptionInit);
+          console.log('✅ Remote description set from caller\'s offer');
+          
+          // Create answer in response
+          const answer = await peerConnectionRef.current.createAnswer();
+          await peerConnectionRef.current.setLocalDescription(answer);
+          console.log('📝 Answer created');
+          
+          // Send answer back to caller
+          await storeSignalingData(currentRoomId, 'answer', answer);
+          console.log('📤 Answer sent to caller');
+        } catch (error) {
+          console.error('❌ Error processing offer:', error);
+        }
+      } else if (type === 'ice_candidate' && peerConnectionRef.current) {
+        try {
+          await peerConnectionRef.current.addIceCandidate(data as unknown as RTCIceCandidateInit);
+          console.log('🧊 Receiver added ICE candidate from caller');
+        } catch (error) {
+          console.error('❌ Error adding ICE candidate:', error);
+        }
       }
     });
     subscriptionRef.current = subscription;
+
+    // Check if there's already an offer waiting
+    const existingOffer = await getSignalingData(currentRoomId, 'offer');
+    if (existingOffer && peerConnectionRef.current) {
+      console.log('📞 Found existing offer, processing...');
+      try {
+        await peerConnectionRef.current.setRemoteDescription(existingOffer as unknown as RTCSessionDescriptionInit);
+        const answer = await peerConnectionRef.current.createAnswer();
+        await peerConnectionRef.current.setLocalDescription(answer);
+        await storeSignalingData(currentRoomId, 'answer', answer);
+        console.log('📤 Answer sent in response to existing offer');
+      } catch (error) {
+        console.error('❌ Error processing existing offer:', error);
+      }
+    }
 
     toast.success(`Joined call with ${targetUsername}!`);
   };
