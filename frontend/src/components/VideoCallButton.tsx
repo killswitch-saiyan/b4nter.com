@@ -233,7 +233,7 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
       )}
 
       {/* Video chat component */}
-      {isInCall && (callAccepted || incomingCallData) && (
+      {isInCall && (
         <VideoChat
           targetUserId={targetUserId}
           targetUsername={targetUsername}
