@@ -77,7 +77,7 @@ export const getAllIceCandidates = async (roomId: string) => {
   }
 };
 
-// Subscribe to signaling changes
+// Subscribe to signaling changes  
 export const subscribeToSignaling = (roomId: string, callback: (type: string, data: any) => void) => {
   console.log(`📡 [SUB] Setting up real-time subscription for room: ${roomId}`);
   const subscription = supabase
@@ -99,4 +99,43 @@ export const subscribeToSignaling = (roomId: string, callback: (type: string, da
     });
 
   return subscription;
+};
+
+// Video Call Invitation functions using the same signaling table
+export const sendCallInvite = async (roomId: string, callerName: string, targetUserId: string) => {
+  console.log(`📞 Sending call invite from ${callerName} to ${targetUserId} for room ${roomId}`);
+  return await storeSignalingData(roomId, 'call_invite', {
+    caller_name: callerName,
+    target_user_id: targetUserId,
+    timestamp: Date.now()
+  });
+};
+
+export const checkForCallInvite = async (roomId: string) => {
+  console.log(`📞 Checking for call invite in room ${roomId}`);
+  return await getSignalingData(roomId, 'call_invite');
+};
+
+export const respondToCallInvite = async (roomId: string, accepted: boolean, responderName: string) => {
+  console.log(`📞 Responding to call invite in room ${roomId}: ${accepted ? 'accepted' : 'declined'}`);
+  return await storeSignalingData(roomId, 'call_response', {
+    accepted,
+    responder_name: responderName,
+    timestamp: Date.now()
+  });
+};
+
+export const checkForCallResponse = async (roomId: string) => {
+  console.log(`📞 Checking for call response in room ${roomId}`);
+  return await getSignalingData(roomId, 'call_response');
+};
+
+// Subscribe to call invites and responses
+export const subscribeToCallEvents = (roomId: string, callback: (type: string, data: any) => void) => {
+  console.log(`📞 Setting up call event subscription for room: ${roomId}`);
+  return subscribeToSignaling(roomId, (type, data) => {
+    if (type === 'call_invite' || type === 'call_response') {
+      callback(type, data);
+    }
+  });
 };

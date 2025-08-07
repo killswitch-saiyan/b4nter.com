@@ -339,8 +339,10 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isI
     const initializeCall = async () => {
       try {
         if (isInitiator) {
+          console.log('🚀 Initiating call...');
           await startCall();
         } else {
+          console.log('🔗 Joining call...');
           await joinCall();
         }
       } catch (error) {
@@ -350,9 +352,11 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isI
       }
     };
 
-    initializeCall();
+    // Small delay to ensure proper initialization
+    const timer = setTimeout(initializeCall, 500);
 
     return () => {
+      clearTimeout(timer);
       endCall();
     };
   }, [isInitiator]);

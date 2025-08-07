@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useWebSocket } from '../contexts/WebSocketContext';
 import VideoChat from './VideoChat';
-import IncomingCallModal from './IncomingCallModal';
 import { toast } from 'react-hot-toast';
+import { sendCallInvite, subscribeToCallEvents, checkForCallInvite, respondToCallInvite } from '../utils/supabase';
 
 interface VideoCallButtonProps {
   targetUserId: string;
@@ -15,10 +14,10 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
   targetUsername 
 }) => {
   const { user } = useAuth();
-  const { sendCustomEvent } = useWebSocket();
   const [isInCall, setIsInCall] = useState(false);
   const [incomingCallData, setIncomingCallData] = useState<any>(null);
   const [callAccepted, setCallAccepted] = useState(false);
+  const [subscriptionRef, setSubscriptionRef] = useState<any>(null);
 
   const startVideoCall = async () => {
     if (!user) {
@@ -31,93 +30,146 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
       return;
     }
 
-    // Generate room ID for this call
-    const roomId = [user.id, targetUserId].sort().join('-video-call');
+    try {
+      // Generate room ID for this call
+      const roomId = [user.id, targetUserId].sort().join('-video-call');
 
-    // Send video call invitation via WebSocket
-    sendCustomEvent({
-      type: 'video_call_invite',
-      caller_id: user.id,
-      caller_name: user.username,
-      target_user_id: targetUserId,
-      room_id: roomId
-    });
+      // Send call invitation via Supabase
+      await sendCallInvite(roomId, user.username, targetUserId);
 
-    // Show calling state
-    toast.success(`Calling ${targetUsername}...`);
-    setIsInCall(true);
+      // Show calling state
+      toast.success(`Calling ${targetUsername}...`);
+      setIsInCall(true);
+
+      // Listen for response
+      const subscription = subscribeToCallEvents(roomId, (type, data) => {
+        if (type === 'call_response') {
+          if (data.accepted) {
+            toast.success(`${targetUsername} accepted your call!`);
+            setCallAccepted(true);
+          } else {
+            toast.error(`${targetUsername} declined your call`);
+            setIsInCall(false);
+          }
+        }
+      });
+      setSubscriptionRef(subscription);
+    } catch (error) {
+      console.error('Failed to start call:', error);
+      toast.error('Failed to start call');
+    }
   };
 
   const endVideoCall = () => {
-    // Send call end event if in call
-    if (isInCall && user) {
-      const roomId = [user.id, targetUserId].sort().join('-video-call');
-      sendCustomEvent({
-        type: 'video_call_end',
-        caller_id: user.id,
-        target_user_id: targetUserId,
-        room_id: roomId
-      });
+    // Clean up subscription
+    if (subscriptionRef) {
+      subscriptionRef.unsubscribe();
+      setSubscriptionRef(null);
     }
     setIsInCall(false);
     setCallAccepted(false);
     setIncomingCallData(null);
   };
 
-  const handleAcceptCall = (roomId: string) => {
-    setCallAccepted(true);
-    setIncomingCallData(null);
-    setIsInCall(true);
-  };
-
-  const handleRejectCall = () => {
-    setIncomingCallData(null);
-  };
-
-  // Listen for video call events
-  useEffect(() => {
-    const handleVideoCallInvite = (event: CustomEvent) => {
-      const data = event.detail;
-      if (data.target_user_id === user?.id) {
-        setIncomingCallData(data);
-      }
-    };
-
-    const handleVideoCallAccept = (event: CustomEvent) => {
-      const data = event.detail;
-      if (data.caller_id === user?.id) {
-        toast.success(`${targetUsername} accepted your call!`);
-        setCallAccepted(true);
-      }
-    };
-
-    const handleVideoCallReject = (event: CustomEvent) => {
-      const data = event.detail;
-      if (data.caller_id === user?.id) {
-        toast.error(`${targetUsername} declined your call`);
-        setIsInCall(false);
-      }
-    };
-
-    const handleVideoCallEnd = (event: CustomEvent) => {
-      toast('Call ended');
-      setIsInCall(false);
-      setCallAccepted(false);
+  const handleAcceptCall = async () => {
+    if (!user || !incomingCallData) return;
+    
+    try {
+      const roomId = [user.id, targetUserId].sort().join('-video-call');
+      await respondToCallInvite(roomId, true, user.username);
+      
+      setCallAccepted(true);
       setIncomingCallData(null);
+      setIsInCall(true);
+    } catch (error) {
+      console.error('Failed to accept call:', error);
+      toast.error('Failed to accept call');
+    }
+  };
+
+  const handleRejectCall = async () => {
+    if (!user || !incomingCallData) return;
+    
+    try {
+      const roomId = [user.id, targetUserId].sort().join('-video-call');
+      await respondToCallInvite(roomId, false, user.username);
+      
+      setIncomingCallData(null);
+    } catch (error) {
+      console.error('Failed to reject call:', error);
+    }
+  };
+
+  // Check for incoming calls and set up subscription
+  useEffect(() => {
+    if (!user) return;
+    
+    const roomId = [user.id, targetUserId].sort().join('-video-call');
+    
+    // Check for existing call invite
+    const checkIncomingCall = async () => {
+      try {
+        const callInvite = await checkForCallInvite(roomId);
+        if (callInvite && callInvite.target_user_id === user.id) {
+          setIncomingCallData({
+            caller_name: callInvite.caller_name,
+            room_id: roomId
+          });
+          
+          // Play ringtone
+          try {
+            const audio = new Audio('/ringtone.mp3');
+            audio.loop = true;
+            audio.volume = 0.7;
+            audio.play().catch(e => console.warn('Could not play ringtone:', e));
+            (window as any).videoCallRingtone = audio;
+          } catch (error) {
+            console.warn('Could not play ringtone:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check for incoming call:', error);
+      }
     };
-
-    window.addEventListener('video-call-invite', handleVideoCallInvite as EventListener);
-    window.addEventListener('video-call-accept', handleVideoCallAccept as EventListener);
-    window.addEventListener('video-call-reject', handleVideoCallReject as EventListener);
-    window.addEventListener('video-call-end', handleVideoCallEnd as EventListener);
-
+    
+    checkIncomingCall();
+    
+    // Set up subscription for new call invites
+    const subscription = subscribeToCallEvents(roomId, (type, data) => {
+      if (type === 'call_invite' && data.target_user_id === user.id) {
+        setIncomingCallData({
+          caller_name: data.caller_name,
+          room_id: roomId
+        });
+        
+        // Play ringtone
+        try {
+          const audio = new Audio('/ringtone.mp3');
+          audio.loop = true;
+          audio.volume = 0.7;
+          audio.play().catch(e => console.warn('Could not play ringtone:', e));
+          (window as any).videoCallRingtone = audio;
+        } catch (error) {
+          console.warn('Could not play ringtone:', error);
+        }
+      }
+    });
+    
     return () => {
-      window.removeEventListener('video-call-invite', handleVideoCallInvite as EventListener);
-      window.removeEventListener('video-call-accept', handleVideoCallAccept as EventListener);
-      window.removeEventListener('video-call-reject', handleVideoCallReject as EventListener);
-      window.removeEventListener('video-call-end', handleVideoCallEnd as EventListener);
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
-  }, [user?.id, targetUsername]);
+  }, [user?.id, targetUserId]);
+  
+  // Stop ringtone when call state changes
+  useEffect(() => {
+    if (!incomingCallData && (window as any).videoCallRingtone) {
+      (window as any).videoCallRingtone.pause();
+      (window as any).videoCallRingtone.currentTime = 0;
+      (window as any).videoCallRingtone = null;
+    }
+  }, [incomingCallData]);
 
   return (
     <>
@@ -142,11 +194,43 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
       </button>
 
       {/* Incoming call modal */}
-      <IncomingCallModal
-        callData={incomingCallData}
-        onAccept={handleAcceptCall}
-        onReject={handleRejectCall}
-      />
+      {incomingCallData && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full mx-4 text-center animate-pulse">
+            <div className="mb-4">
+              <div className="w-20 h-20 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl">
+                📹
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                Incoming Video Call
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300">
+                {incomingCallData.caller_name} is calling you
+              </p>
+              <div className="mt-2 text-sm text-gray-500">
+                Ring ring... 📞
+              </div>
+            </div>
+            
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={handleRejectCall}
+                className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-full flex items-center space-x-2 transition-colors"
+              >
+                <span>📞</span>
+                <span>Decline</span>
+              </button>
+              <button
+                onClick={handleAcceptCall}
+                className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-full flex items-center space-x-2 transition-colors"
+              >
+                <span>📹</span>
+                <span>Accept</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Video chat component */}
       {isInCall && (callAccepted || incomingCallData) && (
