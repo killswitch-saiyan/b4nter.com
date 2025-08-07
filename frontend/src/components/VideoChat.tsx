@@ -16,6 +16,7 @@ interface VideoChatProps {
 }
 
 const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isInitiator = false, onClose }) => {
+  console.log('📺 VideoChat component mounted!', { targetUserId, targetUsername, isInitiator });
   const { user } = useAuth();
   const [roomId, setRoomId] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -335,6 +336,8 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isI
 
   // Auto-setup when component mounts
   useEffect(() => {
+    console.log('🎬 VideoChat useEffect triggered', { isInitiator, user: user?.username });
+    
     // Automatically start or join call based on role
     const initializeCall = async () => {
       try {
@@ -346,16 +349,20 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isI
           await joinCall();
         }
       } catch (error) {
-        console.error('Failed to initialize call:', error);
+        console.error('❌ Failed to initialize call:', error);
         toast.error('Failed to initialize video call');
         onClose();
       }
     };
 
     // Small delay to ensure proper initialization
-    const timer = setTimeout(initializeCall, 500);
+    const timer = setTimeout(() => {
+      console.log('⏰ Timer fired, initializing call...');
+      initializeCall();
+    }, 500);
 
     return () => {
+      console.log('🧹 VideoChat cleanup');
       clearTimeout(timer);
       endCall();
     };

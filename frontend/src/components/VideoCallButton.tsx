@@ -20,6 +20,8 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
   const [subscriptionRef, setSubscriptionRef] = useState<any>(null);
 
   const startVideoCall = async () => {
+    console.log('🚀 Starting video call...', { user: user?.username, target: targetUsername });
+    
     if (!user) {
       toast.error('Please log in to start a video call');
       return;
@@ -33,23 +35,30 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
     try {
       // Generate room ID for this call
       const roomId = [user.id, targetUserId].sort().join('-video-call');
+      console.log('📞 Generated room ID:', roomId);
 
       // Send call invitation via Supabase
       await sendCallInvite(roomId, user.username, targetUserId);
+      console.log('📤 Call invitation sent');
 
-      // Show calling state
+      // Show calling state and video chat immediately
       toast.success(`Calling ${targetUsername}...`);
       setIsInCall(true);
+      setCallAccepted(false); // Make sure this is false initially
+      console.log('📺 Video chat should now be visible');
 
       // Listen for response
       const subscription = subscribeToCallEvents(roomId, (type, data) => {
+        console.log('📨 Received call event:', type, data);
         if (type === 'call_response') {
           if (data.accepted) {
             toast.success(`${targetUsername} accepted your call!`);
             setCallAccepted(true);
+            console.log('✅ Call accepted');
           } else {
             toast.error(`${targetUsername} declined your call`);
             setIsInCall(false);
+            console.log('❌ Call declined');
           }
         }
       });
@@ -57,6 +66,7 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
     } catch (error) {
       console.error('Failed to start call:', error);
       toast.error('Failed to start call');
+      setIsInCall(false);
     }
   };
 
@@ -233,14 +243,22 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
       )}
 
       {/* Video chat component */}
-      {isInCall && (
-        <VideoChat
-          targetUserId={targetUserId}
-          targetUsername={targetUsername}
-          isInitiator={!incomingCallData}
-          onClose={endVideoCall}
-        />
-      )}
+      {(() => {
+        console.log('🔍 VideoChat render check:', { 
+          isInCall, 
+          incomingCallData: !!incomingCallData,
+          isInitiator: !incomingCallData,
+          shouldRender: isInCall 
+        });
+        return isInCall && (
+          <VideoChat
+            targetUserId={targetUserId}
+            targetUsername={targetUsername}
+            isInitiator={!incomingCallData}
+            onClose={endVideoCall}
+          />
+        );
+      })()}
     </>
   );
 };
