@@ -11,11 +11,11 @@ import {
 interface VideoChatProps {
   targetUserId: string;
   targetUsername: string;
-  roomId?: string;
+  isInitiator?: boolean;
   onClose: () => void;
 }
 
-const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roomId: initialRoomId, onClose }) => {
+const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, isInitiator = false, onClose }) => {
   const { user } = useAuth();
   const [roomId, setRoomId] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -335,23 +335,27 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
 
   // Auto-setup when component mounts
   useEffect(() => {
-    // Check if there's an existing call waiting to be joined
-    const checkForIncomingCall = async () => {
-      const currentRoomId = generateRoomId();
-      const existingOffer = await getSignalingData(currentRoomId, 'offer');
-      
-      if (existingOffer) {
-        // There's an incoming call, show option to join
-        toast.success(`Incoming call from ${targetUsername}! Click to join.`);
+    // Automatically start or join call based on role
+    const initializeCall = async () => {
+      try {
+        if (isInitiator) {
+          await startCall();
+        } else {
+          await joinCall();
+        }
+      } catch (error) {
+        console.error('Failed to initialize call:', error);
+        toast.error('Failed to initialize video call');
+        onClose();
       }
     };
 
-    checkForIncomingCall();
+    initializeCall();
 
     return () => {
       endCall();
     };
-  }, []);
+  }, [isInitiator]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center">
@@ -376,32 +380,24 @@ const VideoChat: React.FC<VideoChatProps> = ({ targetUserId, targetUsername, roo
           </button>
         </div>
 
-        {/* Call Setup */}
+        {/* Connecting state */}
         {!isConnected && (
           <div className="flex-1 flex items-center justify-center p-8">
-            <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full">
-              <h4 className="text-xl font-semibold text-white mb-6 text-center">
-                Video Call with {targetUsername}
+            <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full text-center">
+              <h4 className="text-xl font-semibold text-white mb-6">
+                {isInitiator ? 'Connecting...' : 'Joining call...'}
               </h4>
               
               <div className="space-y-4">
                 <div className="text-center text-gray-300 mb-6">
-                  Start a video call or join if {targetUsername} has already started one.
+                  {isInitiator 
+                    ? `Calling ${targetUsername}...` 
+                    : `Connecting to ${targetUsername}'s call...`
+                  }
                 </div>
-
-                <div className="flex space-x-3 pt-4">
-                  <button
-                    onClick={startCall}
-                    className="flex-1 bg-green-600 hover:bg-green-500 text-white px-4 py-3 rounded-lg font-semibold transition-colors"
-                  >
-                    📞 Start Call
-                  </button>
-                  <button
-                    onClick={joinCall}
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-lg font-semibold transition-colors"
-                  >
-                    📲 Join Call
-                  </button>
+                
+                <div className="flex justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                 </div>
               </div>
             </div>

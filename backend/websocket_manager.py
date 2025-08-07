@@ -374,6 +374,112 @@ class WebSocketManager:
             if len(self.video_rooms[room_id]) == 0:
                 del self.video_rooms[room_id]
                 logger.info(f"Video room {room_id} deleted (empty)")
+    
+    # Video Call Invitation Handlers
+    async def handle_video_call_invite(self, caller_user_id: str, message: dict):
+        """Handle video call invitation"""
+        target_user_id = message.get('target_user_id')
+        caller_name = message.get('caller_name')
+        room_id = message.get('room_id')
+        
+        if not target_user_id or not caller_name or not room_id:
+            logger.warning(f"Invalid video call invite from {caller_user_id}: {message}")
+            return
+        
+        logger.info(f"Video call invitation from {caller_name} ({caller_user_id}) to {target_user_id}")
+        
+        # Send invitation to target user
+        if target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    'type': 'video_call_invite',
+                    'caller_id': caller_user_id,
+                    'caller_name': caller_name,
+                    'room_id': room_id
+                }))
+                logger.info(f"Video call invitation sent to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending video call invite to {target_user_id}: {e}")
+        else:
+            logger.warning(f"Target user {target_user_id} not connected")
+            # Notify caller that target is offline
+            if caller_user_id in self.user_connections:
+                try:
+                    await self.user_connections[caller_user_id].send_text(json.dumps({
+                        'type': 'video_call_reject',
+                        'reason': 'User is offline'
+                    }))
+                except Exception as e:
+                    logger.error(f"Error notifying caller {caller_user_id}: {e}")
+    
+    async def handle_video_call_accept(self, user_id: str, message: dict):
+        """Handle video call acceptance"""
+        caller_id = message.get('caller_id')
+        room_id = message.get('room_id')
+        
+        if not caller_id or not room_id:
+            logger.warning(f"Invalid video call accept from {user_id}: {message}")
+            return
+        
+        logger.info(f"Video call accepted by {user_id} for caller {caller_id}")
+        
+        # Notify caller that call was accepted
+        if caller_id in self.user_connections:
+            try:
+                await self.user_connections[caller_id].send_text(json.dumps({
+                    'type': 'video_call_accept',
+                    'accepter_id': user_id,
+                    'room_id': room_id
+                }))
+                logger.info(f"Video call acceptance sent to {caller_id}")
+            except Exception as e:
+                logger.error(f"Error sending video call acceptance to {caller_id}: {e}")
+    
+    async def handle_video_call_reject(self, user_id: str, message: dict):
+        """Handle video call rejection"""
+        caller_id = message.get('caller_id')
+        room_id = message.get('room_id')
+        
+        if not caller_id or not room_id:
+            logger.warning(f"Invalid video call reject from {user_id}: {message}")
+            return
+        
+        logger.info(f"Video call rejected by {user_id} for caller {caller_id}")
+        
+        # Notify caller that call was rejected
+        if caller_id in self.user_connections:
+            try:
+                await self.user_connections[caller_id].send_text(json.dumps({
+                    'type': 'video_call_reject',
+                    'rejecter_id': user_id,
+                    'room_id': room_id
+                }))
+                logger.info(f"Video call rejection sent to {caller_id}")
+            except Exception as e:
+                logger.error(f"Error sending video call rejection to {caller_id}: {e}")
+    
+    async def handle_video_call_end(self, user_id: str, message: dict):
+        """Handle video call end"""
+        target_user_id = message.get('target_user_id')
+        room_id = message.get('room_id')
+        
+        if not target_user_id or not room_id:
+            logger.warning(f"Invalid video call end from {user_id}: {message}")
+            return
+        
+        logger.info(f"Video call ended by {user_id} for {target_user_id}")
+        
+        # Notify other user that call ended
+        if target_user_id in self.user_connections:
+            try:
+                await self.user_connections[target_user_id].send_text(json.dumps({
+                    'type': 'video_call_end',
+                    'ender_id': user_id,
+                    'room_id': room_id
+                }))
+                logger.info(f"Video call end notification sent to {target_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending video call end to {target_user_id}: {e}")
 
     async def handle_websocket_message(self, websocket: WebSocket, user_id: str):
         """Handle incoming WebSocket messages"""
@@ -420,6 +526,15 @@ class WebSocketManager:
                     await self.webrtc_ice_candidate(user_id, message)
                 elif message_type == 'webrtc_leave_room':
                     await self.webrtc_leave_room(user_id, message)
+                # Video call invitation system
+                elif message_type == 'video_call_invite':
+                    await self.handle_video_call_invite(user_id, message)
+                elif message_type == 'video_call_accept':
+                    await self.handle_video_call_accept(user_id, message)
+                elif message_type == 'video_call_reject':
+                    await self.handle_video_call_reject(user_id, message)
+                elif message_type == 'video_call_end':
+                    await self.handle_video_call_end(user_id, message)
                 else:
                     logger.warning(f"Unknown message type: {message_type}")
         except WebSocketDisconnect:

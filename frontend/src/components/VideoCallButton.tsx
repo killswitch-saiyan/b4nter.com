@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useWebSocket } from '../contexts/WebSocketContext';
 import VideoChat from './VideoChat';
+import IncomingCallModal from './IncomingCallModal';
 import { toast } from 'react-hot-toast';
 
 interface VideoCallButtonProps {
@@ -13,7 +15,10 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
   targetUsername 
 }) => {
   const { user } = useAuth();
+  const { sendCustomEvent } = useWebSocket();
   const [isInCall, setIsInCall] = useState(false);
+  const [incomingCallData, setIncomingCallData] = useState<any>(null);
+  const [callAccepted, setCallAccepted] = useState(false);
 
   const startVideoCall = async () => {
     if (!user) {
@@ -26,12 +31,93 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
       return;
     }
 
+    // Generate room ID for this call
+    const roomId = [user.id, targetUserId].sort().join('-video-call');
+
+    // Send video call invitation via WebSocket
+    sendCustomEvent({
+      type: 'video_call_invite',
+      caller_id: user.id,
+      caller_name: user.username,
+      target_user_id: targetUserId,
+      room_id: roomId
+    });
+
+    // Show calling state
+    toast.success(`Calling ${targetUsername}...`);
     setIsInCall(true);
   };
 
   const endVideoCall = () => {
+    // Send call end event if in call
+    if (isInCall && user) {
+      const roomId = [user.id, targetUserId].sort().join('-video-call');
+      sendCustomEvent({
+        type: 'video_call_end',
+        caller_id: user.id,
+        target_user_id: targetUserId,
+        room_id: roomId
+      });
+    }
     setIsInCall(false);
+    setCallAccepted(false);
+    setIncomingCallData(null);
   };
+
+  const handleAcceptCall = (roomId: string) => {
+    setCallAccepted(true);
+    setIncomingCallData(null);
+    setIsInCall(true);
+  };
+
+  const handleRejectCall = () => {
+    setIncomingCallData(null);
+  };
+
+  // Listen for video call events
+  useEffect(() => {
+    const handleVideoCallInvite = (event: CustomEvent) => {
+      const data = event.detail;
+      if (data.target_user_id === user?.id) {
+        setIncomingCallData(data);
+      }
+    };
+
+    const handleVideoCallAccept = (event: CustomEvent) => {
+      const data = event.detail;
+      if (data.caller_id === user?.id) {
+        toast.success(`${targetUsername} accepted your call!`);
+        setCallAccepted(true);
+      }
+    };
+
+    const handleVideoCallReject = (event: CustomEvent) => {
+      const data = event.detail;
+      if (data.caller_id === user?.id) {
+        toast.error(`${targetUsername} declined your call`);
+        setIsInCall(false);
+      }
+    };
+
+    const handleVideoCallEnd = (event: CustomEvent) => {
+      toast('Call ended');
+      setIsInCall(false);
+      setCallAccepted(false);
+      setIncomingCallData(null);
+    };
+
+    window.addEventListener('video-call-invite', handleVideoCallInvite as EventListener);
+    window.addEventListener('video-call-accept', handleVideoCallAccept as EventListener);
+    window.addEventListener('video-call-reject', handleVideoCallReject as EventListener);
+    window.addEventListener('video-call-end', handleVideoCallEnd as EventListener);
+
+    return () => {
+      window.removeEventListener('video-call-invite', handleVideoCallInvite as EventListener);
+      window.removeEventListener('video-call-accept', handleVideoCallAccept as EventListener);
+      window.removeEventListener('video-call-reject', handleVideoCallReject as EventListener);
+      window.removeEventListener('video-call-end', handleVideoCallEnd as EventListener);
+    };
+  }, [user?.id, targetUsername]);
 
   return (
     <>
@@ -55,10 +141,19 @@ const VideoCallButton: React.FC<VideoCallButtonProps> = ({
         </svg>
       </button>
 
-      {isInCall && (
+      {/* Incoming call modal */}
+      <IncomingCallModal
+        callData={incomingCallData}
+        onAccept={handleAcceptCall}
+        onReject={handleRejectCall}
+      />
+
+      {/* Video chat component */}
+      {isInCall && (callAccepted || incomingCallData) && (
         <VideoChat
           targetUserId={targetUserId}
           targetUsername={targetUsername}
+          isInitiator={!incomingCallData}
           onClose={endVideoCall}
         />
       )}
