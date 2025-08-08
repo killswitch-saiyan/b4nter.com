@@ -119,8 +119,7 @@ const ChatPage: React.FC = () => {
     (window as any).testRingtone = testRingtone;
   }, []);
 
-  const [userSearch, setUserSearch] = useState('');
-  const [channelSearch, setChannelSearch] = useState('');
+  const [globalSearch, setGlobalSearch] = useState('');
   const [isInCall, setIsInCall] = useState(false);
   const [incomingCall, setIncomingCall] = useState<{
     from: string;
@@ -998,31 +997,26 @@ const ChatPage: React.FC = () => {
         {/* Sidebar - Fixed */}
         <div className="w-64 bg-white border-r flex-shrink-0 dark:bg-dark-800 dark:border-dark-700">
           <div className="h-full overflow-y-auto">
-            {/* Soccer Leagues Section */}
-            <GroupsList
-              selectedChannel={selectedChannel}
-              onChannelSelect={(channel) => {
-                setSelectedChannel(channel);
-                setSelectedDMUser(null);
-              }}
-            />
-            
-            {/* Regular Channels Section */}
-            <div className="p-4 border-t dark:border-dark-700">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-white">Channels</h3>
+            {/* Global Search */}
+            <div className="p-4 border-b dark:border-dark-700">
               <input
                 type="text"
-                value={channelSearch}
-                onChange={e => setChannelSearch(e.target.value)}
-                placeholder="Search channels..."
-                className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
+                value={globalSearch}
+                onChange={e => setGlobalSearch(e.target.value)}
+                placeholder="Search channels, leagues, users..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white text-sm"
               />
+            </div>
+            
+            {/* Regular Channels Section */}
+            <div className="p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-white">Channels</h3>
               {loading ? (
                 <div className="text-sm text-gray-500">Loading channels...</div>
               ) : (
                 <div className="space-y-2">
                   {/* Regular Channels */}
-                  {channels.filter(channel => !channel.is_call_channel && !channel.is_match_channel && channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
+                  {channels.filter(channel => !channel.is_call_channel && !channel.is_match_channel && channel.name.toLowerCase().includes(globalSearch.toLowerCase())).map((channel) => (
                     <button
                       key={channel.id}
                       onClick={() => {
@@ -1041,7 +1035,7 @@ const ChatPage: React.FC = () => {
                     </button>
                   ))}
                   {/* Call Channels */}
-                  {channels.filter(channel => channel.is_call_channel && channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
+                  {channels.filter(channel => channel.is_call_channel && channel.name.toLowerCase().includes(globalSearch.toLowerCase())).map((channel) => (
                     <button
                       key={channel.id}
                       onClick={() => {
@@ -1069,21 +1063,26 @@ const ChatPage: React.FC = () => {
               )}
             </div>
             
+            {/* Soccer Leagues Section */}
+            <div className="border-t dark:border-dark-700">
+              <GroupsList
+                selectedChannel={selectedChannel}
+                onChannelSelect={(channel) => {
+                  setSelectedChannel(channel);
+                  setSelectedDMUser(null);
+                }}
+                searchQuery={globalSearch}
+              />
+            </div>
+            
             {/* Direct Messages Section */}
             <div className="p-4 border-t dark:border-dark-700">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-white">Direct Messages</h3>
-              <input
-                type="text"
-                value={userSearch}
-                onChange={e => setUserSearch(e.target.value)}
-                placeholder="Search users..."
-                className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
-              />
               {loadingUsers ? (
                 <div className="text-sm text-gray-500">Loading users...</div>
               ) : (
                 <div className="space-y-2">
-                  {users.filter(u => u.username.toLowerCase().includes(userSearch.toLowerCase())).map((u) => (
+                  {users.filter(u => u.username.toLowerCase().includes(globalSearch.toLowerCase())).map((u) => (
                     <button
                       key={u.id}
                       onClick={() => { setSelectedDMUser(u); setSelectedChannel(null); }}

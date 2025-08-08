@@ -5,6 +5,7 @@ import logging
 import asyncio
 from functools import wraps
 import concurrent.futures
+from datetime import date, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -724,6 +725,174 @@ class DatabaseManager:
             return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Error getting match channel by SportsDB ID: {e}")
+            return None
+
+    # Friendly Matches Methods
+    async def get_friendly_matches(self, date_filter: str = None):
+        """Get friendly matches, optionally filtered by date"""
+        try:
+            query = self.client.table('friendly_matches').select('''
+                id, channel_id, match_date, match_time, home_team, away_team,
+                home_team_logo, away_team_logo, venue, match_type, sportsdb_event_id,
+                friendly_match_scores (
+                    home_score, away_score, match_status, match_minute, last_updated
+                )
+            ''')
+            
+            if date_filter:
+                query = query.eq('match_date', date_filter)
+            
+            response = await run_sync_in_thread(lambda: query.execute())
+            
+            # Flatten the scores data
+            matches = []
+            for match in response.data or []:
+                scores = match.get('friendly_match_scores', [])
+                latest_score = scores[0] if scores else {}
+                
+                match_data = {
+                    **match,
+                    'home_score': latest_score.get('home_score', 0),
+                    'away_score': latest_score.get('away_score', 0),
+                    'match_status': latest_score.get('match_status', 'scheduled'),
+                    'match_minute': latest_score.get('match_minute'),
+                    'last_updated': latest_score.get('last_updated')
+                }
+                del match_data['friendly_match_scores']  # Remove nested data
+                matches.append(match_data)
+            
+            return matches
+        except Exception as e:
+            logger.error(f"Error getting friendly matches: {e}")
+            return []
+
+    async def get_todays_friendly_matches(self):
+        """Get today's friendly matches"""
+        today = date.today().isoformat()
+        return await self.get_friendly_matches(today)
+
+    async def get_tomorrows_friendly_matches(self):
+        """Get tomorrow's friendly matches"""
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        return await self.get_friendly_matches(tomorrow)
+
+    async def create_friendly_match(self, match_data: dict):
+        """Create a new friendly match"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('friendly_matches').insert(match_data).execute()
+            )
+            
+            if response.data:
+                # Create initial score record
+                friendly_id = response.data[0]['id']
+                await self.create_friendly_score(friendly_id, {
+                    'home_score': 0,
+                    'away_score': 0,
+                    'match_status': 'scheduled'
+                })
+                
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error creating friendly match: {e}")
+            return None
+
+    async def create_friendly_score(self, friendly_match_id: str, score_data: dict):
+        """Create or update friendly match scores"""
+        try:
+            score_data['friendly_match_id'] = friendly_match_id
+            response = await run_sync_in_thread(
+                lambda: self.client.table('friendly_match_scores').insert(score_data).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error creating friendly score: {e}")
+            return None
+
+    async def update_friendly_scores(self, friendly_match_id: str, score_data: dict):
+        """Update friendly match live scores"""
+        try:
+            # First check if score record exists
+            existing = await run_sync_in_thread(
+                lambda: self.client.table('friendly_match_scores')
+                .select('id')
+                .eq('friendly_match_id', friendly_match_id)
+                .execute()
+            )
+            
+            if existing.data:
+                # Update existing record
+                response = await run_sync_in_thread(
+                    lambda: self.client.table('friendly_match_scores')
+                    .update(score_data)
+                    .eq('friendly_match_id', friendly_match_id)
+                    .execute()
+                )
+            else:
+                # Create new record
+                score_data['friendly_match_id'] = friendly_match_id
+                response = await run_sync_in_thread(
+                    lambda: self.client.table('friendly_match_scores')
+                    .insert(score_data)
+                    .execute()
+                )
+            
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error updating friendly scores: {e}")
+            return None
+
+    async def get_live_friendly_matches(self):
+        """Get currently live friendly matches"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('friendly_matches').select('''
+                    id, channel_id, home_team, away_team, venue, match_type,
+                    friendly_match_scores!inner (
+                        home_score, away_score, match_status, match_minute, last_updated
+                    )
+                ''').eq('friendly_match_scores.match_status', 'live').execute()
+            )
+            
+            matches = []
+            for match in response.data or []:
+                scores = match.get('friendly_match_scores', [])
+                if scores:
+                    score = scores[0]
+                    matches.append({
+                        **match,
+                        'home_score': score.get('home_score', 0),
+                        'away_score': score.get('away_score', 0),
+                        'match_status': score.get('match_status', 'live'),
+                        'match_minute': score.get('match_minute'),
+                        'last_updated': score.get('last_updated')
+                    })
+            
+            return matches
+        except Exception as e:
+            logger.error(f"Error getting live friendly matches: {e}")
+            return []
+
+    async def get_friendly_match_by_sportsdb_id(self, sportsdb_event_id: str):
+        """Get friendly match by SportsDB event ID"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('friendly_matches').select('*').eq('sportsdb_event_id', sportsdb_event_id).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error getting friendly match by SportsDB ID: {e}")
+            return None
+
+    async def delete_friendly_match(self, friendly_id: str):
+        """Delete a friendly match (cascade will handle scores)"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('friendly_matches').delete().eq('id', friendly_id).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error deleting friendly match: {e}")
             return None
 
 
