@@ -9,8 +9,10 @@ import EncryptionStatus from '../components/EncryptionStatus';
 import UserProfileDropdown from '../components/UserProfileDropdown';
 import VideoCallButton from '../components/VideoCallButton';
 import MultiUserVideoButton from '../components/MultiUserVideoButton';
+import GroupsList from '../components/GroupsList';
+import LiveScoreHeader from '../components/LiveScoreHeader';
 import { userAPI } from '../lib/api';
-import { Message, MessageReaction } from '../types';
+import { Message, MessageReaction, LiveScoreUpdate } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
 
 // Type declaration for Vite's import.meta.env
@@ -995,163 +997,215 @@ const ChatPage: React.FC = () => {
       <div className="flex-1 flex overflow-hidden bg-gray-100 dark:bg-dark-900">
         {/* Sidebar - Fixed */}
         <div className="w-64 bg-white border-r flex-shrink-0 dark:bg-dark-800 dark:border-dark-700">
-          <div className="p-4 h-full overflow-y-auto">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-white">Channels</h3>
-            <input
-              type="text"
-              value={channelSearch}
-              onChange={e => setChannelSearch(e.target.value)}
-              placeholder="Search channels..."
-              className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
+          <div className="h-full overflow-y-auto">
+            {/* Soccer Leagues Section */}
+            <GroupsList
+              selectedChannel={selectedChannel}
+              onChannelSelect={(channel) => {
+                setSelectedChannel(channel);
+                setSelectedDMUser(null);
+              }}
             />
-            {loading ? (
-              <div className="text-sm text-gray-500">Loading channels...</div>
-            ) : (
-              <div className="space-y-2">
-                {/* Regular Channels */}
-                {channels.filter(channel => !channel.is_call_channel && channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
-                  <button
-                    key={channel.id}
-                    onClick={() => setSelectedChannel(channel)}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      selectedChannel?.id === channel.id 
-                        ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' 
-                        : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span># {channel.name}</span>
-                    </div>
-                  </button>
-                ))}
-                {/* Call Channels */}
-                {channels.filter(channel => channel.is_call_channel && channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
-                  <button
-                    key={channel.id}
-                    onClick={() => setSelectedChannel(channel)}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors border-l-4 border-green-500 bg-green-50 dark:bg-green-900/20 ${
-                      selectedChannel?.id === channel.id 
-                        ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' 
-                        : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>{channel.name}</span>
-                      <span className="text-xs text-green-600 dark:text-green-400">
-                        {channel.member_count} online
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {channel.call_type === 'voice' ? '🔊 Voice Call' : '📹 Video Call'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* Debug Component removed - archived */}
             
-            <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-4 dark:text-white">Direct Messages</h3>
-            <input
-              type="text"
-              value={userSearch}
-              onChange={e => setUserSearch(e.target.value)}
-              placeholder="Search users..."
-              className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
-            />
-            {loadingUsers ? (
-              <div className="text-sm text-gray-500">Loading users...</div>
-            ) : (
-              <div className="space-y-2">
-                {users.filter(u => u.username.toLowerCase().includes(userSearch.toLowerCase())).map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => { setSelectedDMUser(u); setSelectedChannel(null); }}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${selectedDMUser?.id === u.id ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'}`}
-                  >
-                    {u.username}
-                    {u.is_blocked && (
-                      <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Regular Channels Section */}
+            <div className="p-4 border-t dark:border-dark-700">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-white">Channels</h3>
+              <input
+                type="text"
+                value={channelSearch}
+                onChange={e => setChannelSearch(e.target.value)}
+                placeholder="Search channels..."
+                className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
+              />
+              {loading ? (
+                <div className="text-sm text-gray-500">Loading channels...</div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Regular Channels */}
+                  {channels.filter(channel => !channel.is_call_channel && !channel.is_match_channel && channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
+                    <button
+                      key={channel.id}
+                      onClick={() => {
+                        setSelectedChannel(channel);
+                        setSelectedDMUser(null);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        selectedChannel?.id === channel.id 
+                          ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' 
+                          : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span># {channel.name}</span>
+                      </div>
+                    </button>
+                  ))}
+                  {/* Call Channels */}
+                  {channels.filter(channel => channel.is_call_channel && channel.name.toLowerCase().includes(channelSearch.toLowerCase())).map((channel) => (
+                    <button
+                      key={channel.id}
+                      onClick={() => {
+                        setSelectedChannel(channel);
+                        setSelectedDMUser(null);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors border-l-4 border-green-500 bg-green-50 dark:bg-green-900/20 ${
+                        selectedChannel?.id === channel.id 
+                          ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' 
+                          : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>{channel.name}</span>
+                        <span className="text-xs text-green-600 dark:text-green-400">
+                          {channel.member_count} online
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {channel.call_type === 'voice' ? '🔊 Voice Call' : '📹 Video Call'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Direct Messages Section */}
+            <div className="p-4 border-t dark:border-dark-700">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 dark:text-white">Direct Messages</h3>
+              <input
+                type="text"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                placeholder="Search users..."
+                className="w-full mb-2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-dark-700 dark:border-dark-400 dark:text-white"
+              />
+              {loadingUsers ? (
+                <div className="text-sm text-gray-500">Loading users...</div>
+              ) : (
+                <div className="space-y-2">
+                  {users.filter(u => u.username.toLowerCase().includes(userSearch.toLowerCase())).map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => { setSelectedDMUser(u); setSelectedChannel(null); }}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${selectedDMUser?.id === u.id ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'}`}
+                    >
+                      {u.username}
+                      {u.is_blocked && (
+                        <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Main Chat Area - Fixed height */}
         <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-dark-700">
-          {/* Channel Header - Fixed */}
-          <div className="bg-white border-b px-6 py-4 flex-shrink-0 dark:bg-dark-800 dark:border-dark-700">
-            <div className="flex items-center justify-between">
-              <div>
-                {selectedDMUser ? (
-                  <div>
+          {/* Match Channel Live Score Header OR Regular Channel Header */}
+          {selectedChannel?.is_match_channel ? (
+            <LiveScoreHeader
+              matchData={{
+                match_id: selectedChannel.match_id,
+                group_name: selectedChannel.group_name || 'Unknown League',
+                home_team: selectedChannel.home_team || 'Home Team',
+                away_team: selectedChannel.away_team || 'Away Team',
+                home_score: selectedChannel.home_score || 0,
+                away_score: selectedChannel.away_score || 0,
+                match_status: selectedChannel.match_status || 'scheduled',
+                match_minute: selectedChannel.match_minute,
+                match_date: selectedChannel.match_date || '',
+                match_time: selectedChannel.match_time,
+                last_updated: selectedChannel.last_updated,
+              }}
+              onScoreUpdate={(update: LiveScoreUpdate) => {
+                // Update the selected channel with new score data
+                if (selectedChannel.id === update.channel_id) {
+                  setSelectedChannel({
+                    ...selectedChannel,
+                    home_score: update.home_score,
+                    away_score: update.away_score,
+                    match_status: update.match_status,
+                    match_minute: update.match_minute,
+                    last_updated: update.last_updated
+                  });
+                }
+              }}
+            />
+          ) : (
+            /* Regular Channel Header */
+            <div className="bg-white border-b px-6 py-4 flex-shrink-0 dark:bg-dark-800 dark:border-dark-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  {selectedDMUser ? (
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Direct Message with {selectedDMUser.username}
+                        {isBlocked && (
+                          <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
+                        )}
+                      </h2>
+                      <EncryptionStatus isEncrypted={true} className="mt-1" />
+                    </div>
+                  ) : selectedChannel?.is_call_channel ? (
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        {selectedChannel.name}
+                        <span className="text-sm text-green-600 dark:text-green-400">
+                          {selectedChannel.member_count} participants
+                        </span>
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-300">
+                        {selectedChannel.call_type === 'voice' ? 'Voice Call' : 'Video Call'} • Started {new Date(selectedChannel.call_started_at || '').toLocaleTimeString()}
+                      </p>
+                    </div>
+                  ) : (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      Direct Message with {selectedDMUser.username}
-                      {isBlocked && (
-                        <span className="ml-2 text-xs text-red-500 font-semibold">(Blocked)</span>
-                      )}
+                      {selectedChannel ? `# ${selectedChannel.name}` : 'Select a channel or user'}
                     </h2>
-                    <EncryptionStatus isEncrypted={true} className="mt-1" />
-                  </div>
-                ) : selectedChannel?.is_call_channel ? (
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                      {selectedChannel.name}
-                      <span className="text-sm text-green-600 dark:text-green-400">
-                        {selectedChannel.member_count} participants
-                      </span>
-                    </h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-300">
-                      {selectedChannel.call_type === 'voice' ? 'Voice Call' : 'Video Call'} • Started {new Date(selectedChannel.call_started_at || '').toLocaleTimeString()}
-                    </p>
-                  </div>
-                ) : (
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedChannel ? `# ${selectedChannel.name}` : 'Select a channel or user'}
-                  </h2>
-                )}
-                {selectedChannel && !selectedDMUser && !selectedChannel.is_call_channel && (
-                  <p className="text-sm text-gray-500 dark:text-gray-300">{selectedChannel.description}</p>
-                )}
-              </div>
-              <div className="flex items-center space-x-4">
-                {selectedDMUser && !isBlocked && (
-                  <VideoCallButton
-                    targetUserId={selectedDMUser.id}
-                    targetUsername={selectedDMUser.username}
-                  />
-                )}
-                {selectedDMUser && (
-                  isBlocked ? (
-                    <button
-                      onClick={handleUnblockUser}
-                      disabled={loadingBlock}
-                      className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-md hover:bg-green-200"
-                    >
-                      Unblock
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleBlockUser}
-                      disabled={loadingBlock}
-                      className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200"
-                    >
-                      Block
-                    </button>
-                  )
-                )}
-                <span className="text-sm text-gray-500 dark:text-gray-300">
-                  {isConnected ? (
-                    <span className="text-green-600">● Connected</span>
-                  ) : (
-                    <span className="text-red-600">● Disconnected</span>
                   )}
-                </span>
+                  {selectedChannel && !selectedDMUser && !selectedChannel.is_call_channel && !selectedChannel.is_match_channel && (
+                    <p className="text-sm text-gray-500 dark:text-gray-300">{selectedChannel.description}</p>
+                  )}
+                </div>
+                <div className="flex items-center space-x-4">
+                  {selectedDMUser && !isBlocked && (
+                    <VideoCallButton
+                      targetUserId={selectedDMUser.id}
+                      targetUsername={selectedDMUser.username}
+                    />
+                  )}
+                  {selectedDMUser && (
+                    isBlocked ? (
+                      <button
+                        onClick={handleUnblockUser}
+                        disabled={loadingBlock}
+                        className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-md hover:bg-green-200"
+                      >
+                        Unblock
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleBlockUser}
+                        disabled={loadingBlock}
+                        className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200"
+                      >
+                        Block
+                      </button>
+                    )
+                  )}
+                  <span className="text-sm text-gray-500 dark:text-gray-300">
+                    {isConnected ? (
+                      <span className="text-green-600">● Connected</span>
+                    ) : (
+                      <span className="text-red-600">● Disconnected</span>
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Messages Area - Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 relative dark:bg-dark-700">

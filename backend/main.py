@@ -1,7 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings, cors_origins_list
-from routers import auth, channels, messages, users, health
+from routers import auth, channels, messages, users, health, groups, matches
 from websocket_manager import websocket_manager
 import logging
 import json
@@ -30,6 +30,8 @@ app.include_router(channels.router)
 app.include_router(messages.router)
 app.include_router(users.router)
 app.include_router(health.router)
+app.include_router(groups.router)
+app.include_router(matches.router)
 
 @app.get("/")
 async def root():

@@ -410,6 +410,322 @@ class DatabaseManager:
             logger.error(f"Error getting all channels: {e}")
             return []
 
+    # Groups and Match Channels methods
+    async def create_group(self, group_data: dict):
+        """Create a new group/league"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('groups').insert(group_data).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error creating group: {e}")
+            return None
+
+    async def get_groups(self, active_only: bool = True):
+        """Get all groups/leagues"""
+        try:
+            query = self.client.table('groups').select('*')
+            if active_only:
+                query = query.eq('is_active', True)
+            
+            response = await run_sync_in_thread(lambda: query.execute())
+            return response.data if response.data else []
+        except Exception as e:
+            logger.error(f"Error getting groups: {e}")
+            return []
+
+    async def get_group_by_id(self, group_id: str):
+        """Get group by ID"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('groups').select('*').eq('id', group_id).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error getting group by ID: {e}")
+            return None
+
+    async def update_group(self, group_id: str, update_data: dict):
+        """Update a group"""
+        try:
+            update_data['updated_at'] = 'now()'
+            response = await run_sync_in_thread(
+                lambda: self.client.table('groups').update(update_data).eq('id', group_id).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error updating group: {e}")
+            return None
+
+    async def create_match_channel(self, match_data: dict):
+        """Create a new match channel record"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('match_channels').insert(match_data).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error creating match channel: {e}")
+            return None
+
+    async def get_today_match_channels(self, group_id: str = None):
+        """Get today's match channels, optionally filtered by group"""
+        try:
+            from datetime import date
+            today = date.today().isoformat()
+            
+            query = self.client.table('match_channels').select('''
+                id, channel_id, group_id, match_date, home_team, away_team, match_time, 
+                sportsdb_event_id, auto_delete_at,
+                groups!match_channels_group_id_fkey(name),
+                channels!match_channels_channel_id_fkey(name, description, created_at),
+                live_match_data!match_channels_id_fkey(home_score, away_score, match_status, match_minute)
+            ''').eq('match_date', today)
+            
+            if group_id:
+                query = query.eq('group_id', group_id)
+            
+            response = await run_sync_in_thread(lambda: query.execute())
+            
+            # Format the response to flatten nested data
+            formatted_matches = []
+            for match in response.data or []:
+                group_data = match.get('groups', {})
+                channel_data = match.get('channels', {})
+                live_data = match.get('live_match_data', [{}])[0] if match.get('live_match_data') else {}
+                
+                formatted_match = {
+                    **match,
+                    'group_name': group_data.get('name', 'Unknown League'),
+                    'channel_name': channel_data.get('name', 'Unknown Channel'),
+                    'home_score': live_data.get('home_score', 0),
+                    'away_score': live_data.get('away_score', 0),
+                    'match_status': live_data.get('match_status', 'scheduled'),
+                    'match_minute': live_data.get('match_minute')
+                }
+                # Remove nested objects
+                formatted_match.pop('groups', None)
+                formatted_match.pop('channels', None)
+                formatted_match.pop('live_match_data', None)
+                formatted_matches.append(formatted_match)
+            
+            return formatted_matches
+        except Exception as e:
+            logger.error(f"Error getting today's match channels: {e}")
+            return []
+
+    async def get_group_channels(self, group_id: str):
+        """Get all channels for a group (including match channels)"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('match_channels').select('''
+                    id, channel_id, match_date, home_team, away_team, match_time,
+                    channels!match_channels_channel_id_fkey(id, name, description, created_at),
+                    live_match_data!match_channels_id_fkey(home_score, away_score, match_status, match_minute)
+                ''').eq('group_id', group_id).order('match_date', desc=True).execute()
+            )
+            
+            # Format the response
+            channels = []
+            for match in response.data or []:
+                channel_data = match.get('channels', {})
+                live_data = match.get('live_match_data', [{}])[0] if match.get('live_match_data') else {}
+                
+                channel = {
+                    'match_channel_id': match['id'],
+                    'channel_id': match['channel_id'],
+                    'name': f"{match['home_team']} vs {match['away_team']}",
+                    'match_date': match['match_date'],
+                    'match_time': match['match_time'],
+                    'home_team': match['home_team'],
+                    'away_team': match['away_team'],
+                    'home_score': live_data.get('home_score', 0),
+                    'away_score': live_data.get('away_score', 0),
+                    'match_status': live_data.get('match_status', 'scheduled'),
+                    'match_minute': live_data.get('match_minute'),
+                    'is_match_channel': True
+                }
+                channels.append(channel)
+            
+            return channels
+        except Exception as e:
+            logger.error(f"Error getting group channels: {e}")
+            return []
+
+    async def get_match_channel_by_id(self, match_channel_id: str):
+        """Get match channel by ID"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('match_channels').select('*').eq('id', match_channel_id).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error getting match channel by ID: {e}")
+            return None
+
+    async def get_match_channel_with_scores(self, match_channel_id: str):
+        """Get match channel with live score data"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('match_channels').select('''
+                    *, 
+                    groups!match_channels_group_id_fkey(name),
+                    live_match_data!match_channels_id_fkey(home_score, away_score, match_status, match_minute, last_updated)
+                ''').eq('id', match_channel_id).execute()
+            )
+            
+            if not response.data:
+                return None
+                
+            match = response.data[0]
+            group_data = match.get('groups', {})
+            live_data = match.get('live_match_data', [{}])[0] if match.get('live_match_data') else {}
+            
+            return {
+                **match,
+                'group_name': group_data.get('name', 'Unknown League'),
+                'home_score': live_data.get('home_score', 0),
+                'away_score': live_data.get('away_score', 0),
+                'match_status': live_data.get('match_status', 'scheduled'),
+                'match_minute': live_data.get('match_minute'),
+                'last_updated': live_data.get('last_updated')
+            }
+        except Exception as e:
+            logger.error(f"Error getting match channel with scores: {e}")
+            return None
+
+    async def update_live_scores(self, match_channel_id: str, score_data: dict):
+        """Update or insert live score data for a match"""
+        try:
+            # First try to update existing record
+            update_response = await run_sync_in_thread(
+                lambda: self.client.table('live_match_data')
+                .update({**score_data, 'last_updated': 'now()'})
+                .eq('match_channel_id', match_channel_id)
+                .execute()
+            )
+            
+            # If no rows were affected, insert new record
+            if not update_response.data:
+                insert_response = await run_sync_in_thread(
+                    lambda: self.client.table('live_match_data')
+                    .insert({**score_data, 'match_channel_id': match_channel_id})
+                    .execute()
+                )
+                return insert_response.data[0] if insert_response.data else None
+            
+            return update_response.data[0]
+        except Exception as e:
+            logger.error(f"Error updating live scores: {e}")
+            return None
+
+    async def get_live_matches(self):
+        """Get all currently live matches"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('live_match_data').select('''
+                    *, 
+                    match_channels!live_match_data_match_channel_id_fkey(
+                        id, channel_id, home_team, away_team, match_date, match_time,
+                        groups!match_channels_group_id_fkey(name)
+                    )
+                ''').eq('match_status', 'live').execute()
+            )
+            
+            # Format response
+            live_matches = []
+            for live_data in response.data or []:
+                match_data = live_data.get('match_channels', {})
+                group_data = match_data.get('groups', {}) if match_data else {}
+                
+                live_matches.append({
+                    'match_channel_id': live_data['match_channel_id'],
+                    'channel_id': match_data.get('channel_id'),
+                    'home_team': match_data.get('home_team'),
+                    'away_team': match_data.get('away_team'),
+                    'home_score': live_data['home_score'],
+                    'away_score': live_data['away_score'],
+                    'match_status': live_data['match_status'],
+                    'match_minute': live_data['match_minute'],
+                    'group_name': group_data.get('name', 'Unknown League'),
+                    'match_date': match_data.get('match_date'),
+                    'last_updated': live_data['last_updated']
+                })
+            
+            return live_matches
+        except Exception as e:
+            logger.error(f"Error getting live matches: {e}")
+            return []
+
+    async def get_match_channels_by_date(self, match_date):
+        """Get match channels for a specific date"""
+        try:
+            date_str = match_date.isoformat() if hasattr(match_date, 'isoformat') else str(match_date)
+            response = await run_sync_in_thread(
+                lambda: self.client.table('match_channels').select('''
+                    id, channel_id, group_id, match_date, home_team, away_team, match_time,
+                    groups!match_channels_group_id_fkey(name),
+                    live_match_data!match_channels_id_fkey(home_score, away_score, match_status, match_minute)
+                ''').eq('match_date', date_str).execute()
+            )
+            
+            # Format response
+            matches = []
+            for match in response.data or []:
+                group_data = match.get('groups', {})
+                live_data = match.get('live_match_data', [{}])[0] if match.get('live_match_data') else {}
+                
+                matches.append({
+                    **match,
+                    'group_name': group_data.get('name', 'Unknown League'),
+                    'home_score': live_data.get('home_score', 0),
+                    'away_score': live_data.get('away_score', 0),
+                    'match_status': live_data.get('match_status', 'scheduled'),
+                    'match_minute': live_data.get('match_minute')
+                })
+            
+            return matches
+        except Exception as e:
+            logger.error(f"Error getting match channels by date: {e}")
+            return []
+
+    async def cleanup_expired_match_channels(self):
+        """Delete expired match channels and their associated data"""
+        try:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).isoformat()
+            
+            # Get expired channels
+            expired_response = await run_sync_in_thread(
+                lambda: self.client.table('match_channels')
+                .select('id, channel_id')
+                .lte('auto_delete_at', now)
+                .execute()
+            )
+            
+            deleted_count = 0
+            for expired_match in expired_response.data or []:
+                # Delete the actual channel (cascade will handle match_channels and live_match_data)
+                await self.delete_channel(expired_match['channel_id'])
+                deleted_count += 1
+            
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Error cleaning up expired match channels: {e}")
+            return 0
+
+    async def get_match_channel_by_sportsdb_id(self, sportsdb_event_id: str):
+        """Get match channel by SportsDB event ID"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('match_channels').select('*').eq('sportsdb_event_id', sportsdb_event_id).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error getting match channel by SportsDB ID: {e}")
+            return None
+
 
 # Global database manager instance
 db = DatabaseManager() 
