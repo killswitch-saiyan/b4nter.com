@@ -196,6 +196,40 @@ class WebSocketManager:
                 logger.error(f"Error sending to user {user_id}: {e}")
                 self.disconnect(user_id)
 
+    async def broadcast_to_all(self, message: dict):
+        """Broadcast message to all connected users"""
+        message_json = json.dumps(message)
+        disconnected_users = []
+        
+        for user_id, websocket in self.user_connections.items():
+            try:
+                await websocket.send_text(message_json)
+            except Exception as e:
+                logger.error(f"Error broadcasting to user {user_id}: {e}")
+                disconnected_users.append(user_id)
+        
+        # Clean up disconnected users
+        for user_id in disconnected_users:
+            self.disconnect(user_id)
+            
+    async def broadcast_live_score_update(self, channel_id: str, score_update: dict):
+        """Broadcast live score update to channel and all connected users"""
+        message = {
+            "type": "live_score_update",
+            "channel_id": channel_id,
+            **score_update
+        }
+        
+        # Broadcast to channel members
+        await self.broadcast_to_channel(channel_id, message)
+        
+        # Also broadcast as global score update for live score widgets
+        global_message = {
+            "type": "global_score_update",
+            "match": message
+        }
+        await self.broadcast_to_all(global_message)
+
     async def broadcast_user_status(self, user_id: str, status: str):
         message = {
             "type": "user_status_changed",

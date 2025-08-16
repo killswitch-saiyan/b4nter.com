@@ -140,4 +140,73 @@ class GoogleAuthRequest(BaseModel):
 
 class SocketEvent(BaseModel):
     event: str
-    data: dict 
+    data: dict
+
+
+# Groups and Soccer Leagues Models
+class GroupBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    league_id: Optional[str] = None  # SportsDB league ID
+    logo_url: Optional[str] = None
+    is_active: bool = True
+
+
+class GroupCreate(GroupBase):
+    pass
+
+
+class GroupResponse(GroupBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class MatchChannelBase(BaseModel):
+    group_id: str
+    match_date: str  # YYYY-MM-DD format
+    home_team: str
+    away_team: str
+    match_time: Optional[str] = None  # HH:MM:SS format
+    sportsdb_event_id: Optional[str] = None
+
+
+class MatchChannelCreate(MatchChannelBase):
+    channel_id: str
+    auto_delete_at: Optional[str] = None
+
+
+class MatchChannelResponse(MatchChannelBase):
+    id: str
+    channel_id: str
+    auto_delete_at: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    
+    # Live score data (populated from live_match_data table)
+    home_score: int = 0
+    away_score: int = 0
+    match_status: str = "scheduled"  # scheduled, live, finished
+    match_minute: Optional[str] = None
+    
+    # Group information
+    group_name: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class LiveScoreData(BaseModel):
+    home_score: int = 0
+    away_score: int = 0
+    match_status: str = "scheduled"
+    match_minute: Optional[str] = None
+
+
+class MatchSyncResult(BaseModel):
+    synced_count: int
+    errors: List[str]
+    created_channels: List[str] 
