@@ -246,23 +246,29 @@ class WidgetService:
     async def update_match_widgets(self, match_id: str, is_friendly: bool = False) -> Dict:
         """Update widget information for a match"""
         try:
-            # Get match data
+            # Get match data directly
             if is_friendly:
-                matches = await db.get_friendlies_with_widgets()
-                match = next((m for m in matches if m['id'] == match_id), None)
+                from database import run_sync_in_thread
+                response = await run_sync_in_thread(
+                    lambda: db.client.table('friendly_matches').select('*').eq('id', match_id).execute()
+                )
             else:
-                matches = await db.get_matches_with_widgets()
-                match = next((m for m in matches if m['id'] == match_id), None)
+                from database import run_sync_in_thread
+                response = await run_sync_in_thread(
+                    lambda: db.client.table('match_channels').select('*').eq('id', match_id).execute()
+                )
             
-            if not match:
+            if not response.data:
                 return {'success': False, 'error': 'Match not found'}
+            
+            match = response.data[0]
             
             # Generate widget URL
             widget_result = await self.generate_match_widget_url(
                 home_team=match['home_team'],
                 away_team=match['away_team'],
                 match_date=match['match_date'],
-                league=match.get('group_name'),
+                league='Premier League',  # Default for now
                 preferred_provider=match.get('widget_provider', 'sofascore')
             )
             
