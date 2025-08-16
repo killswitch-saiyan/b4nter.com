@@ -895,6 +895,183 @@ class DatabaseManager:
             logger.error(f"Error deleting friendly match: {e}")
             return None
 
+    # Widget and Team Mapping Methods
+    async def get_team_mapping(self, team_name: str, provider: str):
+        """Get team mapping for a specific provider"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('team_mappings')
+                .select('*')
+                .eq('canonical_name', team_name)
+                .eq('provider', provider)
+                .execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error getting team mapping: {e}")
+            return None
+
+    async def create_team_mapping(self, canonical_name: str, provider: str, provider_name: str, provider_id: str = None, confidence_score: float = 1.0):
+        """Create a new team mapping"""
+        try:
+            mapping_data = {
+                "canonical_name": canonical_name,
+                "provider": provider,
+                "provider_name": provider_name,
+                "provider_id": provider_id,
+                "confidence_score": confidence_score
+            }
+            
+            response = await run_sync_in_thread(
+                lambda: self.client.table('team_mappings').insert(mapping_data).execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error creating team mapping: {e}")
+            return None
+
+    async def get_widget_configuration(self, name: str = 'default'):
+        """Get widget configuration by name"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('widget_configurations')
+                .select('*')
+                .eq('name', name)
+                .eq('is_active', True)
+                .execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error getting widget configuration: {e}")
+            return None
+
+    async def update_match_widget(self, match_channel_id: str, widget_data: dict):
+        """Update widget information for a match channel"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('match_channels')
+                .update(widget_data)
+                .eq('id', match_channel_id)
+                .execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error updating match widget: {e}")
+            return None
+
+    async def update_friendly_widget(self, friendly_id: str, widget_data: dict):
+        """Update widget information for a friendly match"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('friendly_matches')
+                .update(widget_data)
+                .eq('id', friendly_id)
+                .execute()
+            )
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Error updating friendly widget: {e}")
+            return None
+
+    async def get_matches_with_widgets(self, date_filter: str = None):
+        """Get match channels with widget information"""
+        try:
+            query = self.client.table('match_channels').select('''
+                id, channel_id, group_id, match_date, match_time, home_team, away_team,
+                widget_url, widget_provider, widget_enabled, sofascore_match_id, external_match_ids,
+                groups!inner (
+                    name, league_id
+                ),
+                live_match_data (
+                    home_score, away_score, match_status, match_minute, last_updated
+                )
+            ''')
+            
+            if date_filter:
+                query = query.eq('match_date', date_filter)
+            
+            response = await run_sync_in_thread(lambda: query.execute())
+            
+            # Flatten the data structure
+            matches = []
+            for match in response.data or []:
+                group_info = match.get('groups', {})
+                score_info = match.get('live_match_data', [])
+                latest_score = score_info[0] if score_info else {}
+                
+                match_data = {
+                    **match,
+                    'group_name': group_info.get('name'),
+                    'league_id': group_info.get('league_id'),
+                    'home_score': latest_score.get('home_score', 0),
+                    'away_score': latest_score.get('away_score', 0),
+                    'match_status': latest_score.get('match_status', 'scheduled'),
+                    'match_minute': latest_score.get('match_minute'),
+                    'last_updated': latest_score.get('last_updated')
+                }
+                del match_data['groups']
+                del match_data['live_match_data']
+                matches.append(match_data)
+            
+            return matches
+        except Exception as e:
+            logger.error(f"Error getting matches with widgets: {e}")
+            return []
+
+    async def get_friendlies_with_widgets(self, date_filter: str = None):
+        """Get friendly matches with widget information"""
+        try:
+            query = self.client.table('friendly_matches').select('''
+                id, channel_id, match_date, match_time, home_team, away_team,
+                home_team_logo, away_team_logo, venue, match_type, sportsdb_event_id,
+                widget_url, widget_provider, widget_enabled, sofascore_match_id, external_match_ids,
+                friendly_match_scores (
+                    home_score, away_score, match_status, match_minute, last_updated
+                )
+            ''')
+            
+            if date_filter:
+                query = query.eq('match_date', date_filter)
+            
+            response = await run_sync_in_thread(lambda: query.execute())
+            
+            # Flatten the scores data
+            matches = []
+            for match in response.data or []:
+                scores = match.get('friendly_match_scores', [])
+                latest_score = scores[0] if scores else {}
+                
+                match_data = {
+                    **match,
+                    'home_score': latest_score.get('home_score', 0),
+                    'away_score': latest_score.get('away_score', 0),
+                    'match_status': latest_score.get('match_status', 'scheduled'),
+                    'match_minute': latest_score.get('match_minute'),
+                    'last_updated': latest_score.get('last_updated')
+                }
+                del match_data['friendly_match_scores']
+                matches.append(match_data)
+            
+            return matches
+        except Exception as e:
+            logger.error(f"Error getting friendlies with widgets: {e}")
+            return []
+
+    async def search_team_mappings(self, team_name: str):
+        """Search for team mappings by partial name match"""
+        try:
+            response = await run_sync_in_thread(
+                lambda: self.client.table('team_mappings')
+                .select('*')
+                .ilike('canonical_name', f'%{team_name}%')
+                .order('confidence_score', desc=True)
+                .execute()
+            )
+            return response.data or []
+        except Exception as e:
+            logger.error(f"Error searching team mappings: {e}")
+            return []
+
 
 # Global database manager instance
 db = DatabaseManager() 

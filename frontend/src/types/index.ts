@@ -126,6 +126,13 @@ export interface MatchChannel extends Channel {
   
   // Channel metadata
   is_match_channel: boolean;
+  
+  // Widget data
+  widget_url?: string;
+  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore';
+  widget_enabled?: boolean;
+  sofascore_match_id?: string;
+  external_match_ids?: Record<string, any>;
 }
 
 export interface LiveScoreUpdate {
@@ -185,6 +192,13 @@ export interface FriendlyMatch {
   match_status: 'scheduled' | 'live' | 'finished' | 'postponed' | 'cancelled';
   match_minute?: string;
   last_updated?: string;
+  
+  // Widget data
+  widget_url?: string;
+  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore';
+  widget_enabled?: boolean;
+  sofascore_match_id?: string;
+  external_match_ids?: Record<string, any>;
 }
 
 export interface FriendlyMatchChannel extends Channel {
