@@ -71,6 +71,54 @@ const MatchChannelWidget: React.FC<MatchChannelWidgetProps> = ({
     });
   }, [matchData]);
 
+  // Auto-refresh live scores every minute for live matches
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (currentScores.match_status === 'live') {
+      interval = setInterval(async () => {
+        try {
+          const token = localStorage.getItem('access_token');
+          const backendUrl = getBackendUrl();
+          
+          const endpoint = matchData.is_friendly_channel 
+            ? `/friendlies/${matchData.friendly_id}/live-score`
+            : `/matches/${matchData.match_id}/live-score`;
+          
+          const response = await fetch(`${backendUrl}${endpoint}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (response.ok) {
+            const liveData = await response.json();
+            setCurrentScores({
+              home_score: liveData.home_score || currentScores.home_score,
+              away_score: liveData.away_score || currentScores.away_score,
+              match_status: liveData.match_status || currentScores.match_status,
+              match_minute: liveData.match_minute || currentScores.match_minute,
+            });
+            
+            // Notify parent component if callback provided
+            if (onScoreUpdate) {
+              onScoreUpdate(liveData);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching live score update:', error);
+        }
+      }, 60000); // Refresh every minute
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [currentScores.match_status, matchData, onScoreUpdate]);
+
   // Update widget settings
   const updateWidgetSettings = async (enabled: boolean) => {
     try {
@@ -219,6 +267,10 @@ const MatchChannelWidget: React.FC<MatchChannelWidgetProps> = ({
             matchDate={matchData.match_date}
             matchTime={matchData.match_time}
             league={matchData.group_name || matchData.league}
+            homeScore={currentScores.home_score}
+            awayScore={currentScores.away_score}
+            matchStatus={currentScores.match_status}
+            matchMinute={currentScores.match_minute}
             widgetUrl={matchData.widget_url}
             widgetProvider={matchData.widget_provider}
             showFallback={true}
