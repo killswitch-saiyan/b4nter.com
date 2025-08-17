@@ -202,6 +202,11 @@ const MatchChannelWidget: React.FC<MatchChannelWidgetProps> = ({
                 <span className={`text-sm font-medium px-2 py-1 rounded-full ${getMatchStatusColor()} bg-opacity-10`}>
                   {getMatchStatusText()}
                 </span>
+                {matchData.widget_provider === 'custom' && matchData.widget_url?.includes('peacocktv.com') && (
+                  <span className="text-sm font-medium px-2 py-1 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                    📺 Peacock TV
+                  </span>
+                )}
               </div>
               
               {/* Match Details */}
@@ -249,9 +254,16 @@ const MatchChannelWidget: React.FC<MatchChannelWidgetProps> = ({
                     ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400'
                 }`}
-                title={widgetEnabled ? 'Disable live widget' : 'Enable live widget'}
+                title={widgetEnabled ? 'Disable live stream' : 'Enable live stream'}
               >
-                {widgetEnabled ? '📊 Widget ON' : '📊 Widget OFF'}
+                {widgetEnabled 
+                  ? (matchData.widget_provider === 'custom' && matchData.widget_url?.includes('peacocktv.com') 
+                      ? '📺 Stream ON' 
+                      : '📊 Widget ON')
+                  : (matchData.widget_provider === 'custom' && matchData.widget_url?.includes('peacocktv.com') 
+                      ? '📺 Stream OFF' 
+                      : '📊 Widget OFF')
+                }
               </button>
             </div>
           </div>
@@ -304,7 +316,7 @@ const MatchChannelWidget: React.FC<MatchChannelWidgetProps> = ({
         <div className="widget-unavailable p-6 text-center bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800">
           <div className="text-yellow-700 dark:text-yellow-400">
             <div className="text-xl mb-2">⚠️</div>
-            <p className="text-sm">Live widget not available for this match</p>
+            <p className="text-sm">Live stream not available for this match</p>
             <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-1">
               Using basic score display instead
             </p>

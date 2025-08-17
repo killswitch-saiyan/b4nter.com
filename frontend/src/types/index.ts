@@ -39,7 +39,7 @@ export interface Channel {
   group_name?: string;
   group_description?: string;
   widget_url?: string;
-  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore';
+  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore' | 'custom';
   widget_enabled?: boolean;
 }
 
@@ -146,7 +146,7 @@ export interface MatchChannel extends Channel {
   
   // Widget data
   widget_url?: string;
-  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore';
+  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore' | 'custom';
   widget_enabled?: boolean;
   sofascore_match_id?: string;
   external_match_ids?: Record<string, any>;
@@ -212,7 +212,7 @@ export interface FriendlyMatch {
   
   // Widget data
   widget_url?: string;
-  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore';
+  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore' | 'custom';
   widget_enabled?: boolean;
   sofascore_match_id?: string;
   external_match_ids?: Record<string, any>;

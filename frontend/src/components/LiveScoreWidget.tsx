@@ -34,6 +34,7 @@ interface WidgetConfig {
   height: number;
   title: string;
   allowFullscreen?: boolean;
+  isExternalLink?: boolean;
 }
 
 const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
@@ -117,11 +118,23 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
 
       case 'custom':
         if (widgetUrl) {
+          // Check if it's a Peacock TV URL
+          if (widgetUrl.includes('peacocktv.com')) {
+            return {
+              provider: 'Peacock TV',
+              url: widgetUrl,
+              height: compact ? 200 : 300,
+              title: `${matchTitle} - Peacock TV Stream`,
+              allowFullscreen: false,
+              isExternalLink: true // Flag to indicate this should open in new tab
+            };
+          }
+          // Generic custom widget
           return {
             provider: 'Custom Widget',
             url: widgetUrl,
             height: height,
-            title: `${matchTitle} Live Scores`
+            title: `${matchTitle} Live Stream`
           };
         }
         break;
@@ -369,6 +382,43 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
                 </button>
               </div>
             </div>
+          ) : widgetConfig.isExternalLink ? (
+            // External link widget (for Peacock TV, etc.)
+            <div className="external-stream-widget bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-6 text-center">
+              <div className="mb-4">
+                <div className="text-4xl mb-2">📺</div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  {widgetConfig.title}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  This stream is available on Peacock TV. Click below to watch the live stream.
+                </p>
+              </div>
+              
+              <div className="space-y-3">
+                <a
+                  href={widgetConfig.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                >
+                  <span className="mr-2">▶️</span>
+                  Watch on Peacock TV
+                </a>
+                
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Opens in new tab • Requires Peacock TV subscription
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-purple-200 dark:border-purple-800">
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <strong>Match:</strong> {homeTeam} vs {awayTeam}<br/>
+                  <strong>League:</strong> {league}<br/>
+                  <strong>Date:</strong> {matchDate}
+                </div>
+              </div>
+            </div>
           ) : (
             // External iframe widget
             <iframe
@@ -394,10 +444,10 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
             onClick={toggleWidget}
             className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400"
           >
-            Click to show live scores widget
+            {widgetConfig?.isExternalLink ? 'Click to show live stream' : 'Click to show live scores widget'}
           </button>
           <div className="text-xs text-gray-500 mt-1">
-            {homeTeam} vs {awayTeam} • {widgetConfig.provider}
+            {homeTeam} vs {awayTeam} • {widgetConfig?.provider || 'Live Stream'}
           </div>
         </div>
       )}

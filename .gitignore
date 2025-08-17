@@ -121,6 +121,7 @@ temp/
 .Python
 env/
 venv/
+venv311/
 ENV/
 env.bak/
 venv.bak/
@@ -133,4 +134,9 @@ venv.bak/
 .supabase/
 
 # Claude Code
-.claude/ 
+.claude/
+
+# Test files
+test.html
+test_image_upload.py
+test_socketio_server.py 
