@@ -1,9 +1,10 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings, cors_origins_list
-from routers import auth, channels, messages, users, health, groups, matches, friendlies, widgets, match_lifecycle
+from routers import auth, channels, messages, users, health, groups, matches, friendlies, widgets, match_lifecycle, automated_scheduler
 from websocket_manager import websocket_manager
 from scheduler import match_scheduler
+from services.automated_match_scheduler import automated_match_scheduler
 import logging
 import json
 
@@ -36,6 +37,7 @@ app.include_router(matches.router)
 app.include_router(friendlies.router, prefix="/friendlies", tags=["friendlies"])
 app.include_router(widgets.router, prefix="/widgets", tags=["widgets"])
 app.include_router(match_lifecycle.router, prefix="/match-lifecycle", tags=["match-lifecycle"])
+app.include_router(automated_scheduler.router, prefix="/scheduler", tags=["automated-scheduler"])
 
 @app.on_event("startup")
 async def startup_event():
@@ -43,7 +45,9 @@ async def startup_event():
     logger.info("Starting B4nter API...")
     # Start the match channel scheduler
     await match_scheduler.start()
-    logger.info("B4nter API startup complete")
+    # Start the automated match scheduler with cron jobs
+    automated_match_scheduler.start_scheduler()
+    logger.info("B4nter API startup complete - All schedulers started")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -51,7 +55,9 @@ async def shutdown_event():
     logger.info("Shutting down B4nter API...")
     # Stop the match channel scheduler
     await match_scheduler.stop()
-    logger.info("B4nter API shutdown complete")
+    # Stop the automated match scheduler
+    automated_match_scheduler.stop_scheduler()
+    logger.info("B4nter API shutdown complete - All schedulers stopped")
 
 @app.get("/")
 async def root():

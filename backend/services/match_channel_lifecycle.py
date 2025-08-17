@@ -18,15 +18,35 @@ class MatchChannelLifecycleManager:
                 'name': 'Premier League',
                 'group_name': 'English Premier League'
             },
+            'la_liga': {
+                'id': '4335',  # SportsDB La Liga ID
+                'name': 'La Liga',
+                'group_name': 'Spanish La Liga'
+            },
+            'bundesliga': {
+                'id': '4331',  # SportsDB Bundesliga ID
+                'name': 'Bundesliga',
+                'group_name': 'German Bundesliga'
+            },
+            'serie_a': {
+                'id': '4332',  # SportsDB Serie A ID
+                'name': 'Serie A',
+                'group_name': 'Italian Serie A'
+            },
+            'ligue_1': {
+                'id': '4334',  # SportsDB Ligue 1 ID
+                'name': 'Ligue 1',
+                'group_name': 'French Ligue 1'
+            },
             'champions_league': {
                 'id': '4480',  # SportsDB Champions League ID  
                 'name': 'Champions League',
                 'group_name': 'UEFA Champions League'
             },
-            'la_liga': {
-                'id': '4335',  # SportsDB La Liga ID
-                'name': 'La Liga',
-                'group_name': 'Spanish La Liga'
+            'europa_league': {
+                'id': '4481',  # SportsDB Europa League ID
+                'name': 'Europa League',
+                'group_name': 'UEFA Europa League'
             }
         }
     
@@ -167,95 +187,11 @@ class MatchChannelLifecycleManager:
         return result
     
     async def _get_league_fixtures_for_date(self, league_id: str, target_date: str) -> List[Dict]:
-        """Get fixtures for a specific league and date"""
+        """Get fixtures for a specific league and date - DEPRECATED: Use automated_match_scheduler instead"""
+        logger.warning("_get_league_fixtures_for_date is deprecated. Use automated_match_scheduler for real API data.")
         try:
-            current_date = date.today().isoformat()
-            
-            # August 17, 2025 - Premier League fixtures
-            if target_date == current_date and league_id == '4328':  # Premier League
-                return [
-                    {
-                        'home_team': 'Chelsea',
-                        'away_team': 'Crystal Palace',
-                        'match_time': '14:00:00',
-                        'home_score': 2,
-                        'away_score': 1,
-                        'match_status': 'live',
-                        'venue': 'Stamford Bridge'
-                    },
-                    {
-                        'home_team': 'Nottingham Forest',
-                        'away_team': 'Brentford',
-                        'match_time': '14:00:00',
-                        'home_score': 1,
-                        'away_score': 0,
-                        'match_status': 'live',
-                        'venue': 'City Ground'
-                    },
-                    {
-                        'home_team': 'Manchester United',
-                        'away_team': 'Arsenal',
-                        'match_time': '16:30:00',
-                        'home_score': 0,
-                        'away_score': 0,
-                        'match_status': 'scheduled',
-                        'venue': 'Old Trafford'
-                    }
-                ]
-            
-            # August 16, 2025 - Premier League fixtures (for reference)
-            elif target_date == '2025-08-16' and league_id == '4328':  # Premier League
-                return [
-                    {
-                        'home_team': 'Aston Villa',
-                        'away_team': 'Newcastle United',
-                        'match_time': '12:30:00',
-                        'home_score': 0,
-                        'away_score': 0,
-                        'match_status': 'finished',
-                        'venue': 'Villa Park'
-                    },
-                    {
-                        'home_team': 'Brighton',
-                        'away_team': 'Fulham',
-                        'match_time': '15:00:00',
-                        'home_score': 1,
-                        'away_score': 1,
-                        'match_status': 'finished',
-                        'venue': 'Amex Stadium'
-                    },
-                    {
-                        'home_team': 'Sunderland',
-                        'away_team': 'West Ham',
-                        'match_time': '15:00:00',
-                        'home_score': 3,
-                        'away_score': 0,
-                        'match_status': 'finished',
-                        'venue': 'Stadium of Light'
-                    },
-                    {
-                        'home_team': 'Tottenham',
-                        'away_team': 'Burnley',
-                        'match_time': '15:00:00',
-                        'home_score': 3,
-                        'away_score': 0,
-                        'match_status': 'finished',
-                        'venue': 'Tottenham Hotspur Stadium'
-                    },
-                    {
-                        'home_team': 'Wolves',
-                        'away_team': 'Manchester City',
-                        'match_time': '17:30:00',
-                        'home_score': 1,
-                        'away_score': 2,
-                        'match_status': 'finished',
-                        'venue': 'Molineux Stadium'
-                    }
-                ]
-            
-            # For other dates/leagues, try SportsDB API
+            # Fallback to SportsDB API for any remaining usage
             return await sportsdb_client.get_todays_fixtures(league_id)
-            
         except Exception as e:
             logger.error(f"Error getting fixtures for league {league_id}: {e}")
             return []
