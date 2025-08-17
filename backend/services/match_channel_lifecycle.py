@@ -169,9 +169,42 @@ class MatchChannelLifecycleManager:
     async def _get_league_fixtures_for_date(self, league_id: str, target_date: str) -> List[Dict]:
         """Get fixtures for a specific league and date"""
         try:
-            # For now, we'll use hardcoded data for August 16, 2025
-            # In production, this would query SportsDB API or similar
-            if target_date == date.today().isoformat() and league_id == '4328':  # Premier League
+            current_date = date.today().isoformat()
+            
+            # August 17, 2025 - Premier League fixtures
+            if target_date == current_date and league_id == '4328':  # Premier League
+                return [
+                    {
+                        'home_team': 'Chelsea',
+                        'away_team': 'Crystal Palace',
+                        'match_time': '14:00:00',
+                        'home_score': 2,
+                        'away_score': 1,
+                        'match_status': 'live',
+                        'venue': 'Stamford Bridge'
+                    },
+                    {
+                        'home_team': 'Nottingham Forest',
+                        'away_team': 'Brentford',
+                        'match_time': '14:00:00',
+                        'home_score': 1,
+                        'away_score': 0,
+                        'match_status': 'live',
+                        'venue': 'City Ground'
+                    },
+                    {
+                        'home_team': 'Manchester United',
+                        'away_team': 'Arsenal',
+                        'match_time': '16:30:00',
+                        'home_score': 0,
+                        'away_score': 0,
+                        'match_status': 'scheduled',
+                        'venue': 'Old Trafford'
+                    }
+                ]
+            
+            # August 16, 2025 - Premier League fixtures (for reference)
+            elif target_date == '2025-08-16' and league_id == '4328':  # Premier League
                 return [
                     {
                         'home_team': 'Aston Villa',
@@ -297,14 +330,20 @@ class MatchChannelLifecycleManager:
             # Generate widget
             widget_result = await widget_service.update_match_widgets(match_channel['id'], is_friendly=False)
             
-            # Add creator as channel member
-            await run_sync_in_thread(
-                lambda: db.client.table('channel_members').insert({
-                    'channel_id': chat_channel['id'],
-                    'user_id': '25293ea3-1122-4989-acd2-f28736b3f698',
-                    'role': 'admin'
-                }).execute()
+            # Add all users as channel members
+            users_response = await run_sync_in_thread(
+                lambda: db.client.table('users').select('id').execute()
             )
+            users = users_response.data or []
+            
+            for user in users:
+                await run_sync_in_thread(
+                    lambda u=user: db.client.table('channel_members').insert({
+                        'channel_id': chat_channel['id'],
+                        'user_id': u['id'],
+                        'role': 'admin' if u['id'] == '25293ea3-1122-4989-acd2-f28736b3f698' else 'user'
+                    }).execute()
+                )
             
             return {
                 'success': True,
