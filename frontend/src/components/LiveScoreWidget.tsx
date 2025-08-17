@@ -9,9 +9,15 @@ interface LiveScoreWidgetProps {
   matchTime?: string;
   league?: string;
   
+  // Score data
+  homeScore?: number;
+  awayScore?: number;
+  matchStatus?: 'scheduled' | 'live' | 'finished' | 'postponed' | 'cancelled';
+  matchMinute?: string;
+  
   // Widget configuration
   widgetUrl?: string;
-  widgetProvider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore' | 'custom';
+  widgetProvider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore' | 'custom' | 'internal';
   showFallback?: boolean;
   height?: number;
   width?: string;
@@ -36,8 +42,12 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
   matchDate,
   matchTime,
   league = 'Unknown League',
+  homeScore = 0,
+  awayScore = 0,
+  matchStatus = 'scheduled',
+  matchMinute,
   widgetUrl,
-  widgetProvider = 'sofascore',
+  widgetProvider = 'internal',
   showFallback = true,
   height = 400,
   width = '100%',
@@ -283,20 +293,62 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
 
                 {/* Score Display */}
                 <div className="text-center">
-                  <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-                    <span className="inline-block min-w-[3rem] text-right">{homeTeam.split(' ').pop()}</span>
-                    <span className="mx-4 text-blue-600 dark:text-blue-400">vs</span>
-                    <span className="inline-block min-w-[3rem] text-left">{awayTeam.split(' ').pop()}</span>
+                  {/* Team Names and Score */}
+                  <div className="flex items-center justify-center space-x-6 mb-4">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-gray-900 dark:text-white">{homeTeam}</div>
+                      <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+                        {homeScore}
+                      </div>
+                    </div>
+                    
+                    <div className="text-2xl font-bold text-gray-500 dark:text-gray-400">-</div>
+                    
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-gray-900 dark:text-white">{awayTeam}</div>
+                      <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+                        {awayScore}
+                      </div>
+                    </div>
                   </div>
                   
                   {/* Match Status */}
                   <div className="flex items-center justify-center space-x-2">
                     <span className="text-sm text-gray-600 dark:text-gray-300">
-                      {matchTime ? `${matchTime}` : 'Match Today'}
+                      {matchTime ? `Kick-off: ${matchTime}` : 'Match Today'}
                     </span>
-                    <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full">
-                      Live Scores Available
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      matchStatus === 'live' 
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : matchStatus === 'finished'
+                        ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    }`}>
+                      {matchStatus === 'live' 
+                        ? `LIVE ${matchMinute ? matchMinute + "'" : ''}` 
+                        : matchStatus === 'finished'
+                        ? 'Full Time'
+                        : 'Scheduled'
+                      }
                     </span>
+                  </div>
+                </div>
+
+                {/* Match Stats */}
+                <div className="w-full max-w-md">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div className="bg-white dark:bg-dark-600 rounded-lg p-3">
+                      <div className="text-lg font-bold text-gray-900 dark:text-white">0</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Shots</div>
+                    </div>
+                    <div className="bg-white dark:bg-dark-600 rounded-lg p-3">
+                      <div className="text-lg font-bold text-gray-900 dark:text-white">0</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Corners</div>
+                    </div>
+                    <div className="bg-white dark:bg-dark-600 rounded-lg p-3">
+                      <div className="text-lg font-bold text-gray-900 dark:text-white">0</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Cards</div>
+                    </div>
                   </div>
                 </div>
 
