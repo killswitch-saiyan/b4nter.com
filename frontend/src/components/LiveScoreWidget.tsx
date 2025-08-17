@@ -116,6 +116,16 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
         }
         break;
 
+      case 'internal':
+        // Internal score display - no external URL needed
+        return {
+          provider: 'Live Scores',
+          url: 'internal',
+          height: compact ? 200 : 300,
+          title: `${matchTitle} Live Scores`,
+          allowFullscreen: false
+        };
+
       default:
         return null;
     }
@@ -257,19 +267,72 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
       
       {showWidget && (
         <div className="widget-content">
-          <iframe
-            src={widgetConfig.url}
-            width={width}
-            height={widgetConfig.height}
-            frameBorder="0"
-            scrolling="no"
-            title={widgetConfig.title}
-            className="w-full border-0"
-            onError={handleIframeError}
-            allowFullScreen={widgetConfig.allowFullscreen}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            loading="lazy"
-          />
+          {widgetConfig.url === 'internal' ? (
+            // Internal score display
+            <div className="internal-score-widget p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-dark-800 dark:to-dark-700" style={{ height: widgetConfig.height }}>
+              <div className="h-full flex flex-col justify-center items-center space-y-6">
+                {/* Match Title */}
+                <div className="text-center">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                    {homeTeam} vs {awayTeam}
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                    {league} • {matchDate}
+                  </p>
+                </div>
+
+                {/* Score Display */}
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                    <span className="inline-block min-w-[3rem] text-right">{homeTeam.split(' ').pop()}</span>
+                    <span className="mx-4 text-blue-600 dark:text-blue-400">vs</span>
+                    <span className="inline-block min-w-[3rem] text-left">{awayTeam.split(' ').pop()}</span>
+                  </div>
+                  
+                  {/* Match Status */}
+                  <div className="flex items-center justify-center space-x-2">
+                    <span className="text-sm text-gray-600 dark:text-gray-300">
+                      {matchTime ? `${matchTime}` : 'Match Today'}
+                    </span>
+                    <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full">
+                      Live Scores Available
+                    </span>
+                  </div>
+                </div>
+
+                {/* Info Message */}
+                <div className="text-center max-w-md">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    📊 Live match data and scores are displayed in the channel header above. 
+                    Join the discussion to follow the match!
+                  </p>
+                </div>
+
+                {/* Action Button */}
+                <button
+                  onClick={toggleWidget}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  View Full Match Details
+                </button>
+              </div>
+            </div>
+          ) : (
+            // External iframe widget
+            <iframe
+              src={widgetConfig.url}
+              width={width}
+              height={widgetConfig.height}
+              frameBorder="0"
+              scrolling="no"
+              title={widgetConfig.title}
+              className="w-full border-0"
+              onError={handleIframeError}
+              allowFullScreen={widgetConfig.allowFullscreen}
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              loading="lazy"
+            />
+          )}
         </div>
       )}
       
