@@ -150,6 +150,112 @@ class DatabaseManager:
             logger.error(f"Error getting user channels: {e}")
             return []
     
+    async def get_user_channels_with_match_data(self, user_id: str):
+        """Get all channels a user is a member of, including match channel data"""
+        try:
+            # Get basic user channels
+            basic_channels = await self.get_user_channels(user_id)
+            enhanced_channels = []
+            
+            for channel_data in basic_channels:
+                if not channel_data.get('channels'):
+                    continue
+                
+                channel = channel_data['channels'].copy()
+                
+                # Check if this is a match channel
+                match_response = await run_sync_in_thread(
+                    lambda ch_id=channel['id']: self.client.table('match_channels')
+                    .select('home_team, away_team, match_date, match_time, group_id, widget_url, widget_provider, widget_enabled')
+                    .eq('channel_id', ch_id)
+                    .execute()
+                )
+                
+                if match_response.data:
+                    # This is a match channel
+                    match_info = match_response.data[0]
+                    
+                    # Get group info separately
+                    group_name = 'Unknown League'
+                    group_description = ''
+                    if match_info.get('group_id'):
+                        try:
+                            group_response = await run_sync_in_thread(
+                                lambda g_id=match_info['group_id']: self.client.table('groups')
+                                .select('name, description')
+                                .eq('id', g_id)
+                                .execute()
+                            )
+                            if group_response.data:
+                                group_name = group_response.data[0]['name']
+                                group_description = group_response.data[0]['description']
+                        except Exception as ge:
+                            logger.warning(f"Could not get group info: {ge}")
+                    
+                    channel.update({
+                        'is_match_channel': True,
+                        'match_id': None,  # We'll add this if needed
+                        'home_team': match_info['home_team'],
+                        'away_team': match_info['away_team'],
+                        'match_date': match_info['match_date'],
+                        'match_time': match_info['match_time'],
+                        'group_id': match_info['group_id'],
+                        'group_name': group_name,
+                        'group_description': group_description,
+                        'widget_url': match_info.get('widget_url'),
+                        'widget_provider': match_info.get('widget_provider'),
+                        'widget_enabled': match_info.get('widget_enabled', True),
+                        
+                        # Get live scores
+                        'home_score': 0,
+                        'away_score': 0,
+                        'match_status': 'scheduled',
+                        'match_minute': None
+                    })
+                    
+                    # Get live match data
+                    try:
+                        score_response = await run_sync_in_thread(
+                            lambda ch_id=channel['id']: self.client.table('live_match_data')
+                            .select('home_score, away_score, match_status, match_minute')
+                            .eq('match_channel_id', self._get_match_channel_id_by_channel_id(ch_id))
+                            .execute()
+                        )
+                        
+                        if score_response.data:
+                            score_data = score_response.data[0]
+                            channel.update({
+                                'home_score': score_data.get('home_score', 0),
+                                'away_score': score_data.get('away_score', 0),
+                                'match_status': score_data.get('match_status', 'scheduled'),
+                                'match_minute': score_data.get('match_minute')
+                            })
+                    except Exception as score_e:
+                        logger.warning(f"Could not get live score data: {score_e}")
+                else:
+                    # Regular channel
+                    channel.update({
+                        'is_match_channel': False,
+                        'group_id': None,
+                        'group_name': None
+                    })
+                
+                enhanced_channels.append({'channels': channel, 'channel_id': channel['id']})
+            
+            return enhanced_channels
+            
+        except Exception as e:
+            logger.error(f"Error getting user channels with match data: {e}")
+            return []
+    
+    def _get_match_channel_id_by_channel_id(self, channel_id: str):
+        """Helper to get match channel ID from chat channel ID"""
+        try:
+            response = self.client.table('match_channels').select('id').eq('channel_id', channel_id).execute()
+            return response.data[0]['id'] if response.data else None
+        except:
+            return None
+    
     async def add_channel_member(self, member_data: dict):
         """Add a user to a channel"""
         try:
