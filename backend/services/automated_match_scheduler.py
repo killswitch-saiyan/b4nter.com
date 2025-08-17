@@ -164,32 +164,42 @@ class AutomatedMatchScheduler:
                 lambda: db.client.table('match_channels')
                 .select('id, channel_id, home_team, away_team')
                 .eq('match_date', today)
-                .eq('is_archived', False)
                 .execute()
             )
             
             for match in match_channels.data or []:
                 try:
-                    # Archive the chat channel
+                    # Remove channel members first
                     if match.get('channel_id'):
                         await run_sync_in_thread(
-                            lambda: db.client.table('channels')
-                            .update({
-                                'is_archived': True,
-                                'archived_at': datetime.now().isoformat()
-                            })
-                            .eq('id', match['channel_id'])
+                            lambda c=match['channel_id']: db.client.table('channel_members')
+                            .delete()
+                            .eq('channel_id', c)
                             .execute()
                         )
                     
-                    # Archive the match channel
+                    # Remove live match data
                     await run_sync_in_thread(
-                        lambda: db.client.table('match_channels')
-                        .update({
-                            'is_archived': True,
-                            'archived_at': datetime.now().isoformat()
-                        })
-                        .eq('id', match['id'])
+                        lambda m=match['id']: db.client.table('live_match_data')
+                        .delete()
+                        .eq('match_channel_id', m)
+                        .execute()
+                    )
+                    
+                    # Delete the chat channel
+                    if match.get('channel_id'):
+                        await run_sync_in_thread(
+                            lambda c=match['channel_id']: db.client.table('channels')
+                            .delete()
+                            .eq('id', c)
+                            .execute()
+                        )
+                    
+                    # Delete the match channel
+                    await run_sync_in_thread(
+                        lambda m=match['id']: db.client.table('match_channels')
+                        .delete()
+                        .eq('id', m)
                         .execute()
                     )
                     
@@ -376,8 +386,29 @@ class AutomatedMatchScheduler:
             return None
     
     async def _create_match_channel_from_fixture(self, fixture: Dict, league_group: Dict, match_date: str) -> Dict:
-        """Create a match channel from fixture data"""
+        """Create a match channel from fixture data - with duplicate prevention"""
         try:
+            # Check for existing match channel first (without is_archived for now)
+            existing_match = await run_sync_in_thread(
+                lambda: db.client.table('match_channels')
+                .select('id, channel_id, home_team, away_team')
+                .eq('home_team', fixture['home_team'])
+                .eq('away_team', fixture['away_team'])
+                .eq('match_date', match_date)
+                .execute()
+            )
+            
+            if existing_match.data:
+                logger.info(f"Match channel already exists: {fixture['home_team']} vs {fixture['away_team']}")
+                return {
+                    'success': True,
+                    'home_team': fixture['home_team'],
+                    'away_team': fixture['away_team'],
+                    'match_channel_id': existing_match.data[0]['id'],
+                    'chat_channel_id': existing_match.data[0]['channel_id'],
+                    'already_existed': True
+                }
+            
             # Create chat channel
             channel_data = {
                 'name': f'{fixture["home_team"]} vs {fixture["away_team"]}',

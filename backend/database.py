@@ -140,12 +140,19 @@ class DatabaseManager:
             return None
     
     async def get_user_channels(self, user_id: str):
-        """Get all channels a user is a member of"""
+        """Get all channels a user is a member of (excluding archived channels)"""
         try:
             response = self.client.table('channel_members').select(
                 'channel_id, channels(*)'
             ).eq('user_id', user_id).execute()
-            return response.data
+            
+            # Filter out archived channels
+            filtered_channels = []
+            for channel_data in response.data:
+                if channel_data.get('channels') and not channel_data['channels'].get('is_archived', False):
+                    filtered_channels.append(channel_data)
+            
+            return filtered_channels
         except Exception as e:
             logger.error(f"Error getting user channels: {e}")
             return []
