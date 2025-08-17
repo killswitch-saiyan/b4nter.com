@@ -1,8 +1,9 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings, cors_origins_list
-from routers import auth, channels, messages, users, health, groups, matches, friendlies, widgets
+from routers import auth, channels, messages, users, health, groups, matches, friendlies, widgets, match_lifecycle
 from websocket_manager import websocket_manager
+from scheduler import match_scheduler
 import logging
 import json
 
@@ -34,6 +35,23 @@ app.include_router(groups.router)
 app.include_router(matches.router)
 app.include_router(friendlies.router, prefix="/friendlies", tags=["friendlies"])
 app.include_router(widgets.router, prefix="/widgets", tags=["widgets"])
+app.include_router(match_lifecycle.router, prefix="/match-lifecycle", tags=["match-lifecycle"])
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    logger.info("Starting B4nter API...")
+    # Start the match channel scheduler
+    await match_scheduler.start()
+    logger.info("B4nter API startup complete")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("Shutting down B4nter API...")
+    # Stop the match channel scheduler
+    await match_scheduler.stop()
+    logger.info("B4nter API shutdown complete")
 
 @app.get("/")
 async def root():
