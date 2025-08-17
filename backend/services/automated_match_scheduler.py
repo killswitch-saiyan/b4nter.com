@@ -9,6 +9,7 @@ import json
 
 from database import db, run_sync_in_thread
 from services.widget_service import widget_service
+from services.reliable_sports_api import reliable_sports_api
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +113,8 @@ class AutomatedMatchScheduler:
         try:
             for league_key, league_info in self.supported_leagues.items():
                 try:
-                    # Fetch real fixtures from API
-                    fixtures = await self._fetch_league_fixtures(league_info['api_id'], today)
+                    # Fetch real fixtures from reliable sources
+                    fixtures = await reliable_sports_api.get_reliable_fixtures(league_key, today)
                     
                     if not fixtures:
                         logger.info(f"No fixtures found for {league_info['name']} on {today}")
@@ -450,8 +451,22 @@ class AutomatedMatchScheduler:
                 lambda: db.client.table('live_match_data').insert(score_data).execute()
             )
             
-            # Generate widget
-            await widget_service.update_match_widgets(match_channel['id'], is_friendly=False)
+            # Generate reliable widget
+            widget_config = reliable_sports_api.get_reliable_widget_config(
+                fixture['home_team'], fixture['away_team'], league_group['name']
+            )
+            
+            # Update match channel with reliable widget info
+            await run_sync_in_thread(
+                lambda: db.client.table('match_channels')
+                .update({
+                    'widget_url': widget_config['widget_url'],
+                    'widget_provider': 'aiscore',
+                    'widget_enabled': True
+                })
+                .eq('id', match_channel['id'])
+                .execute()
+            )
             
             # Add all users as channel members
             users_response = await run_sync_in_thread(

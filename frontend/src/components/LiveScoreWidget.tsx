@@ -116,6 +116,28 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
           title: `${matchTitle} Live Scores`
         };
 
+      case 'aiscore':
+        // AiScore - Most reliable widget provider
+        const aiScoreUrl = `https://www.aiscore.com/livescorewidget?match=${encodeURIComponent(homeTeam)}+vs+${encodeURIComponent(awayTeam)}`;
+        return {
+          provider: 'AiScore',
+          url: aiScoreUrl,
+          height: compact ? 350 : 450,
+          title: `${matchTitle} Live Scores - AiScore`,
+          allowFullscreen: false
+        };
+
+      case 'scoreaxis':
+        // ScoreAxis - Reliable alternative
+        const scoreAxisUrl = `https://www.scoreaxis.com/widget?teams=${encodeURIComponent(homeTeam)}+${encodeURIComponent(awayTeam)}`;
+        return {
+          provider: 'ScoreAxis',
+          url: scoreAxisUrl,
+          height: compact ? 300 : 400,
+          title: `${matchTitle} Live Scores - ScoreAxis`,
+          allowFullscreen: false
+        };
+
       case 'custom':
         if (widgetUrl) {
           // Check if it's a Peacock TV URL
@@ -167,8 +189,8 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
     if (config) {
       setWidgetConfig(config);
     } else if (showFallback) {
-      // Try fallback providers in order
-      const fallbackProviders = ['footystats', 'fctables', 'livescore'];
+      // Try fallback providers in order - most reliable first
+      const fallbackProviders = ['aiscore', 'scoreaxis', 'footystats'];
       let fallbackConfig = null;
       
       for (const provider of fallbackProviders) {
@@ -197,8 +219,8 @@ const LiveScoreWidget: React.FC<LiveScoreWidgetProps> = ({
       setRetryCount(prev => prev + 1);
       setError('Widget failed to load, trying alternative...');
       
-      // Try next fallback provider
-      const fallbackProviders = ['footystats', 'fctables', 'livescore'];
+      // Try next fallback provider - most reliable first
+      const fallbackProviders = ['aiscore', 'scoreaxis', 'footystats'];
       const nextProvider = fallbackProviders[retryCount] || 'livescore';
       const fallbackConfig = generateWidgetUrl(nextProvider);
       
