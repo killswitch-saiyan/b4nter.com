@@ -24,6 +24,23 @@ export interface Channel {
   call_participants?: string[];
   call_started_at?: string;
   call_ended_at?: string;
+  // Match channel properties
+  is_match_channel?: boolean;
+  match_id?: string;
+  home_team?: string;
+  away_team?: string;
+  home_score?: number;
+  away_score?: number;
+  match_status?: 'scheduled' | 'live' | 'finished' | 'postponed' | 'cancelled';
+  match_minute?: string;
+  match_date?: string;
+  match_time?: string;
+  group_id?: string;
+  group_name?: string;
+  group_description?: string;
+  widget_url?: string;
+  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore';
+  widget_enabled?: boolean;
 }
 
 export interface MessageReaction {
@@ -126,6 +143,13 @@ export interface MatchChannel extends Channel {
   
   // Channel metadata
   is_match_channel: boolean;
+  
+  // Widget data
+  widget_url?: string;
+  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore';
+  widget_enabled?: boolean;
+  sofascore_match_id?: string;
+  external_match_ids?: Record<string, any>;
 }
 
 export interface LiveScoreUpdate {
@@ -185,6 +209,13 @@ export interface FriendlyMatch {
   match_status: 'scheduled' | 'live' | 'finished' | 'postponed' | 'cancelled';
   match_minute?: string;
   last_updated?: string;
+  
+  // Widget data
+  widget_url?: string;
+  widget_provider?: 'sofascore' | 'footystats' | 'fctables' | 'livescore';
+  widget_enabled?: boolean;
+  sofascore_match_id?: string;
+  external_match_ids?: Record<string, any>;
 }
 
 export interface FriendlyMatchChannel extends Channel {

@@ -54,18 +54,19 @@ async def create_channel(
         )
 
 
-@router.get("/", response_model=List[ChannelResponse])
+@router.get("/", response_model=List[dict])
 async def get_user_channels(current_user: UserResponse = Depends(get_current_user)):
-    """Get all channels the current user is a member of"""
+    """Get all channels the current user is a member of, with match channel data"""
     try:
-        channels_data = await db.get_user_channels(current_user.id)
+        # Use enhanced method that includes match channel data
+        channels_data = await db.get_user_channels_with_match_data(current_user.id)
         channels = []
         
         for channel_data in channels_data:
             if channel_data.get("channels"):
                 channel = channel_data["channels"]
-                channel_response = ChannelResponse(**channel)
-                channels.append(channel_response)
+                # Return the enhanced channel data directly (includes match info)
+                channels.append(channel)
         
         return channels
         

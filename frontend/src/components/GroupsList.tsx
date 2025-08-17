@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Group, MatchChannel, TodayMatchesResponse, FriendlyMatch } from '../types';
+import { Group, MatchChannel, TodayMatchesResponse, FriendlyMatch, Channel } from '../types';
 import { toast } from 'react-hot-toast';
+import { useChannels } from '../contexts/ChannelsContext';
 
 interface GroupsListProps {
   selectedChannel: any;
@@ -15,6 +16,7 @@ const GroupsList: React.FC<GroupsListProps> = ({
   onGroupToggle,
   searchQuery = ''
 }) => {
+  const { channels } = useChannels(); // Get channels from context
   const [groups, setGroups] = useState<Group[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [groupMatches, setGroupMatches] = useState<{ [groupId: string]: MatchChannel[] }>({});
@@ -28,6 +30,22 @@ const GroupsList: React.FC<GroupsListProps> = ({
   // Get backend URL from environment variable or default
   const getBackendUrl = () => {
     return import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+  };
+
+  // Group match channels by league
+  const getMatchChannelsByLeague = () => {
+    const matchChannels = channels.filter(channel => channel.is_match_channel);
+    const grouped: { [groupName: string]: Channel[] } = {};
+    
+    matchChannels.forEach(channel => {
+      const groupName = channel.group_name || 'Other Matches';
+      if (!grouped[groupName]) {
+        grouped[groupName] = [];
+      }
+      grouped[groupName].push(channel);
+    });
+    
+    return grouped;
   };
 
   // Fetch all groups and friendlies on component mount
@@ -369,36 +387,30 @@ const GroupsList: React.FC<GroupsListProps> = ({
                   {/* Expanded Group - Today's Matches */}
                   {expandedGroups.has(group.id) && (
                     <div className="ml-6 space-y-1">
-                      {loadingMatches.has(group.id) ? (
-                        <div className="text-xs text-gray-500 px-3 py-2">
-                          Loading matches...
-                        </div>
-                      ) : groupMatches[group.id]?.length > 0 ? (
-                        groupMatches[group.id]
-                          .filter(match => 
+                      {(() => {
+                        // Get match channels for this group from enhanced API
+                        const matchChannelsByLeague = getMatchChannelsByLeague();
+                        const groupMatchChannels = matchChannelsByLeague[group.name] || [];
+                        
+                        return groupMatchChannels.length > 0 ? (
+                          groupMatchChannels
+                          .filter(channel => 
                             searchQuery === '' || // Show all matches if no search query
-                            match.home_team.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            match.away_team.toLowerCase().includes(searchQuery.toLowerCase())
+                            (channel.home_team && channel.home_team.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                            (channel.away_team && channel.away_team.toLowerCase().includes(searchQuery.toLowerCase()))
                           )
-                          .length > 0 ? (
-                        groupMatches[group.id]
-                          .filter(match => 
-                            searchQuery === '' ||
-                            match.home_team.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            match.away_team.toLowerCase().includes(searchQuery.toLowerCase())
-                          )
-                          .map((match) => (
+                          .map((channel) => (
                           <button
-                            key={match.id}
-                            onClick={() => handleMatchChannelSelect(match)}
+                            key={channel.id}
+                            onClick={() => onChannelSelect(channel)}
                             className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors border-l-4 ${
-                              match.match_status === 'live' 
+                              channel.match_status === 'live' 
                                 ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                                : match.match_status === 'finished'
+                                : channel.match_status === 'finished'
                                 ? 'border-gray-400 bg-gray-50 dark:bg-gray-800/20'
                                 : 'border-blue-400 bg-blue-50 dark:bg-blue-900/20'
                             } ${
-                              selectedChannel?.id === match.channel_id
+                              selectedChannel?.id === channel.id
                                 ? 'bg-indigo-100 text-indigo-700 dark:bg-dark-600 dark:text-white' 
                                 : 'text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-dark-600'
                             }`}
@@ -406,26 +418,47 @@ const GroupsList: React.FC<GroupsListProps> = ({
                             <div className="flex items-center justify-between">
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium truncate">
-                                  {match.home_team} vs {match.away_team}
+                                  {channel.home_team} vs {channel.away_team}
                                 </div>
                                 <div className="flex items-center space-x-2 mt-1">
-                                  {getMatchStatusDisplay(match)}
-                                  {getScoreDisplay(match)}
+                                  {(() => {
+                                    // Match status display for enhanced channels
+                                    switch (channel.match_status) {
+                                      case 'live':
+                                        return (
+                                          <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                            {channel.match_minute ? `${channel.match_minute}'` : 'LIVE'} ⚡
+                                          </span>
+                                        );
+                                      case 'finished':
+                                        return <span className="text-xs text-gray-500">FT</span>;
+                                      case 'scheduled':
+                                        return channel.match_time ? (
+                                          <span className="text-xs text-gray-500">{channel.match_time.slice(0, 5)}</span>
+                                        ) : null;
+                                      default:
+                                        return null;
+                                    }
+                                  })()}
+                                  {channel.match_status !== 'scheduled' && (
+                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                      {channel.home_score || 0} - {channel.away_score || 0}
+                                    </span>
+                                  )}
+                                  {channel.widget_enabled && (
+                                    <span className="text-xs text-blue-600 dark:text-blue-400">📊</span>
+                                  )}
                                 </div>
                               </div>
                             </div>
                           </button>
                         ))
-                      ) : (
-                        <div className="text-xs text-gray-500 px-3 py-2">
-                          No matches found for "{searchQuery}"
-                        </div>
-                      )
-                      ) : (
-                        <div className="text-xs text-gray-500 px-3 py-2">
-                          No matches today
-                        </div>
-                      )}
+                        ) : (
+                          <div className="text-xs text-gray-500 px-3 py-2">
+                            No matches today
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

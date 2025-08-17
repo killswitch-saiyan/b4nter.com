@@ -11,6 +11,7 @@ import VideoCallButton from '../components/VideoCallButton';
 import MultiUserVideoButton from '../components/MultiUserVideoButton';
 import GroupsList from '../components/GroupsList';
 import LiveScoreHeader from '../components/LiveScoreHeader';
+import MatchChannelWidget from '../components/MatchChannelWidget';
 import { userAPI } from '../lib/api';
 import { Message, MessageReaction, LiveScoreUpdate } from '../types';
 import { prepareMessageContent, processReceivedMessage } from '../services/e2eeService';
@@ -1102,11 +1103,12 @@ const ChatPage: React.FC = () => {
 
         {/* Main Chat Area - Fixed height */}
         <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-dark-700">
-          {/* Match Channel Live Score Header OR Regular Channel Header */}
-          {selectedChannel?.is_match_channel ? (
-            <LiveScoreHeader
+          {/* Match Channel Widget OR Regular Channel Header */}
+          {(selectedChannel?.is_match_channel || selectedChannel?.is_friendly_channel) ? (
+            <MatchChannelWidget
               matchData={{
                 match_id: selectedChannel.match_id,
+                friendly_id: selectedChannel.friendly_id,
                 group_name: selectedChannel.group_name || 'Unknown League',
                 home_team: selectedChannel.home_team || 'Home Team',
                 away_team: selectedChannel.away_team || 'Away Team',
@@ -1116,9 +1118,21 @@ const ChatPage: React.FC = () => {
                 match_minute: selectedChannel.match_minute,
                 match_date: selectedChannel.match_date || '',
                 match_time: selectedChannel.match_time,
+                venue: selectedChannel.venue,
+                league: selectedChannel.group_name,
+                widget_url: selectedChannel.widget_url,
+                widget_provider: selectedChannel.widget_provider,
+                widget_enabled: selectedChannel.widget_enabled,
+                sofascore_match_id: selectedChannel.sofascore_match_id,
+                external_match_ids: selectedChannel.external_match_ids,
+                is_match_channel: selectedChannel.is_match_channel,
+                is_friendly_channel: selectedChannel.is_friendly_channel,
                 last_updated: selectedChannel.last_updated,
               }}
-              onScoreUpdate={(update: LiveScoreUpdate) => {
+              showWidget={true}
+              showHeader={true}
+              compact={false}
+              onScoreUpdate={(update: any) => {
                 // Update the selected channel with new score data
                 if (selectedChannel.id === update.channel_id) {
                   setSelectedChannel({
